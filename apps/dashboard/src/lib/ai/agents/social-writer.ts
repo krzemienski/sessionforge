@@ -7,6 +7,7 @@ import { handlePostManagerTool } from "../tools/post-manager";
 import { TWITTER_THREAD_PROMPT } from "../prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "../prompts/social/linkedin-post";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 
 const client = new Anthropic();
 
@@ -36,7 +37,7 @@ export function streamSocialWriter(input: SocialWriterInput): Response {
     try {
       const model = getModelForAgent("social-writer");
       const tools = getToolsForAgent("social-writer");
-      const systemPrompt = PROMPTS[input.platform];
+      const systemPrompt = await injectStyleProfile(PROMPTS[input.platform], input.workspaceId);
 
       const userMessage = input.customInstructions
         ? `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details. Then create the post with content_type "${CONTENT_TYPES[input.platform]}". When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`

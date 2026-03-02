@@ -5,6 +5,7 @@ import { handleSessionReaderTool } from "../tools/session-reader";
 import { handlePostManagerTool } from "../tools/post-manager";
 import { CHANGELOG_PROMPT } from "../prompts/changelog";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 
 const client = new Anthropic();
 
@@ -22,6 +23,7 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
     try {
       const model = getModelForAgent("changelog-writer");
       const tools = getToolsForAgent("changelog-writer");
+      const systemPrompt = await injectStyleProfile(CHANGELOG_PROMPT, input.workspaceId);
 
       const userMessage = input.customInstructions
         ? `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First list sessions in the timeframe, then get summaries for each, then create a changelog post. When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
@@ -36,7 +38,7 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
       let response = await client.messages.create({
         model,
         max_tokens: 8192,
-        system: CHANGELOG_PROMPT,
+        system: systemPrompt,
         tools: tools as Anthropic.Tool[],
         messages,
       });
@@ -87,7 +89,7 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
         response = await client.messages.create({
           model,
           max_tokens: 8192,
-          system: CHANGELOG_PROMPT,
+          system: systemPrompt,
           tools: tools as Anthropic.Tool[],
           messages,
         });

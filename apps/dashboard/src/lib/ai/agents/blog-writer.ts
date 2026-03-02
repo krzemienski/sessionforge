@@ -9,6 +9,7 @@ import { BLOG_TECHNICAL_PROMPT } from "../prompts/blog/technical";
 import { BLOG_TUTORIAL_PROMPT } from "../prompts/blog/tutorial";
 import { BLOG_CONVERSATIONAL_PROMPT } from "../prompts/blog/conversational";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 
 const client = new Anthropic();
 
@@ -34,7 +35,7 @@ export function streamBlogWriter(input: BlogWriterInput): Response {
     try {
       const model = getModelForAgent("blog-writer");
       const tools = getToolsForAgent("blog-writer");
-      const systemPrompt = PROMPTS[input.tone ?? "technical"];
+      const systemPrompt = await injectStyleProfile(PROMPTS[input.tone ?? "technical"], input.workspaceId);
 
       const userMessage = input.customInstructions
         ? `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post. When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
