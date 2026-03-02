@@ -63,3 +63,89 @@ h1, h2, h3, nav {
 code, pre {
   font-family: var(--font-code);
 }
+
+/* Lexical editor theme */
+.sf-editor-root {
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--color-sf-text-primary);
+}
+
+.sf-editor-paragraph {
+  margin-bottom: 0.75rem;
+}
+
+.sf-editor-h1 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  color: var(--color-sf-text-primary);
+}
+
+.sf-editor-h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--color-sf-text-primary);
+}
+
+.sf-editor-h3 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--color-sf-text-primary);
+}
+
+.sf-editor-ul, .sf-editor-ol {
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.sf-editor-ul { list-style-type: disc; }
+.sf-editor-ol { list-style-type: decimal; }
+
+.sf-editor-li {
+  margin-bottom: 0.25rem;
+}
+
+.sf-editor-code {
+  font-family: var(--font-code);
+  background: var(--color-sf-bg-tertiary);
+  border: 1px solid var(--color-sf-border);
+  border-radius: var(--radius-sf);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+  color: var(--color-sf-accent);
+}
+
+.sf-editor-link {
+  color: var(--color-sf-accent);
+  text-decoration: underline;
+}
+
+.sf-editor-quote {
+  border-left: 3px solid var(--color-sf-accent);
+  padding-left: 1rem;
+  color: var(--color-sf-text-secondary);
+  margin-bottom: 0.75rem;
+  font-style: italic;
+}
+
+.sf-editor-bold { font-weight: 700; }
+.sf-editor-italic { font-style: italic; }
+.sf-editor-strikethrough { text-decoration: line-through; }
+
+.sf-editor-inline-code {
+  font-family: var(--font-code);
+  background: var(--color-sf-bg-tertiary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.8125rem;
+  color: var(--color-sf-accent);
+}

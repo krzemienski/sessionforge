@@ -2,8 +2,15 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost } from "@/hooks/use-content";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Save } from "lucide-react";
+import dynamic from "next/dynamic";
+import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
+
+const MarkdownEditor = dynamic(
+  () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
+  { ssr: false, loading: () => <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg animate-pulse" /> }
+);
 
 export default function ContentEditorPage() {
   const { workspace, postId } = useParams<{ workspace: string; postId: string }>();
@@ -13,18 +20,32 @@ export default function ContentEditorPage() {
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
+  const [externalMd, setExternalMd] = useState<string | null>(null);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
-    if (post.data) {
+    if (post.data && !initializedRef.current) {
       setTitle(post.data.title || "");
       setMarkdown(post.data.markdown || "");
       setStatus(post.data.status || "draft");
+      initializedRef.current = true;
     }
   }, [post.data]);
 
   function handleSave() {
     update.mutate({ id: postId, title, markdown, status });
   }
+
+  const handleMarkdownChange = useCallback((md: string) => {
+    setMarkdown(md);
+  }, []);
+
+  const handleEditsApplied = useCallback((newMd: string) => {
+    setMarkdown(newMd);
+    setExternalMd(newMd);
+    // Reset external trigger after a tick so future updates work
+    setTimeout(() => setExternalMd(null), 100);
+  }, []);
 
   if (post.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
@@ -68,18 +89,22 @@ export default function ContentEditorPage() {
       />
 
       <div className="flex-1 flex gap-4 min-h-0">
-        <div className="flex-1 flex flex-col">
-          <textarea
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
-            className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 text-sm text-sf-text-primary font-code resize-none focus:outline-none focus:border-sf-border-focus"
-            placeholder="Write your content in markdown..."
-          />
+        <div className="flex-1 flex flex-col min-h-0">
+          {initializedRef.current && (
+            <MarkdownEditor
+              initialMarkdown={post.data?.markdown || ""}
+              onMarkdownChange={handleMarkdownChange}
+              externalMarkdown={externalMd}
+            />
+          )}
         </div>
 
-        <div className="hidden lg:block w-[340px] bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 overflow-y-auto">
-          <h3 className="font-display font-semibold text-sf-text-primary mb-3">AI Assistant</h3>
-          <p className="text-sm text-sf-text-muted">AI chat will be available in Phase 6.</p>
+        <div className="hidden lg:flex w-[340px] bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex-col">
+          <AIChatSidebar
+            postId={postId}
+            workspace={workspace}
+            onEditsApplied={handleEditsApplied}
+          />
         </div>
       </div>
 
