@@ -19,7 +19,7 @@ export interface CreatePostInput {
     sessionIds: string[];
     insightIds: string[];
     lookbackWindow?: string;
-    generatedBy: "blog_writer" | "social_writer" | "changelog_writer" | "editor_chat" | "manual";
+    generatedBy: "blog_writer" | "social_writer" | "changelog_writer" | "editor_chat" | "manual" | "newsletter_writer";
   };
 }
 
