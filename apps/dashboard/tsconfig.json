@@ -5,6 +5,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@sessionforge/db": [
+        "../../packages/db/src/index"
       ]
     },
     "plugins": [
