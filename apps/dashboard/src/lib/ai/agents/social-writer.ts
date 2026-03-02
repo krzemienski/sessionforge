@@ -1,3 +1,8 @@
+/**
+ * Social writer agent for generating platform-specific social media content.
+ * Uses Anthropic tool-calling to fetch insight data and save drafted posts via SSE streaming.
+ */
+
 import Anthropic from "@anthropic-ai/sdk";
 import { getModelForAgent } from "../orchestration/model-selector";
 import { getToolsForAgent } from "../orchestration/tool-registry";
@@ -10,6 +15,7 @@ import { createSSEStream, sseResponse } from "../orchestration/streaming";
 
 const client = new Anthropic();
 
+/** Supported social media platforms for post generation. */
 type SocialPlatform = "twitter" | "linkedin";
 
 const PROMPTS: Record<SocialPlatform, string> = {
@@ -22,13 +28,26 @@ const CONTENT_TYPES: Record<SocialPlatform, "twitter_thread" | "linkedin_post"> 
   linkedin: "linkedin_post",
 };
 
+/** Input parameters for the social writer agent. */
 interface SocialWriterInput {
+  /** Workspace context used to scope tool calls. */
   workspaceId: string;
+  /** ID of the insight to base the social post on. */
   insightId: string;
+  /** Target platform that determines the prompt and content type. */
   platform: SocialPlatform;
+  /** Optional freeform guidance appended to the agent's user message. */
   customInstructions?: string;
 }
 
+/**
+ * Starts the social writer agent and returns a streaming SSE response.
+ * The agent fetches the specified insight, drafts platform-appropriate content,
+ * and saves the post via tool calls, emitting progress events throughout.
+ *
+ * @param input - Workspace, insight, platform, and optional instructions.
+ * @returns A Server-Sent Events `Response` that streams agent progress and results.
+ */
 export function streamSocialWriter(input: SocialWriterInput): Response {
   const { stream, send, close } = createSSEStream();
 
