@@ -37,12 +37,13 @@ export async function POST(request: Request) {
       sessionId,
     });
 
-    if (result.insight) {
+    const insight = result.insight;
+    if (insight) {
       void fireWebhookEvent(workspace.id, "insight.extracted", {
-        insightId: result.insight.id,
-        title: result.insight.title,
-        category: result.insight.category,
-        compositeScore: result.insight.compositeScore,
+        insightId: insight.id,
+        title: insight.title,
+        category: insight.category,
+        compositeScore: insight.compositeScore,
       });
     }
 

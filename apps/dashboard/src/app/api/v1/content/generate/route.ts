@@ -18,6 +18,8 @@ import type { AgentType } from "@/lib/ai/orchestration/tool-registry";
 
 export const dynamic = "force-dynamic";
 
+type CreatedPost = { id: string; title: string; contentType: string };
+
 const BLOG_TONE_PROMPTS: Record<string, string> = {
   technical: BLOG_TECHNICAL_PROMPT,
   tutorial: BLOG_TUTORIAL_PROMPT,
@@ -119,7 +121,7 @@ export async function POST(req: NextRequest) {
     { role: "user", content: userMessage },
   ];
 
-  let createdPost: { id: string; title: string; contentType: string } | null = null;
+  let createdPost: CreatedPost | null = null;
 
   try {
     let response = await client.messages.create({
@@ -148,7 +150,7 @@ export async function POST(req: NextRequest) {
               );
 
               if (toolUse.name === "create_post" && result && typeof result === "object") {
-                const post = result as { id: string; title: string; contentType: string };
+                const post = result as CreatedPost;
                 if (!createdPost) createdPost = post;
               }
 
@@ -187,21 +189,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!createdPost) {
+  const finalPost = createdPost as CreatedPost | null;
+  if (!finalPost) {
     return apiError("Content generation completed but no post was created", 500);
   }
 
   void fireWebhookEvent(wsId, "content.generated", {
-    postId: createdPost.id,
-    title: createdPost.title,
-    contentType: createdPost.contentType,
+    postId: finalPost.id,
+    title: finalPost.title,
+    contentType: finalPost.contentType,
   });
 
   return apiResponse(
     {
-      postId: createdPost.id,
-      title: createdPost.title,
-      contentType: createdPost.contentType,
+      postId: finalPost.id,
+      title: finalPost.title,
+      contentType: finalPost.contentType,
     },
     {}
   );

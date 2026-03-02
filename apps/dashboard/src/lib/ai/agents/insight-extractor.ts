@@ -31,7 +31,18 @@ interface ExtractInsightInput {
  * @param input - The workspace and session identifiers to process.
  * @returns An object containing the final insight text and Anthropic usage data.
  */
-export async function extractInsight(input: ExtractInsightInput) {
+type CreatedInsight = {
+  id: string;
+  title: string;
+  category: string;
+  compositeScore: number;
+};
+
+export async function extractInsight(input: ExtractInsightInput): Promise<{
+  result: string | null;
+  usage: Anthropic.Usage;
+  insight: CreatedInsight | null;
+}> {
   const model = getModelForAgent("insight-extractor");
   const tools = getToolsForAgent("insight-extractor");
 
@@ -50,12 +61,7 @@ export async function extractInsight(input: ExtractInsightInput) {
     messages,
   });
 
-  let createdInsight: {
-    id: string;
-    title: string;
-    category: string;
-    compositeScore: number;
-  } | null = null;
+  let createdInsight: CreatedInsight | null = null;
 
   // Tool dispatch loop
   while (response.stop_reason === "tool_use") {
@@ -80,12 +86,7 @@ export async function extractInsight(input: ExtractInsightInput) {
               result &&
               typeof result === "object"
             ) {
-              const r = result as {
-                id: string;
-                title: string;
-                category: string;
-                compositeScore: number;
-              };
+              const r = result as CreatedInsight;
               if (!createdInsight) createdInsight = r;
             }
 
