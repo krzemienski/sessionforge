@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentTriggers, workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
+import { createTriggerSchedule } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,25 @@ export async function POST(request: Request) {
       cronExpression: cronExpression || null,
     })
     .returning();
+
+  let qstashScheduleId: string | null = null;
+
+  if (triggerType === "scheduled" && cronExpression) {
+    try {
+      qstashScheduleId = await createTriggerSchedule(trigger.id, cronExpression);
+
+      const [updated] = await db
+        .update(contentTriggers)
+        .set({ qstashScheduleId })
+        .where(eq(contentTriggers.id, trigger.id))
+        .returning();
+
+      return NextResponse.json(updated, { status: 201 });
+    } catch {
+      // QStash schedule creation failed (e.g. placeholder credentials) — return
+      // trigger without a scheduleId rather than failing the whole request
+    }
+  }
 
   return NextResponse.json(trigger, { status: 201 });
 }

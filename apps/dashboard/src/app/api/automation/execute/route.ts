@@ -1,9 +1,9 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentTriggers, workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
+import { verifyQStashRequest } from "@/lib/qstash";
+import { runAutomationPipeline } from "@/lib/automation/pipeline";
 import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";
@@ -12,10 +12,14 @@ import { indexSessions } from "@/lib/sessions/indexer";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const rawBody = await request.text();
 
-  const body = await request.json();
+  const isValid = await verifyQStashRequest(request, rawBody).catch(() => false);
+  if (!isValid) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = JSON.parse(rawBody) as { triggerId?: string };
   const { triggerId } = body;
 
   if (!triggerId) {
@@ -34,26 +38,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Trigger is disabled" }, { status: 400 });
   }
 
+  await db
+    .update(contentTriggers)
+    .set({ lastRunAt: new Date(), lastRunStatus: "running" })
+    .where(eq(contentTriggers.id, triggerId));
+
   try {
-    await db
-      .update(contentTriggers)
-      .set({ lastRunAt: new Date(), lastRunStatus: "running" })
-      .where(eq(contentTriggers.id, triggerId));
+    // Auto-scan step: run incremental scan before content generation pipeline
+    // to ensure sessions are fresh when automation runs
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.id, trigger.workspaceId),
+    });
 
-    // Auto-scan step: discover new session files before content generation pipeline
-    const workspace = await db
-      .select()
-      .from(workspaces)
-      .where(eq(workspaces.ownerId, session.user.id))
-      .limit(1);
-
-    if (workspace.length) {
-      const ws = workspace[0];
-      const basePath = ws.sessionBasePath ?? "~/.claude";
+    if (workspace) {
+      const basePath = workspace.sessionBasePath ?? "~/.claude";
       const scanStartTime = new Date();
-
-      const isIncremental = ws.lastScanAt != null;
-      const sinceTimestamp = isIncremental ? (ws.lastScanAt ?? undefined) : undefined;
+      const sinceTimestamp = workspace.lastScanAt ?? undefined;
 
       const files = await scanSessionFiles(30, basePath, sinceTimestamp);
 
@@ -64,27 +64,31 @@ export async function POST(request: Request) {
         })
       );
 
-      await indexSessions(ws.id, normalized);
+      await indexSessions(workspace.id, normalized);
 
       await db
         .update(workspaces)
         .set({ lastScanAt: scanStartTime })
-        .where(eq(workspaces.id, ws.id));
+        .where(eq(workspaces.id, workspace.id));
     }
+
+    const result = await runAutomationPipeline({
+      workspaceId: trigger.workspaceId,
+      contentType: trigger.contentType,
+      lookbackWindow: trigger.lookbackWindow ?? "last_7_days",
+      triggerId,
+    });
 
     await db
       .update(contentTriggers)
       .set({ lastRunStatus: "success", lastRunAt: new Date() })
       .where(eq(contentTriggers.id, triggerId));
 
-    return NextResponse.json({ executed: true });
+    return NextResponse.json({ executed: true, ...result });
   } catch (error) {
     await db
       .update(contentTriggers)
-      .set({
-        lastRunStatus: error instanceof Error ? error.message : "failed",
-        lastRunAt: new Date(),
-      })
+      .set({ lastRunStatus: "failed", lastRunAt: new Date() })
       .where(eq(contentTriggers.id, triggerId));
 
     return NextResponse.json(
