@@ -8,14 +8,15 @@ import {
   ScrollText,
   Lightbulb,
   FileText,
+  BarChart3,
   Settings,
 } from "lucide-react";
 
 const tabs = [
   { label: "Home", icon: LayoutDashboard, href: "" },
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
-  { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
+  { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 

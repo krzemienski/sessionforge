@@ -9,6 +9,7 @@ import {
   Lightbulb,
   FileText,
   Zap,
+  BarChart3,
   Settings,
   Palette,
   KeyRound,
@@ -22,6 +23,7 @@ const mainNav = [
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
+  { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Automation", icon: Zap, href: "/automation" },
 ];
 
