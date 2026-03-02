@@ -10,8 +10,19 @@ import readline from "readline";
 
 export const dynamic = "force-dynamic";
 
-async function readRawMessages(filePath: string): Promise<unknown[]> {
+interface PagedMessages {
+  messages: unknown[];
+  hasMore: boolean;
+}
+
+async function readPagedMessages(
+  filePath: string,
+  offset: number,
+  limit: number
+): Promise<PagedMessages> {
   const messages: unknown[] = [];
+  let validLinesSeen = 0;
+
   return new Promise((resolve) => {
     const stream = createReadStream(filePath, { encoding: "utf8" });
     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -19,26 +30,48 @@ async function readRawMessages(filePath: string): Promise<unknown[]> {
     rl.on("line", (line) => {
       const trimmed = line.trim();
       if (!trimmed) return;
+
+      let parsed: unknown;
       try {
-        messages.push(JSON.parse(trimmed));
+        parsed = JSON.parse(trimmed);
       } catch {
         // skip malformed
+        return;
       }
+
+      if (validLinesSeen < offset) {
+        validLinesSeen++;
+        return;
+      }
+
+      if (messages.length < limit) {
+        messages.push(parsed);
+      } else {
+        // We have one extra — signals hasMore; stop processing
+        rl.close();
+        stream.destroy();
+      }
+
+      validLinesSeen++;
     });
 
-    rl.on("close", () => resolve(messages));
-    rl.on("error", () => resolve(messages));
+    rl.on("close", () => resolve({ messages, hasMore: validLinesSeen > offset + limit }));
+    rl.on("error", () => resolve({ messages, hasMore: false }));
   });
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+
+  const { searchParams } = req.nextUrl;
+  const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
+  const offset = Math.max(parseInt(searchParams.get("offset") ?? "0"), 0);
 
   const workspace = await db
     .select({ id: workspaces.id })
@@ -73,6 +106,6 @@ export async function GET(
     return NextResponse.json({ error: "Session file not accessible" }, { status: 404 });
   }
 
-  const messages = await readRawMessages(filePath);
-  return NextResponse.json({ data: messages, count: messages.length });
+  const { messages, hasMore } = await readPagedMessages(filePath, offset, limit);
+  return NextResponse.json({ messages, offset, limit, hasMore });
 }
