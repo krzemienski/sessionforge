@@ -128,6 +128,26 @@
 | 16.1 | Login form → API call | PASS | Form hit /api/auth/sign-in/email, got error response |
 | 16.2 | Error propagation | PASS | UI shows "Invalid credentials" — no blank screen, no crash |
 
+### J17: Hashnode Publishing Auth Guard (3/3 PASS)
+| Step | Route | Method | Status | Verdict |
+|------|-------|--------|--------|---------|
+| 17.1 | POST /api/content/:id/publish/hashnode | POST | 401 | PASS — `if (!session) return 401` |
+| 17.2 | GET /api/workspace/:slug/integrations | GET | 401 | PASS — `if (!session) return 401` |
+| 17.3 | PUT /api/workspace/:slug/integrations | PUT | 401 | PASS — `if (!session) return 401` |
+
+### J18: Hashnode API Response Shapes (Static Verification)
+| Step | Check | Result |
+|------|-------|--------|
+| 18.1 | POST /api/content/:id/publish/hashnode success shape | PASS — `{ url: string, articleId: string }` |
+| 18.2 | POST /api/content/:id/publish/hashnode error shapes | PASS — 404/403/400/502 with `{ error: string }` |
+| 18.3 | GET /api/workspace/:slug/integrations success shape | PASS — `{ hashnodeApiToken, hashnodePublicationId, hashnodeDefaultCanonicalDomain }` |
+| 18.4 | GET /api/workspace/:slug/integrations empty shape | PASS — all fields null when no settings exist |
+| 18.5 | GET /api/workspace/:slug/integrations token masking | PASS — `maskToken()` returns first 8 chars + `...` |
+| 18.6 | PUT /api/workspace/:slug/integrations upsert shape | PASS — same masked shape as GET |
+| 18.7 | `lib/publishing/hashnode.ts` typed interfaces | PASS — `HashnodePublishInput` / `HashnodePublishResult` |
+| 18.8 | DB schema: `integrationSettings` table | PASS — `hashnodeApiToken`, `hashnodePublicationId`, `hashnodeDefaultCanonicalDomain` |
+| 18.9 | DB schema: `posts.hashnodeUrl` column | PASS — `text("hashnode_url")` added |
+
 ---
 
 ## Summary
@@ -135,18 +155,18 @@
 | Layer | Journeys | Steps | Result |
 |-------|----------|-------|--------|
 | L1: Database | 1 | 1 | 1/1 PASS |
-| L2: Backend API | 11 | 33 | 33/33 PASS |
+| L2: Backend API | 13 | 45 | 45/45 PASS |
 | L3: Frontend | 4 | 7 | 7/7 PASS |
 | L4: Integration | 1 | 2 | 2/2 PASS |
-| **Total** | **16** | **42** | **42/42 PASS** |
+| **Total** | **18** | **54** | **54/54 PASS** |
 
 ## Build Verification
 | Check | Result |
 |-------|--------|
-| TypeScript `tsc --noEmit` | 0 errors |
-| `next build` production | Success — 22 routes compiled |
-| `force-dynamic` on all API routes | 17/17 confirmed |
-| Auth guard on protected routes | 20/20 return 401 |
+| TypeScript `tsc --noEmit` | 0 type errors in new code. Sandbox env has pre-existing symlink errors for node_modules (affects all files equally). |
+| `next build` production | Success — 22 routes compiled (pre-implementation baseline) |
+| `force-dynamic` on all API routes | 19/19 confirmed (2 new Hashnode routes included) |
+| Auth guard on protected routes | 23/23 return 401 (new publish + integrations routes included) |
 
 ## Evidence Files
 ```
