@@ -1,3 +1,8 @@
+/**
+ * Changelog writer agent that summarizes recent sessions into a changelog post.
+ * Uses tool-calling to list sessions, fetch summaries, and create a published post.
+ */
+
 import Anthropic from "@anthropic-ai/sdk";
 import { getModelForAgent } from "../orchestration/model-selector";
 import { getToolsForAgent } from "../orchestration/tool-registry";
@@ -8,13 +13,26 @@ import { createSSEStream, sseResponse } from "../orchestration/streaming";
 
 const client = new Anthropic();
 
+/** Input parameters for the changelog writer agent. */
 interface ChangelogWriterInput {
+  /** Workspace to read sessions from and publish the changelog post to. */
   workspaceId: string;
+  /** Number of past days to include in the changelog. */
   lookbackDays: number;
+  /** Optional project name to narrow the session query. */
   projectFilter?: string;
+  /** Optional extra instructions appended to the agent prompt. */
   customInstructions?: string;
 }
 
+/**
+ * Starts a streaming changelog generation run and returns an SSE response.
+ * The agent lists sessions in the lookback window, fetches their summaries,
+ * and creates a changelog post via tool calls.
+ *
+ * @param input - Configuration for the changelog run.
+ * @returns A streaming SSE {@link Response} with status, tool, and text events.
+ */
 export function streamChangelogWriter(input: ChangelogWriterInput): Response {
   const { stream, send, close } = createSSEStream();
 
