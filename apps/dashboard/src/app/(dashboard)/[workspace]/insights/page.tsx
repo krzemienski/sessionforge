@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useInsights } from "@/hooks/use-insights";
 import { useState } from "react";
 import { Lightbulb } from "lucide-react";
@@ -79,7 +80,22 @@ export default function InsightsPage() {
         {insightList.length === 0 && !insights.isLoading && (
           <div className="text-center py-12">
             <Lightbulb size={40} className="mx-auto text-sf-text-muted mb-3" />
-            <p className="text-sf-text-secondary">No insights yet. Extract insights from your sessions first.</p>
+            <p className="text-sf-text-primary font-medium mb-1">No insights yet</p>
+            <p className="text-sf-text-secondary mb-6 text-sm">Extract insights from your sessions to surface patterns, decisions, and discoveries.</p>
+            <div className="flex items-center justify-center gap-3">
+              <Link
+                href={`/${workspace}/sessions`}
+                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+              >
+                View Sessions →
+              </Link>
+              <Link
+                href="/onboarding"
+                className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
+              >
+                View setup guide →
+              </Link>
+            </div>
           </div>
         )}
       </div>
