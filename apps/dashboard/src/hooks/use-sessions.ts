@@ -55,7 +55,7 @@ export type ScanResult = {
   scanned: number;
   new: number;
   updated: number;
-  errors: number;
+  errors: string[];
   durationMs: number;
   isIncremental: boolean;
   lastScanAt: string;
