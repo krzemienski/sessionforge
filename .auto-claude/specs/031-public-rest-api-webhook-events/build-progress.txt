@@ -1,0 +1,131 @@
+=== AUTO-BUILD PROGRESS ===
+
+Project: Public REST API & Webhook Events (Task 031)
+Workspace: /auto-claude/worktrees/tasks/031-public-rest-api-webhook-events
+Started: 2026-03-02
+
+Workflow Type: feature
+Rationale: Multi-layer feature requiring DB schema → auth middleware → v1 API routes → webhook service → event wiring → frontend UI → OpenAPI docs. Each layer depends on the previous, typical of a feature workflow.
+
+Session 1 (Planner):
+- Investigated codebase deeply (20+ files read)
+- Created context.json with findings
+- Created project_index.json
+- Created implementation_plan.json with 10 phases, 20 subtasks
+- Created init.sh for environment startup
+
+=== CODEBASE FINDINGS ===
+
+Tech Stack:
+- Next.js 15 (App Router), TypeScript, React 19
+- Drizzle ORM with Neon PostgreSQL (serverless)
+- better-auth for session authentication
+- Upstash QStash for scheduled automation
+- Upstash Redis for caching
+- Turborepo monorepo, Bun package manager
+
+Existing API Keys:
+- Schema: `apiKeys` table has keyHash (SHA256), keyPrefix, workspaceId, lastUsedAt
+- Raw key format: `sf_live_${randomBytes(24).toString("hex")}`
+- CRUD at /api/api-keys/* (session-auth only today)
+- No Bearer token auth exists yet - this is the first feature to use it
+
+Existing Routes Pattern:
+- All routes: `export const dynamic = "force-dynamic"`
+- Auth: `const session = await auth.api.getSession({ headers: await headers() })`
+- DB: import from @/lib/db and @sessionforge/db
+- Responses: NextResponse.json() with varied formats (no envelope today)
+
+Key Files:
+- packages/db/src/schema.ts - All table definitions (need to add webhookEndpoints)
+- apps/dashboard/src/lib/auth.ts - better-auth config
+- apps/dashboard/src/lib/db.ts - Drizzle client
+- apps/dashboard/src/lib/qstash.ts - Shows HMAC signing pattern (to copy for webhooks)
+- apps/dashboard/src/lib/automation/pipeline.ts - runAutomationPipeline()
+- apps/dashboard/src/app/api/sessions/route.ts - Pattern for sessions list
+- apps/dashboard/src/app/api/sessions/scan/route.ts - Scan logic to reuse
+
+=== PHASE SUMMARY ===
+
+Phase 1 (Database Schema): 1 subtask - Add webhookEndpoints table, push migration
+Phase 2 (API Auth Middleware): 1 subtask - Create lib/api-auth.ts with Bearer token validation + response envelope helpers
+Phase 3 (V1 Sessions API): 2 subtasks - GET /v1/sessions, POST /v1/sessions/scan
+Phase 4 (V1 Insights API): 1 subtask - GET /v1/insights
+Phase 5 (V1 Content API): 3 subtasks - GET /v1/content, POST /v1/content/generate, PATCH /v1/content/:id
+Phase 6 (Webhook Service): 4 subtasks - deliver.ts, events.ts, v1/webhooks CRUD
+Phase 7 (Webhook Wiring): 2 subtasks - Wire scan.completed, content.published, content.generated, insight.extracted, automation.completed events
+Phase 8 (Settings UI): 2 subtasks - Internal session-auth webhook API + frontend settings page
+Phase 9 (OpenAPI Docs): 1 subtask - Static OpenAPI 3.1 spec at /api/v1/openapi.json
+Phase 10 (Integration): 3 subtasks - TS compile, lint, manual e2e verification
+
+=== SERVICES INVOLVED ===
+
+- db: Schema changes (webhookEndpoints table)
+- backend (dashboard): API routes, webhook service, auth middleware
+- frontend (dashboard): Webhooks settings page UI
+
+=== PARALLELISM ANALYSIS ===
+
+Max parallel phases: 3
+Recommended workers: 2
+
+Parallel groups:
+1. Phases 3+4+5 (v1 sessions, insights, content) - all depend only on phase 2, no file conflicts
+2. Phase 6 (webhook service) - depends only on phase 1, independent of phases 2-5
+3. Phases 8+9 (settings UI, OpenAPI) - can run concurrently after their deps
+
+Sequential blockers:
+- Phase 1 (DB) must complete before Phase 2 (API auth) and Phase 6 (webhooks)
+- Phase 2 must complete before Phases 3, 4, 5
+- Phases 3+4+5+6 must all complete before Phase 7 (wiring)
+- Phase 7 must complete before Phase 10 (integration)
+
+=== STARTUP COMMAND ===
+
+To continue building this spec, the coder agent should:
+
+1. Read implementation_plan.json for next pending subtask
+2. Start with subtask-1-1 (DB schema)
+3. Then subtask-2-1 (API auth middleware)
+4. Then phases 3/4/5/6 in parallel
+5. Then phase 7 (wiring)
+6. Then phases 8/9
+7. Finally phase 10 (integration)
+
+Dev server: cd apps/dashboard && bun dev
+DB push: cd packages/db && bunx drizzle-kit push
+
+=== END SESSION 1 ===
+
+=== SESSION: subtask-10-3 — Manual E2E Verification ===
+
+Verification Results (all PASSED):
+
+1. ✅ GET /api/v1/sessions (no auth) → HTTP 401
+   Response: {"data":null,"meta":{},"error":"Unauthorized"}
+
+2. ✅ GET /api/v1/sessions (Bearer token) → HTTP 200
+   Response: { data: [...sessions], meta: { total: 8590, limit: 20, offset: 0 }, error: null }
+   - Envelope format correct
+   - API key auth via SHA-256 hash lookup confirmed working
+
+3. ✅ GET /api/v1/openapi.json → HTTP 200
+   - Returns full OpenAPI 3.1.0 document
+   - All paths, schemas, and security schemes present
+
+4. ✅ GET /api/v1/insights (Bearer token) → HTTP 200
+   Response: {"data":[],"meta":{"total":0,"limit":20,"offset":0},"error":null}
+
+5. ✅ GET /api/v1/content (Bearer token) → HTTP 200
+   Response: {"data":[],"meta":{"total":0,"limit":20,"offset":0},"error":null}
+
+6. ✅ Webhook settings UI at /[workspace]/settings/webhooks
+   - Page component exists and renders correctly
+   - Uses internal session-auth /api/webhooks route
+   - Supports create, toggle enable/disable, delete
+   - Shows signing secret on creation (copy-once pattern)
+
+Dev server tested on port 3001 (port 3000 in production).
+All 20/20 subtasks now complete.
+
+=== END SESSION: subtask-10-3 ===
