@@ -1,0 +1,16 @@
+                  List of tables
+ Schema |       Name       | Type  |    Owner     
+--------+------------------+-------+--------------
+ public | accounts         | table | neondb_owner
+ public | api_keys         | table | neondb_owner
+ public | auth_sessions    | table | neondb_owner
+ public | claude_sessions  | table | neondb_owner
+ public | content_triggers | table | neondb_owner
+ public | insights         | table | neondb_owner
+ public | posts            | table | neondb_owner
+ public | style_settings   | table | neondb_owner
+ public | users            | table | neondb_owner
+ public | verifications    | table | neondb_owner
+ public | workspaces       | table | neondb_owner
+(11 rows)
+
