@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-export function useSessions(workspace: string, params?: { limit?: number; offset?: number; sort?: string; project?: string; dateFrom?: string; dateTo?: string; maxMessages?: number; hasSummary?: boolean }) {
+export function useSessions(workspace: string, params?: { limit?: number; offset?: number; sort?: string; project?: string; dateFrom?: string; dateTo?: string; minMessages?: number; maxMessages?: number; hasSummary?: boolean }) {
   return useQuery({
     queryKey: ["sessions", workspace, params],
     queryFn: async () => {
@@ -13,6 +13,7 @@ export function useSessions(workspace: string, params?: { limit?: number; offset
       if (params?.project) sp.set("project", params.project);
       if (params?.dateFrom) sp.set("dateFrom", params.dateFrom);
       if (params?.dateTo) sp.set("dateTo", params.dateTo);
+      if (params?.minMessages) sp.set("minMessages", String(params.minMessages));
       if (params?.maxMessages) sp.set("maxMessages", String(params.maxMessages));
       if (params?.hasSummary !== undefined) sp.set("hasSummary", String(params.hasSummary));
       const res = await fetch(`/api/sessions?${sp}`);

@@ -38,6 +38,7 @@ export default function SessionsPage() {
     project: filters.project || undefined,
     dateFrom: filters.dateFrom || undefined,
     dateTo: filters.dateTo || undefined,
+    minMessages: filters.minMessages ? Number(filters.minMessages) : undefined,
     maxMessages: filters.maxMessages ? Number(filters.maxMessages) : undefined,
     hasSummary: hasSummaryValue,
   });

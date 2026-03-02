@@ -12,7 +12,7 @@ export function useContent(workspace: string, params?: { limit?: number; offset?
       if (params?.offset) sp.set("offset", String(params.offset));
       if (params?.status) sp.set("status", params.status);
       if (params?.type) sp.set("type", params.type);
-      if (params?.tone) sp.set("tone", params.tone);
+      if (params?.tone) sp.set("toneUsed", params.tone);
       if (params?.dateFrom) sp.set("dateFrom", params.dateFrom);
       if (params?.dateTo) sp.set("dateTo", params.dateTo);
       if (params?.search) sp.set("search", params.search);
