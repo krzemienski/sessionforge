@@ -75,6 +75,7 @@ export function buildFrontmatter(post: ExportablePost): string {
     "---",
     `title: ${JSON.stringify(post.title)}`,
     `date: ${date}`,
+    "tags: []",
     `type: ${post.contentType}`,
     `status: ${post.status ?? "draft"}`,
     "---",

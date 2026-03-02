@@ -69,6 +69,7 @@ export async function GET(request: Request) {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Content-Length": String(zipBuffer.length),
+        "X-Export-Count": String(results.length),
       },
     });
   } catch (error) {
