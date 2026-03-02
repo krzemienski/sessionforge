@@ -252,6 +252,8 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    badgeEnabled: boolean("badge_enabled").default(false),
+    platformFooterEnabled: boolean("platform_footer_enabled").default(false),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
