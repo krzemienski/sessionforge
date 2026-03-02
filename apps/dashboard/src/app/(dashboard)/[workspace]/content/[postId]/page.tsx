@@ -1,15 +1,22 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { usePost, useUpdatePost } from "@/hooks/use-content";
+import { usePost, useUpdatePost, useSeoData } from "@/hooks/use-content";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Save } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
+import { cn } from "@/lib/utils";
+import { computeSeoScore } from "@/lib/seo";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
   { ssr: false, loading: () => <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg animate-pulse" /> }
+);
+
+const SeoPanel = dynamic(
+  () => import("@/components/editor/seo-panel").then((m) => m.SeoPanel),
+  { ssr: false }
 );
 
 export default function ContentEditorPage() {
@@ -17,10 +24,12 @@ export default function ContentEditorPage() {
   const router = useRouter();
   const post = usePost(postId);
   const update = useUpdatePost();
+  const seoData = useSeoData(postId);
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
   const [externalMd, setExternalMd] = useState<string | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo">("chat");
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -52,6 +61,15 @@ export default function ContentEditorPage() {
   }
 
   const wordCount = markdown.split(/\s+/).filter(Boolean).length;
+
+  const seoMetadata = seoData.data?.seoMetadata ?? undefined;
+  const liveScore = seoData.data ? computeSeoScore(markdown, title, seoMetadata) : null;
+
+  function seoScoreColor(score: number): string {
+    if (score >= 70) return "text-sf-success";
+    if (score >= 40) return "text-amber-500";
+    return "text-red-500";
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
@@ -100,17 +118,53 @@ export default function ContentEditorPage() {
         </div>
 
         <div className="hidden lg:flex w-[340px] bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex-col">
-          <AIChatSidebar
-            postId={postId}
-            workspace={workspace}
-            onEditsApplied={handleEditsApplied}
-          />
+          {/* Sidebar tabs */}
+          <div className="flex gap-1 p-2 border-b border-sf-border">
+            {(["chat", "seo"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setSidebarTab(tab)}
+                className={cn(
+                  "px-3 py-1.5 text-sm rounded-sf transition-colors",
+                  sidebarTab === tab
+                    ? "bg-sf-accent-bg text-sf-accent"
+                    : "text-sf-text-secondary hover:bg-sf-bg-hover"
+                )}
+              >
+                {tab === "chat" ? "AI Chat" : "SEO"}
+              </button>
+            ))}
+          </div>
+
+          {/* Sidebar content */}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            {sidebarTab === "chat" ? (
+              <AIChatSidebar
+                postId={postId}
+                workspace={workspace}
+                onEditsApplied={handleEditsApplied}
+              />
+            ) : (
+              <SeoPanel
+                postId={postId}
+                markdown={markdown}
+                title={title}
+              />
+            )}
+          </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-sf-border">
         <span className="text-xs text-sf-text-muted">{wordCount} words</span>
-        <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
+        <div className="flex items-center gap-3">
+          {liveScore !== null && (
+            <span className={cn("text-xs font-medium", seoScoreColor(liveScore.total))}>
+              SEO: {liveScore.total}/100
+            </span>
+          )}
+          <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
+        </div>
       </div>
     </div>
   );
