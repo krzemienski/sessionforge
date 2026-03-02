@@ -62,6 +62,11 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "file_watch",
 ]);
 
+export const styleProfileGenerationStatusEnum = pgEnum(
+  "style_profile_generation_status",
+  ["pending", "generating", "completed", "failed"]
+);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -224,6 +229,43 @@ export const insights = pgTable(
   ]
 );
 
+export const writingStyleProfiles = pgTable(
+  "writing_style_profiles",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    formality: real("formality"),
+    technicalDepth: real("technical_depth"),
+    humor: real("humor"),
+    headingStyle: jsonb("heading_style").$type<{
+      preferredLevels: string[];
+      capitalization: "title" | "sentence" | "all_caps";
+      includeEmoji: boolean;
+    }>(),
+    codeStyle: jsonb("code_style").$type<{
+      commentDensity: "minimal" | "moderate" | "heavy";
+      preferInlineComments: boolean;
+      explanationStyle: "before" | "after" | "inline";
+    }>(),
+    vocabularyPatterns: jsonb("vocabulary_patterns").$type<string[]>(),
+    sampleEdits: jsonb("sample_edits").$type<
+      { original: string; edited: string; postId: string }[]
+    >(),
+    publishedPostsAnalyzed: integer("published_posts_analyzed").default(0),
+    generationStatus: styleProfileGenerationStatusEnum(
+      "generation_status"
+    ).default("pending"),
+    lastGeneratedAt: timestamp("last_generated_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("writingStyleProfiles_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
 export const posts = pgTable(
   "posts",
   {
@@ -251,6 +293,12 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    aiDraftMarkdown: text("ai_draft_markdown"),
+    editDistance: integer("edit_distance"),
+    styleProfileUsed: text("style_profile_used").references(
+      () => writingStyleProfiles.id,
+      { onDelete: "set null" }
+    ),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -327,6 +375,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
     references: [users.id],
   }),
   styleSettings: one(styleSettings),
+  writingStyleProfiles: many(writingStyleProfiles),
   claudeSessions: many(claudeSessions),
   insights: many(insights),
   posts: many(posts),
@@ -340,6 +389,17 @@ export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const writingStyleProfilesRelations = relations(
+  writingStyleProfiles,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [writingStyleProfiles.workspaceId],
+      references: [workspaces.id],
+    }),
+    posts: many(posts),
+  })
+);
 
 export const claudeSessionsRelations = relations(
   claudeSessions,
@@ -372,6 +432,10 @@ export const postsRelations = relations(posts, ({ one }) => ({
   insight: one(insights, {
     fields: [posts.insightId],
     references: [insights.id],
+  }),
+  writingStyleProfile: one(writingStyleProfiles, {
+    fields: [posts.styleProfileUsed],
+    references: [writingStyleProfiles.id],
   }),
 }));
 
