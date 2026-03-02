@@ -109,7 +109,7 @@ export default function SettingsPage() {
           Re-run the onboarding wizard to update your workspace configuration or connect new integrations.
         </p>
         <button
-          onClick={() => router.push(`/${workspace}/onboarding`)}
+          onClick={() => router.push("/onboarding")}
           className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf font-medium text-sm hover:border-sf-border-focus transition-colors"
         >
           <PlayCircle size={16} />
