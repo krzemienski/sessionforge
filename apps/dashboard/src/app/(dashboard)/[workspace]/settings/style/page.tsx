@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Palette, Save } from "lucide-react";
+import { Save } from "lucide-react";
 
 const TONE_OPTIONS = ["technical", "casual", "professional", "storytelling", "educational"];
 const AUDIENCE_OPTIONS = ["developers", "engineering_managers", "startup_founders", "general_tech", "beginners"];
@@ -15,7 +15,7 @@ export default function StyleSettingsPage() {
   const style = useQuery({
     queryKey: ["style-settings", workspace],
     queryFn: async () => {
-      const res = await fetch(`/api/workspaces/style?workspace=${workspace}`);
+      const res = await fetch(`/api/workspace/${workspace}/style`);
       if (!res.ok && res.status !== 404) throw new Error("Failed");
       if (res.status === 404) return null;
       return res.json();
@@ -40,10 +40,10 @@ export default function StyleSettingsPage() {
 
   const save = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
-      const res = await fetch(`/api/workspaces/style`, {
+      const res = await fetch(`/api/workspace/${workspace}/style`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, workspaceSlug: workspace }),
+        body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error("Failed");
       return res.json();
