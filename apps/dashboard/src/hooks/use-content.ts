@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { SeoMetadata } from "@/lib/seo";
 
@@ -109,4 +110,44 @@ export function useSaveSeo() {
       qc.invalidateQueries({ queryKey: ["seo", vars.postId] });
     },
   });
+}
+
+export function useExportContent() {
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportCount, setExportCount] = useState<number | null>(null);
+
+  const exportContent = useCallback(
+    async (workspace: string, filters?: { type?: string; status?: string; dateFrom?: string; dateTo?: string }) => {
+      setIsExporting(true);
+      setExportCount(null);
+      try {
+        const sp = new URLSearchParams({ workspace });
+        if (filters?.type) sp.set("type", filters.type);
+        if (filters?.status) sp.set("status", filters.status);
+        if (filters?.dateFrom) sp.set("dateFrom", filters.dateFrom);
+        if (filters?.dateTo) sp.set("dateTo", filters.dateTo);
+
+        const res = await fetch(`/api/content/export?${sp}`);
+        if (!res.ok) throw new Error("Export failed");
+
+        const count = res.headers.get("X-Export-Count");
+        if (count) setExportCount(Number(count));
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `content-export-${workspace}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    []
+  );
+
+  return { exportContent, isExporting, exportCount };
 }

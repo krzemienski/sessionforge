@@ -2,11 +2,20 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentTriggers } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
+import { verifyQStashRequest } from "@/lib/qstash";
+import { runAutomationPipeline } from "@/lib/automation/pipeline";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  const rawBody = await request.text();
+
+  const isValid = await verifyQStashRequest(request, rawBody).catch(() => false);
+  if (!isValid) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = JSON.parse(rawBody) as { triggerId?: string };
   const { triggerId } = body;
 
   if (!triggerId) {
@@ -25,25 +34,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Trigger is disabled" }, { status: 400 });
   }
 
+  await db
+    .update(contentTriggers)
+    .set({ lastRunAt: new Date(), lastRunStatus: "running" })
+    .where(eq(contentTriggers.id, triggerId));
+
   try {
-    await db
-      .update(contentTriggers)
-      .set({ lastRunAt: new Date(), lastRunStatus: "running" })
-      .where(eq(contentTriggers.id, triggerId));
+    const result = await runAutomationPipeline({
+      workspaceId: trigger.workspaceId,
+      contentType: trigger.contentType,
+      lookbackWindow: trigger.lookbackWindow ?? "last_7_days",
+      triggerId,
+    });
 
     await db
       .update(contentTriggers)
       .set({ lastRunStatus: "success", lastRunAt: new Date() })
       .where(eq(contentTriggers.id, triggerId));
 
-    return NextResponse.json({ executed: true });
+    return NextResponse.json({ executed: true, ...result });
   } catch (error) {
     await db
       .update(contentTriggers)
-      .set({
-        lastRunStatus: error instanceof Error ? error.message : "failed",
-        lastRunAt: new Date(),
-      })
+      .set({ lastRunStatus: "failed", lastRunAt: new Date() })
       .where(eq(contentTriggers.id, triggerId));
 
     return NextResponse.json(
