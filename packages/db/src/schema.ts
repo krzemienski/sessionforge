@@ -299,6 +299,29 @@ export const apiKeys = pgTable(
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const sessionBookmarks = pgTable(
+  "session_bookmarks",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => claudeSessions.id, { onDelete: "cascade" }),
+    messageIndex: integer("message_index").notNull(),
+    label: text("label").notNull(),
+    note: text("note"),
+    sentToInsights: boolean("sent_to_insights").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("sessionBookmarks_workspaceId_idx").on(table.workspaceId),
+    index("sessionBookmarks_sessionId_idx").on(table.sessionId),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -332,6 +355,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  sessionBookmarks: many(sessionBookmarks),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -349,6 +373,7 @@ export const claudeSessionsRelations = relations(
       references: [workspaces.id],
     }),
     insights: many(insights),
+    sessionBookmarks: many(sessionBookmarks),
   })
 );
 
@@ -391,3 +416,17 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const sessionBookmarksRelations = relations(
+  sessionBookmarks,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [sessionBookmarks.workspaceId],
+      references: [workspaces.id],
+    }),
+    session: one(claudeSessions, {
+      fields: [sessionBookmarks.sessionId],
+      references: [claudeSessions.id],
+    }),
+  })
+);
