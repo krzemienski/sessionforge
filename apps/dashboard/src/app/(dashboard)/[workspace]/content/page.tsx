@@ -5,6 +5,7 @@ import { useContent } from "@/hooks/use-content";
 import { useState } from "react";
 import { FileText } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
+import { ExportDropdown } from "@/components/content/export-dropdown";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "text-sf-info bg-sf-info/10",
@@ -73,7 +74,10 @@ export default function ContentPage() {
               <span className="px-2 py-0.5 bg-sf-bg-tertiary rounded-sf-full text-xs text-sf-text-secondary">
                 {TYPE_LABELS[post.contentType] || post.contentType}
               </span>
-              <span className="ml-auto text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
+                <ExportDropdown markdown={post.markdown || ""} title={post.title || ""} />
+              </div>
             </div>
             <h3 className="font-semibold text-sf-text-primary mb-1">{post.title}</h3>
             <p className="text-sm text-sf-text-secondary line-clamp-2">
