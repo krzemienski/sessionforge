@@ -1,0 +1,2 @@
+{"message":"[body.name] Invalid input: expected string, received undefined; [body.email] Invalid email address","code":"VALIDATION_ERROR"}
+HTTP:400
