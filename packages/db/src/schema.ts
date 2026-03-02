@@ -299,6 +299,51 @@ export const apiKeys = pgTable(
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const devtoIntegrations = pgTable(
+  "devto_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    apiKey: text("api_key").notNull(),
+    username: text("username"),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("devtoIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const devtoPublications = pgTable(
+  "devto_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => devtoIntegrations.id, { onDelete: "cascade" }),
+    devtoArticleId: integer("devto_article_id").notNull(),
+    devtoUrl: text("devto_url"),
+    publishedAsDraft: boolean("published_as_draft").default(false),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("devtoPublications_workspaceId_idx").on(table.workspaceId),
+    index("devtoPublications_postId_idx").on(table.postId),
+    uniqueIndex("devtoPublications_postId_uidx").on(table.postId),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -332,6 +377,8 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  devtoIntegrations: many(devtoIntegrations),
+  devtoPublications: many(devtoPublications),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -373,6 +420,10 @@ export const postsRelations = relations(posts, ({ one }) => ({
     fields: [posts.insightId],
     references: [insights.id],
   }),
+  devtoPublication: one(devtoPublications, {
+    fields: [posts.id],
+    references: [devtoPublications.postId],
+  }),
 }));
 
 export const contentTriggersRelations = relations(
@@ -391,3 +442,32 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const devtoIntegrationsRelations = relations(
+  devtoIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [devtoIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    publications: many(devtoPublications),
+  })
+);
+
+export const devtoPublicationsRelations = relations(
+  devtoPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [devtoPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [devtoPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(devtoIntegrations, {
+      fields: [devtoPublications.integrationId],
+      references: [devtoIntegrations.id],
+    }),
+  })
+);
