@@ -62,6 +62,27 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "file_watch",
 ]);
 
+// ── Types ──
+
+export interface SeoMetadata {
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  focusKeyword?: string | null;
+  additionalKeywords?: string[] | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  twitterTitle?: string | null;
+  twitterDescription?: string | null;
+  twitterCard?: string | null;
+  schemaOrg?: Record<string, unknown> | null;
+  readabilityScore?: number | null;
+  readabilityGrade?: string | null;
+  seoScore?: number | null;
+  keywordDensity?: number | null;
+  suggestedKeywords?: string[] | null;
+  generatedAt?: string | null;
+}
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -251,6 +272,7 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    seoMetadata: jsonb("seo_metadata").$type<SeoMetadata>(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
