@@ -25,6 +25,7 @@
     "drizzle-orm": "^0.39",
     "jszip": "^3.10.1",
     "lucide-react": "^0.576.0",
+    "marked": "^15.0.0",
     "next": "^15.1",
     "react": "^19",
     "react-dom": "^19",
