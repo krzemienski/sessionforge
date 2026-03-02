@@ -1,11 +1,18 @@
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { contentTriggers } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { automationRuns, contentTriggers, workspaces } from "@sessionforge/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { executePipeline } from "@/lib/automation/pipeline";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const body = await request.json();
   const { triggerId } = body;
 
@@ -21,34 +28,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Trigger not found" }, { status: 404 });
   }
 
-  if (!trigger.enabled) {
-    return NextResponse.json({ error: "Trigger is disabled" }, { status: 400 });
+  const workspace = await db.query.workspaces.findFirst({
+    where: eq(workspaces.id, trigger.workspaceId),
+  });
+
+  if (!workspace || workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
   }
 
-  try {
-    await db
-      .update(contentTriggers)
-      .set({ lastRunAt: new Date(), lastRunStatus: "running" })
-      .where(eq(contentTriggers.id, triggerId));
+  const activeRun = await db.query.automationRuns.findFirst({
+    where: and(
+      eq(automationRuns.triggerId, triggerId),
+      inArray(automationRuns.status, ["pending", "scanning", "extracting", "generating"])
+    ),
+  });
 
-    await db
-      .update(contentTriggers)
-      .set({ lastRunStatus: "success", lastRunAt: new Date() })
-      .where(eq(contentTriggers.id, triggerId));
-
-    return NextResponse.json({ executed: true });
-  } catch (error) {
-    await db
-      .update(contentTriggers)
-      .set({
-        lastRunStatus: error instanceof Error ? error.message : "failed",
-        lastRunAt: new Date(),
-      })
-      .where(eq(contentTriggers.id, triggerId));
-
+  if (activeRun) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Execution failed" },
-      { status: 500 }
+      { error: "Run already in progress", runId: activeRun.id },
+      { status: 409 }
     );
   }
+
+  const [newRun] = await db
+    .insert(automationRuns)
+    .values({
+      triggerId,
+      workspaceId: workspace.id,
+      status: "pending",
+    })
+    .returning();
+
+  executePipeline(newRun.id, trigger, workspace);
+
+  return NextResponse.json({ runId: newRun.id, status: "pending" }, { status: 202 });
 }
