@@ -73,7 +73,7 @@ export default function DashboardHome() {
       {scan.isSuccess && (
         <div className="bg-sf-accent-bg border border-sf-accent/20 rounded-sf-lg p-4 mb-6">
           <p className="text-sf-accent text-sm">
-            Scan complete: {scan.data?.scanned ?? 0} files scanned, {scan.data?.indexed ?? 0} sessions indexed
+            Scan complete: {scan.data?.scanned ?? 0} files scanned, {(scan.data?.new ?? 0) + (scan.data?.updated ?? 0)} sessions indexed
           </p>
         </div>
       )}
