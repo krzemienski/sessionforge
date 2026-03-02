@@ -1,10 +1,13 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useContent } from "@/hooks/use-content";
-import { useState } from "react";
-import { FileText } from "lucide-react";
+import { useContent, useContentStreak } from "@/hooks/use-content";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { FileText, CalendarDays, LayoutGrid, List } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
+import { CalendarView } from "@/components/content/calendar-view";
+import { PipelineView } from "@/components/content/pipeline-view";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "text-sf-info bg-sf-info/10",
@@ -22,76 +25,159 @@ const TYPE_LABELS: Record<string, string> = {
   custom: "Custom",
 };
 
+type ViewTab = "calendar" | "pipeline" | "list";
+
+const VIEW_TABS: { label: string; value: ViewTab; icon: React.ReactNode }[] = [
+  { label: "Calendar", value: "calendar", icon: <CalendarDays size={15} /> },
+  { label: "Pipeline", value: "pipeline", icon: <LayoutGrid size={15} /> },
+  { label: "List", value: "list", icon: <List size={15} /> },
+];
+
+const STATUS_TABS = [
+  { label: "All", value: "" },
+  { label: "Drafts", value: "draft" },
+  { label: "Published", value: "published" },
+  { label: "Archived", value: "archived" },
+];
+
 export default function ContentPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<ViewTab | null>(null);
+
   const content = useContent(workspace, { limit: 50, status: statusFilter || undefined });
   const contentList = content.data?.posts ?? [];
 
-  const tabs = [
-    { label: "All", value: "" },
-    { label: "Drafts", value: "draft" },
-    { label: "Published", value: "published" },
-    { label: "Archived", value: "archived" },
-  ];
+  const streak = useContentStreak(workspace);
+  const streakCount: number | undefined = streak.data?.streak;
+
+  const triggers = useQuery({
+    queryKey: ["triggers", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/automation/triggers?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!workspace,
+  });
+
+  // Smart default: Calendar when automation triggers exist, otherwise List
+  useEffect(() => {
+    if (activeTab !== null) return;
+    if (triggers.isLoading) return;
+    const hasTriggers = (triggers.data?.triggers ?? []).length > 0;
+    setActiveTab(hasTriggers ? "calendar" : "list");
+  }, [triggers.isLoading, triggers.data, activeTab]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold font-display">Content</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold font-display">Content</h1>
+          {streakCount != null && streakCount > 0 && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-sf-accent/10 border border-sf-accent/20 rounded-sf-full">
+              <span className="text-base leading-none">🔥</span>
+              <span className="text-xs font-medium text-sf-accent">
+                {streakCount}-week streak
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="flex gap-2 mb-6">
-        {tabs.map((tab) => (
+      {/* View tabs */}
+      <div className="flex gap-1 mb-6 bg-sf-bg-tertiary rounded-sf p-0.5 w-fit">
+        {VIEW_TABS.map((tab) => (
           <button
             key={tab.value}
-            onClick={() => setStatusFilter(tab.value)}
+            onClick={() => setActiveTab(tab.value)}
             className={cn(
-              "px-3 py-1.5 text-sm rounded-sf transition-colors",
-              statusFilter === tab.value
-                ? "bg-sf-accent-bg text-sf-accent"
-                : "text-sf-text-secondary hover:bg-sf-bg-hover"
+              "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sf transition-colors",
+              activeTab === tab.value
+                ? "bg-sf-bg-secondary text-sf-text-primary shadow-sm"
+                : "text-sf-text-secondary hover:text-sf-text-primary"
             )}
           >
+            {tab.icon}
             {tab.label}
           </button>
         ))}
       </div>
 
-      <div className="space-y-3">
-        {contentList.map((post: any) => (
-          <div
-            key={post.id}
-            onClick={() => router.push(`/${workspace}/content/${post.id}`)}
-            className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status] || "")}>
-                {post.status}
-              </span>
-              <span className="px-2 py-0.5 bg-sf-bg-tertiary rounded-sf-full text-xs text-sf-text-secondary">
-                {TYPE_LABELS[post.contentType] || post.contentType}
-              </span>
-              <span className="ml-auto text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
-            </div>
-            <h3 className="font-semibold text-sf-text-primary mb-1">{post.title}</h3>
-            <p className="text-sm text-sf-text-secondary line-clamp-2">
-              {post.markdown?.slice(0, 150)}...
-            </p>
-            {post.wordCount && (
-              <p className="text-xs text-sf-text-muted mt-2">{post.wordCount} words</p>
+      {/* Calendar view */}
+      {activeTab === "calendar" && (
+        <CalendarView workspace={workspace} />
+      )}
+
+      {/* Pipeline view */}
+      {activeTab === "pipeline" && (
+        <PipelineView
+          workspace={workspace}
+          onNavigateToPost={(postId) => router.push(`/${workspace}/content/${postId}`)}
+        />
+      )}
+
+      {/* List view */}
+      {activeTab === "list" && (
+        <>
+          <div className="flex gap-2 mb-6">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setStatusFilter(tab.value)}
+                className={cn(
+                  "px-3 py-1.5 text-sm rounded-sf transition-colors",
+                  statusFilter === tab.value
+                    ? "bg-sf-accent-bg text-sf-accent"
+                    : "text-sf-text-secondary hover:bg-sf-bg-hover"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            {contentList.map((post: any) => (
+              <div
+                key={post.id}
+                onClick={() => router.push(`/${workspace}/content/${post.id}`)}
+                className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status] || "")}>
+                    {post.status}
+                  </span>
+                  <span className="px-2 py-0.5 bg-sf-bg-tertiary rounded-sf-full text-xs text-sf-text-secondary">
+                    {TYPE_LABELS[post.contentType] || post.contentType}
+                  </span>
+                  <span className="ml-auto text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
+                </div>
+                <h3 className="font-semibold text-sf-text-primary mb-1">{post.title}</h3>
+                <p className="text-sm text-sf-text-secondary line-clamp-2">
+                  {post.markdown?.slice(0, 150)}...
+                </p>
+                {post.wordCount && (
+                  <p className="text-xs text-sf-text-muted mt-2">{post.wordCount} words</p>
+                )}
+              </div>
+            ))}
+
+            {contentList.length === 0 && !content.isLoading && (
+              <div className="text-center py-12">
+                <FileText size={40} className="mx-auto text-sf-text-muted mb-3" />
+                <p className="text-sf-text-secondary">No content yet. Generate content from insights or create manually.</p>
+              </div>
             )}
           </div>
-        ))}
+        </>
+      )}
 
-        {contentList.length === 0 && !content.isLoading && (
-          <div className="text-center py-12">
-            <FileText size={40} className="mx-auto text-sf-text-muted mb-3" />
-            <p className="text-sf-text-secondary">No content yet. Generate content from insights or create manually.</p>
-          </div>
-        )}
-      </div>
+      {/* Loading state while determining default view */}
+      {activeTab === null && (
+        <div className="text-center py-12 text-sm text-sf-text-muted">Loading...</div>
+      )}
     </div>
   );
 }
