@@ -70,7 +70,11 @@ export async function PUT(
   if (!willBeEnabled) {
     // Disabling: tear down any existing QStash schedule
     if (existing.qstashScheduleId) {
-      await deleteTriggerSchedule(existing.qstashScheduleId);
+      try {
+        await deleteTriggerSchedule(existing.qstashScheduleId);
+      } catch {
+        // QStash schedule already gone or API down - proceed with DB update
+      }
       qstashScheduleId = null;
     }
   } else if (willBeEnabled && effectiveCron) {
@@ -83,9 +87,17 @@ export async function PUT(
 
     if (cronChanged || justEnabled || noScheduleYet) {
       if (existing.qstashScheduleId) {
-        await deleteTriggerSchedule(existing.qstashScheduleId);
+        try {
+          await deleteTriggerSchedule(existing.qstashScheduleId);
+        } catch {
+          // Proceed even if old schedule cleanup fails
+        }
       }
-      qstashScheduleId = await createTriggerSchedule(id, effectiveCron);
+      try {
+        qstashScheduleId = await createTriggerSchedule(id, effectiveCron);
+      } catch {
+        qstashScheduleId = null;
+      }
     }
   }
 
@@ -129,7 +141,11 @@ export async function DELETE(
   }
 
   if (existing.qstashScheduleId) {
-    await deleteTriggerSchedule(existing.qstashScheduleId);
+    try {
+      await deleteTriggerSchedule(existing.qstashScheduleId);
+    } catch {
+      // Schedule already gone or API down - proceed with DB deletion
+    }
   }
 
   await db.delete(contentTriggers).where(eq(contentTriggers.id, id));
