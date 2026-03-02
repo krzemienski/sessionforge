@@ -62,6 +62,18 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "file_watch",
 ]);
 
+export const editTypeEnum = pgEnum("edit_type", [
+  "user_edit",
+  "ai_generated",
+  "auto_save",
+  "restore",
+]);
+
+export const versionTypeEnum = pgEnum("version_type", [
+  "major",
+  "minor",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -301,6 +313,36 @@ export const apiKeys = pgTable(
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const postRevisions = pgTable(
+  "post_revisions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    versionType: versionTypeEnum("version_type").notNull(),
+    editType: editTypeEnum("edit_type").notNull(),
+    contentSnapshot: text("content_snapshot"),
+    contentDiff: jsonb("content_diff").$type<
+      { count?: number; added?: boolean; removed?: boolean; value: string }[]
+    >(),
+    parentRevisionId: text("parent_revision_id"),
+    title: text("title").notNull(),
+    wordCount: integer("word_count").default(0),
+    wordCountDelta: integer("word_count_delta").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    createdBy: text("created_by"),
+  },
+  (table) => [
+    index("postRevisions_postId_idx").on(table.postId),
+    index("postRevisions_postId_versionNumber_idx").on(
+      table.postId,
+      table.versionNumber
+    ),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -366,7 +408,7 @@ export const insightsRelations = relations(insights, ({ one, many }) => ({
   posts: many(posts),
 }));
 
-export const postsRelations = relations(posts, ({ one }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   workspace: one(workspaces, {
     fields: [posts.workspaceId],
     references: [workspaces.id],
@@ -374,6 +416,14 @@ export const postsRelations = relations(posts, ({ one }) => ({
   insight: one(insights, {
     fields: [posts.insightId],
     references: [insights.id],
+  }),
+  revisions: many(postRevisions),
+}));
+
+export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
+  post: one(posts, {
+    fields: [postRevisions.postId],
+    references: [posts.id],
   }),
 }));
 
