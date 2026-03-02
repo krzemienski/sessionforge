@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 export function useSessions(workspace: string, params?: { limit?: number; offset?: number; sort?: string; project?: string }) {
   return useQuery({
@@ -31,15 +31,28 @@ export function useSession(id: string) {
   });
 }
 
-export function useSessionMessages(id: string, params?: { limit?: number; offset?: number }) {
-  return useQuery({
-    queryKey: ["session-messages", id, params],
-    queryFn: async () => {
-      const sp = new URLSearchParams();
-      if (params?.limit) sp.set("limit", String(params.limit));
-      if (params?.offset) sp.set("offset", String(params.offset));
+export function useSessionMessages(id: string) {
+  return useInfiniteQuery({
+    queryKey: ["session-messages", id],
+    queryFn: async ({ pageParam }: { pageParam: number }) => {
+      const sp = new URLSearchParams({ limit: "50", offset: String(pageParam) });
       const res = await fetch(`/api/sessions/${id}/messages?${sp}`);
       if (!res.ok) throw new Error("Failed to fetch messages");
+      return res.json() as Promise<{ messages: unknown[]; offset: number; limit: number; hasMore: boolean }>;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage: { hasMore: boolean; offset: number; limit: number }) =>
+      lastPage.hasMore ? lastPage.offset + lastPage.limit : undefined,
+    enabled: !!id,
+  });
+}
+
+export function useSessionBookmarks(id: string) {
+  return useQuery({
+    queryKey: ["bookmarks", id],
+    queryFn: async () => {
+      const res = await fetch(`/api/sessions/${id}/bookmarks`);
+      if (!res.ok) throw new Error("Failed to fetch bookmarks");
       return res.json();
     },
     enabled: !!id,

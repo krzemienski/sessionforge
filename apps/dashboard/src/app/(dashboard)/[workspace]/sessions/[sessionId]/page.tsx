@@ -11,11 +11,11 @@ export default function SessionDetailPage() {
   const { workspace, sessionId } = useParams<{ workspace: string; sessionId: string }>();
   const router = useRouter();
   const session = useSession(sessionId);
-  const messages = useSessionMessages(sessionId, { limit: 100 });
+  const messages = useSessionMessages(sessionId);
   const extract = useExtractInsights(workspace);
 
   const s = session.data;
-  const msgList = messages.data?.messages ?? [];
+  const msgList = messages.data?.pages.flatMap((p) => p.messages) ?? [];
 
   if (session.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /><div className="h-4 bg-sf-bg-tertiary rounded w-2/3" /></div>;
