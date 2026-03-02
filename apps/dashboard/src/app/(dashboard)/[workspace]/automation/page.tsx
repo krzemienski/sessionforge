@@ -1,0 +1,126 @@
+"use client";
+
+import { useParams } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Zap, Plus, Trash2 } from "lucide-react";
+import { cn, timeAgo } from "@/lib/utils";
+
+export default function AutomationPage() {
+  const { workspace } = useParams<{ workspace: string }>();
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("Weekly Blog");
+  const [triggerType, setTriggerType] = useState("scheduled");
+  const [contentType, setContentType] = useState("blog_post");
+  const [cron, setCron] = useState("0 9 * * MON");
+
+  const triggers = useQuery({
+    queryKey: ["triggers", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/automation/triggers?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const create = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch("/api/automation/triggers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, workspaceSlug: workspace }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["triggers"] }); setShowForm(false); },
+  });
+
+  const del = useMutation({
+    mutationFn: async (id: string) => {
+      await fetch(`/api/automation/triggers/${id}`, { method: "DELETE" });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["triggers"] }),
+  });
+
+  const toggle = useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      await fetch(`/api/automation/triggers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["triggers"] }),
+  });
+
+  const triggerList = triggers.data?.triggers ?? [];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold font-display">Automation</h1>
+        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors">
+          <Plus size={16} /> New Trigger
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 mb-6 space-y-3">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Trigger name" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary" />
+          <div className="grid grid-cols-2 gap-3">
+            <select value={triggerType} onChange={(e) => setTriggerType(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
+              <option value="manual">Manual</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="file_watch">File Watch</option>
+            </select>
+            <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
+              <option value="blog_post">Blog Post</option>
+              <option value="twitter_thread">Twitter Thread</option>
+              <option value="changelog">Changelog</option>
+            </select>
+          </div>
+          {triggerType === "scheduled" && (
+            <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="Cron expression" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code" />
+          )}
+          <div className="flex gap-2">
+            <button onClick={() => create.mutate({ name, triggerType, contentType, cronExpression: triggerType === "scheduled" ? cron : undefined })} className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium">Save</button>
+            <button onClick={() => setShowForm(false)} className="text-sf-text-secondary px-4 py-2 text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {triggerList.map((t: any) => (
+          <div key={t.id} className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-sf-text-primary">{t.name}</h3>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => toggle.mutate({ id: t.id, enabled: !t.enabled })}
+                  className={cn("w-10 h-5 rounded-full transition-colors relative", t.enabled ? "bg-sf-accent" : "bg-sf-bg-tertiary border border-sf-border")}
+                >
+                  <div className={cn("w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform", t.enabled ? "translate-x-5" : "translate-x-0.5")} />
+                </button>
+                <button onClick={() => del.mutate(t.id)} className="text-sf-text-muted hover:text-sf-danger"><Trash2 size={16} /></button>
+              </div>
+            </div>
+            <p className="text-xs text-sf-text-secondary">
+              {t.triggerType === "scheduled" ? `Scheduled` : t.triggerType} · {t.contentType?.replace(/_/g, " ")} · {t.lookbackWindow?.replace(/_/g, " ")}
+            </p>
+            {t.cronExpression && <p className="text-xs text-sf-text-muted font-code mt-1">{t.cronExpression}</p>}
+            {t.lastRunAt && <p className="text-xs text-sf-text-muted mt-1">Last run: {timeAgo(t.lastRunAt)} ({t.lastRunStatus || "unknown"})</p>}
+          </div>
+        ))}
+
+        {triggerList.length === 0 && !triggers.isLoading && (
+          <div className="text-center py-12">
+            <Zap size={40} className="mx-auto text-sf-text-muted mb-3" />
+            <p className="text-sf-text-secondary">No automation triggers yet. Create one to automate content generation.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
