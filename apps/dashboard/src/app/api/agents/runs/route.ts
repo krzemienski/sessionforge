@@ -36,11 +36,12 @@ export async function GET(request: Request) {
     );
   }
 
-  const runs = await db.query.agentRuns.findMany({
-    where: and(...conditions),
-    orderBy: [desc(agentRuns.startedAt)],
-    limit,
-  });
+  const runs = await db
+    .select()
+    .from(agentRuns)
+    .where(and(...conditions))
+    .orderBy(desc(agentRuns.startedAt))
+    .limit(limit);
 
   return NextResponse.json({ runs });
 }
