@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { SeoMetadata } from "@/lib/seo";
 
 export function useContent(workspace: string, params?: { limit?: number; offset?: number; status?: string; type?: string }) {
   return useQuery({
@@ -59,5 +60,53 @@ export function useDeletePost() {
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["content"] }),
+  });
+}
+
+export function useSeoData(postId: string) {
+  return useQuery({
+    queryKey: ["seo", postId],
+    queryFn: async () => {
+      const res = await fetch(`/api/content/${postId}/seo`);
+      if (!res.ok) throw new Error("Failed to fetch SEO data");
+      return res.json();
+    },
+    enabled: !!postId,
+  });
+}
+
+export function useGenerateSeo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ postId }: { postId: string }) => {
+      const res = await fetch(`/api/content/${postId}/seo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId }),
+      });
+      if (!res.ok) throw new Error("SEO generation failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["seo", vars.postId] });
+    },
+  });
+}
+
+export function useSaveSeo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ postId, ...data }: { postId: string } & Partial<SeoMetadata>) => {
+      const res = await fetch(`/api/content/${postId}/seo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("SEO save failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["seo", vars.postId] });
+    },
   });
 }
