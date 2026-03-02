@@ -1,0 +1,16 @@
+{
+  "name": "sessionforge",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "db:push": "cd packages/db && bunx drizzle-kit push",
+    "db:generate": "cd packages/db && bunx drizzle-kit generate"
+  },
+  "devDependencies": {
+    "turbo": "^2"
+  },
+  "packageManager": "bun@1.2.4"
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@sessionforge/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "db:push": "bunx drizzle-kit push",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "bun run src/migrate.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.39",
+    "@neondatabase/serverless": "^0.10"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.30",
+    "typescript": "^5.7",
+    "@sessionforge/tsconfig": "workspace:*"
+  }
+}
