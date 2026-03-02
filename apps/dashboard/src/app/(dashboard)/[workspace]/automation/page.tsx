@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Zap, Plus, Trash2, Clock } from "lucide-react";
+import { Zap, Plus, Trash2, Clock, Eye, PauseCircle, AlertCircle } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { getNextRunTime, formatNextRun } from "@/lib/automation/cron-utils";
 
@@ -15,6 +15,7 @@ export default function AutomationPage() {
   const [triggerType, setTriggerType] = useState("scheduled");
   const [contentType, setContentType] = useState("blog_post");
   const [cron, setCron] = useState("0 9 * * MON");
+  const [debounceMinutes, setDebounceMinutes] = useState(30);
 
   const triggers = useQuery({
     queryKey: ["triggers", workspace],
@@ -85,8 +86,14 @@ export default function AutomationPage() {
           {triggerType === "scheduled" && (
             <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="Cron expression" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code" />
           )}
+          {triggerType === "file_watch" && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-sf-text-secondary whitespace-nowrap">Debounce window (minutes)</label>
+              <input type="number" min={1} value={debounceMinutes} onChange={(e) => setDebounceMinutes(Number(e.target.value))} className="w-24 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary" />
+            </div>
+          )}
           <div className="flex gap-2">
-            <button onClick={() => create.mutate({ name, triggerType, contentType, cronExpression: triggerType === "scheduled" ? cron : undefined })} className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium">Save</button>
+            <button onClick={() => create.mutate({ name, triggerType, contentType, cronExpression: triggerType === "scheduled" ? cron : undefined, debounceMinutes: triggerType === "file_watch" ? debounceMinutes : undefined })} className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium">Save</button>
             <button onClick={() => setShowForm(false)} className="text-sf-text-secondary px-4 py-2 text-sm">Cancel</button>
           </div>
         </div>
@@ -117,11 +124,22 @@ export default function AutomationPage() {
                 <p className="text-xs text-sf-text-secondary mt-1">Next run: {formatNextRun(nextRun)}</p>
               ) : null;
             })()}
-            {t.qstashScheduleId && (
+            {t.qstashScheduleId && t.triggerType !== "file_watch" && (
               <span className="inline-flex items-center gap-1 text-xs text-sf-accent mt-1">
                 <Clock size={11} />
                 Scheduled
               </span>
+            )}
+            {t.triggerType === "file_watch" && t.watchStatus && (
+              <span className={cn("inline-flex items-center gap-1 text-xs mt-1", t.watchStatus === "watching" ? "text-sf-accent" : t.watchStatus === "error" ? "text-sf-danger" : "text-sf-text-muted")}>
+                {t.watchStatus === "watching" && <Eye size={11} />}
+                {t.watchStatus === "paused" && <PauseCircle size={11} />}
+                {t.watchStatus === "error" && <AlertCircle size={11} />}
+                {t.watchStatus}
+              </span>
+            )}
+            {t.triggerType === "file_watch" && t.lastFileEventAt && (
+              <p className="text-xs text-sf-text-muted mt-1">Last file event: {timeAgo(t.lastFileEventAt)}</p>
             )}
             {t.lastRunAt && <p className="text-xs text-sf-text-muted mt-1">Last run: {timeAgo(t.lastRunAt)} ({t.lastRunStatus || "unknown"})</p>}
           </div>
