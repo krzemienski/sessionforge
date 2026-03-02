@@ -39,7 +39,7 @@ export function usePost(id: string) {
 export function useUpdatePost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: string; title?: string; markdown?: string; status?: string }) => {
+    mutationFn: async ({ id, ...data }: { id: string; title?: string; markdown?: string; status?: string; badgeEnabled?: boolean; platformFooterEnabled?: boolean }) => {
       const res = await fetch(`/api/content/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

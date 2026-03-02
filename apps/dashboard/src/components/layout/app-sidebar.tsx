@@ -12,6 +12,7 @@ import {
   Settings,
   Palette,
   KeyRound,
+  Link2,
   LogOut,
   Search,
 } from "lucide-react";
@@ -30,6 +31,7 @@ const settingsNav = [
   { label: "Settings", icon: Settings, href: "/settings" },
   { label: "Style", icon: Palette, href: "/settings/style" },
   { label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
+  { label: "Integrations", icon: Link2, href: "/settings/integrations" },
 ];
 
 export function AppSidebar({
