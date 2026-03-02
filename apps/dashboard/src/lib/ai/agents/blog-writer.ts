@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { eq } from "drizzle-orm";
 import { getModelForAgent } from "../orchestration/model-selector";
 import { getToolsForAgent } from "../orchestration/tool-registry";
+import { withRetry, isRateLimitError } from "../orchestration/retry";
 import { handleSessionReaderTool } from "../tools/session-reader";
 import { handleInsightTool } from "../tools/insight-tools";
 import { handlePostManagerTool } from "../tools/post-manager";
@@ -9,6 +11,8 @@ import { BLOG_TECHNICAL_PROMPT } from "../prompts/blog/technical";
 import { BLOG_TUTORIAL_PROMPT } from "../prompts/blog/tutorial";
 import { BLOG_CONVERSATIONAL_PROMPT } from "../prompts/blog/conversational";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
+import { db } from "@/lib/db";
+import { agentRuns } from "../../../../../../packages/db/src/schema";
 
 const client = new Anthropic();
 
@@ -27,10 +31,55 @@ interface BlogWriterInput {
   customInstructions?: string;
 }
 
+const RETRY_CONFIG = {
+  maxAttempts: 3,
+  delays: [1000, 4000, 16000],
+  rateLimitDelay: 60000,
+};
+
 export function streamBlogWriter(input: BlogWriterInput): Response {
   const { stream, send, close } = createSSEStream();
 
   const run = async () => {
+    // Create agent run record for observability
+    let agentRunId: string | undefined;
+    try {
+      const [agentRun] = await db
+        .insert(agentRuns)
+        .values({
+          workspaceId: input.workspaceId,
+          agentType: "blog-writer",
+          status: "running",
+          inputMetadata: {
+            insightId: input.insightId,
+            tone: input.tone ?? "technical",
+            workspaceId: input.workspaceId,
+          },
+        })
+        .returning();
+      agentRunId = agentRun.id;
+    } catch {
+      // Logging failure should not block agent execution
+    }
+
+    let totalAttempts = 0;
+
+    const retryOptions = {
+      ...RETRY_CONFIG,
+      onRetry: (attempt: number, error: unknown, delay: number) => {
+        const rateLimit = isRateLimitError(error);
+        send("retry_status", {
+          attempt,
+          maxAttempts: RETRY_CONFIG.maxAttempts,
+          delayMs: delay,
+          isRateLimit: rateLimit,
+          message: rateLimit
+            ? `Rate limited. Retrying in ${delay / 1000}s...`
+            : `Retrying... attempt ${attempt} of 3`,
+        });
+      },
+    };
+
     try {
       const model = getModelForAgent("blog-writer");
       const tools = getToolsForAgent("blog-writer");
@@ -46,13 +95,21 @@ export function streamBlogWriter(input: BlogWriterInput): Response {
 
       send("status", { phase: "starting", message: "Initializing blog writer..." });
 
-      let response = await client.messages.create({
-        model,
-        max_tokens: 8192,
-        system: systemPrompt,
-        tools: tools as Anthropic.Tool[],
-        messages,
-      });
+      const { result: initialResponse, attempts: initialAttempts } =
+        await withRetry(
+          () =>
+            client.messages.create({
+              model,
+              max_tokens: 8192,
+              system: systemPrompt,
+              tools: tools as Anthropic.Tool[],
+              messages,
+            }),
+          retryOptions
+        );
+      totalAttempts += initialAttempts;
+
+      let response = initialResponse;
 
       while (response.stop_reason === "tool_use") {
         const toolUseBlocks = response.content.filter(
@@ -102,13 +159,20 @@ export function streamBlogWriter(input: BlogWriterInput): Response {
         messages.push({ role: "assistant", content: response.content });
         messages.push(toolResults);
 
-        response = await client.messages.create({
-          model,
-          max_tokens: 8192,
-          system: systemPrompt,
-          tools: tools as Anthropic.Tool[],
-          messages,
-        });
+        const { result: nextResponse, attempts: nextAttempts } =
+          await withRetry(
+            () =>
+              client.messages.create({
+                model,
+                max_tokens: 8192,
+                system: systemPrompt,
+                tools: tools as Anthropic.Tool[],
+                messages,
+              }),
+            retryOptions
+          );
+        totalAttempts += nextAttempts;
+        response = nextResponse;
       }
 
       // Stream text blocks
@@ -118,11 +182,44 @@ export function streamBlogWriter(input: BlogWriterInput): Response {
         }
       }
 
+      if (agentRunId) {
+        try {
+          await db
+            .update(agentRuns)
+            .set({
+              status: "completed",
+              completedAt: new Date(),
+              attemptCount: totalAttempts,
+              resultMetadata: { usage: response.usage },
+            })
+            .where(eq(agentRuns.id, agentRunId));
+        } catch {
+          // DB update failure should not prevent success event
+        }
+      }
+
       send("complete", { usage: response.usage });
     } catch (error) {
-      send("error", {
-        message: error instanceof Error ? error.message : String(error),
-      });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      if (agentRunId) {
+        try {
+          await db
+            .update(agentRuns)
+            .set({
+              status: "failed",
+              completedAt: new Date(),
+              attemptCount: totalAttempts,
+              errorMessage,
+            })
+            .where(eq(agentRuns.id, agentRunId));
+        } catch {
+          // DB update failure should not prevent error event
+        }
+      }
+
+      send("error", { message: errorMessage });
     } finally {
       close();
     }
