@@ -66,7 +66,7 @@ export default function SessionDetailPage() {
         </div>
       )}
 
-      <TranscriptViewer sessionId={sessionId} />
+      <TranscriptViewer sessionId={sessionId} workspace={workspace} />
     </div>
   );
 }

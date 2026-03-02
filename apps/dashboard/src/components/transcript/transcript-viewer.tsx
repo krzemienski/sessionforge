@@ -15,6 +15,7 @@ import {
   useCreateBookmark,
   useDeleteBookmark,
 } from "@/hooks/use-bookmarks";
+import { useExtractInsights } from "@/hooks/use-insights";
 import { TranscriptMessage, RawSessionEntry } from "./transcript-message";
 import { TranscriptSearch } from "./transcript-search";
 import { TimelineScrubber, BookmarkMarker } from "./timeline-scrubber";
@@ -31,6 +32,11 @@ interface BookmarkRecord {
 export interface TranscriptViewerProps {
   /** The session ID to display the transcript for. */
   sessionId: string;
+  /**
+   * Workspace slug — when provided, enables "Send to Insights" on bookmark pills
+   * in the timeline scrubber.
+   */
+  workspace?: string;
   className?: string;
 }
 
@@ -49,12 +55,15 @@ function extractText(entry: RawSessionEntry): string {
 
 // ── TranscriptViewer ──────────────────────────────────────────────────────────
 
-export function TranscriptViewer({ sessionId, className }: TranscriptViewerProps) {
+export function TranscriptViewer({ sessionId, workspace, className }: TranscriptViewerProps) {
   // ── Remote data ────────────────────────────────────────────────────────────
   const messages = useSessionMessages(sessionId);
   const bookmarksQuery = useSessionBookmarks(sessionId);
   const createBookmark = useCreateBookmark(sessionId);
   const deleteBookmark = useDeleteBookmark(sessionId);
+
+  // Insight extraction — only active when a workspace slug is provided
+  const extractInsights = useExtractInsights(workspace ?? "");
 
   /** Flat list of all messages across infinite-query pages. */
   const allMessages = useMemo<RawSessionEntry[]>(
@@ -230,6 +239,12 @@ export function TranscriptViewer({ sessionId, className }: TranscriptViewerProps
     return () => io.disconnect();
   }, [messages.hasNextPage, messages.isFetchingNextPage, messages.fetchNextPage]);
 
+  // ── Send bookmark to insight extraction ───────────────────────────────────
+  const handleSendToInsights = useCallback(() => {
+    if (!workspace) return;
+    extractInsights.mutate([sessionId]);
+  }, [workspace, sessionId, extractInsights]);
+
   // ── Bookmark toggle ────────────────────────────────────────────────────────
   const handleBookmark = useCallback(
     (index: number, label: string) => {
@@ -281,6 +296,8 @@ export function TranscriptViewer({ sessionId, className }: TranscriptViewerProps
         currentPosition={currentPosition}
         onChange={handleTimelineChange}
         bookmarks={bookmarkMarkers}
+        onSendToInsights={workspace ? handleSendToInsights : undefined}
+        isSendingInsights={extractInsights.isPending}
       />
 
       {/* ── Search bar ─────────────────────────────────────────────────── */}

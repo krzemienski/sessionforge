@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useId } from "react";
-import { Bookmark } from "lucide-react";
+import { Bookmark, Lightbulb, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -20,6 +20,13 @@ export interface TimelineScrubberProps {
   onChange: (position: number) => void;
   /** Optional list of bookmark positions to render as dot markers. */
   bookmarks?: BookmarkMarker[];
+  /**
+   * When provided, a "Send to Insights" button is shown alongside bookmarks.
+   * Clicking it triggers insight extraction for the session.
+   */
+  onSendToInsights?: () => void;
+  /** Whether insight extraction is currently in-flight. */
+  isSendingInsights?: boolean;
   className?: string;
 }
 
@@ -37,6 +44,8 @@ export function TimelineScrubber({
   currentPosition,
   onChange,
   bookmarks = [],
+  onSendToInsights,
+  isSendingInsights = false,
   className,
 }: TimelineScrubberProps) {
   const inputId = useId();
@@ -132,7 +141,7 @@ export function TimelineScrubber({
 
       {/* ── Bookmark pills ────────────────────────────────────────────── */}
       {bookmarks.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-2.5">
+        <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
           {bookmarks.map((bm, i) => {
             const isActive = bm.messageIndex === currentPosition;
             return (
@@ -155,6 +164,29 @@ export function TimelineScrubber({
               </button>
             );
           })}
+
+          {/* "Send to Insights" — triggers insight extraction for bookmarked session */}
+          {onSendToInsights && (
+            <button
+              type="button"
+              onClick={onSendToInsights}
+              disabled={isSendingInsights}
+              title="Extract insights from this session's bookmarked moments"
+              className={cn(
+                "flex items-center gap-1 text-xs font-code px-2 py-0.5 rounded-sf border transition-colors ml-auto",
+                isSendingInsights
+                  ? "border-sf-accent/30 bg-sf-accent-bg text-sf-accent/60 cursor-not-allowed"
+                  : "border-sf-accent/50 bg-sf-accent-bg text-sf-accent hover:bg-sf-accent/20"
+              )}
+            >
+              {isSendingInsights ? (
+                <Loader2 size={10} className="shrink-0 animate-spin" />
+              ) : (
+                <Lightbulb size={10} className="shrink-0" />
+              )}
+              <span>{isSendingInsights ? "Extracting…" : "Send to Insights"}</span>
+            </button>
+          )}
         </div>
       )}
     </div>

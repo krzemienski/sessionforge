@@ -55,7 +55,8 @@ export async function GET(
     .where(eq(sessionBookmarks.sessionId, id))
     .orderBy(sessionBookmarks.messageIndex);
 
-  return NextResponse.json({ bookmarks });
+  // Return array directly — consumers (TranscriptViewer) expect Array.isArray check to succeed.
+  return NextResponse.json(bookmarks);
 }
 
 export async function POST(
