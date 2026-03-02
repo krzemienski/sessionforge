@@ -252,6 +252,8 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    wordpressPublishedUrl: text("wordpress_published_url"),
+    wordpressPostId: integer("wordpress_post_id"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
