@@ -1,3 +1,9 @@
+/**
+ * Blog writer agent that generates blog posts from session insights.
+ * Uses the Anthropic SDK with tool use to fetch insight data and create posts,
+ * streaming progress events over SSE as the agent works.
+ */
+
 import Anthropic from "@anthropic-ai/sdk";
 import { getModelForAgent } from "../orchestration/model-selector";
 import { getToolsForAgent } from "../orchestration/tool-registry";
@@ -12,6 +18,7 @@ import { createSSEStream, sseResponse } from "../orchestration/streaming";
 
 const client = new Anthropic();
 
+/** Writing style applied to the generated blog post. */
 type BlogTone = "technical" | "tutorial" | "conversational";
 
 const PROMPTS: Record<BlogTone, string> = {
@@ -20,13 +27,26 @@ const PROMPTS: Record<BlogTone, string> = {
   conversational: BLOG_CONVERSATIONAL_PROMPT,
 };
 
+/** Input parameters for the blog writer agent. */
 interface BlogWriterInput {
+  /** ID of the workspace owning the insight and target post. */
   workspaceId: string;
+  /** ID of the insight to base the blog post on. */
   insightId: string;
+  /** Writing tone for the generated post. Defaults to "technical". */
   tone?: BlogTone;
+  /** Optional freeform instructions appended to the agent's prompt. */
   customInstructions?: string;
 }
 
+/**
+ * Starts the blog writer agent and returns an SSE streaming response.
+ * The agent fetches the specified insight, retrieves related session data,
+ * and writes a blog post via tool use, emitting progress events throughout.
+ *
+ * @param input - Workspace, insight, tone, and optional custom instructions.
+ * @returns An SSE `Response` that streams status, tool, and text events.
+ */
 export function streamBlogWriter(input: BlogWriterInput): Response {
   const { stream, send, close } = createSSEStream();
 
@@ -132,6 +152,16 @@ export function streamBlogWriter(input: BlogWriterInput): Response {
   return sseResponse(stream);
 }
 
+/**
+ * Routes a tool call from the agent to the appropriate tool handler.
+ * Supports session reader, insight, post manager, and skill loader tools.
+ *
+ * @param workspaceId - Workspace context passed to each handler.
+ * @param toolName - Name of the tool requested by the agent.
+ * @param toolInput - Arguments supplied by the agent for the tool call.
+ * @returns The handler's result, serialised to the agent as JSON.
+ * @throws {Error} When `toolName` does not match any known tool.
+ */
 async function dispatchTool(
   workspaceId: string,
   toolName: string,

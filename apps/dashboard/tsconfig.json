@@ -7,7 +7,7 @@
         "./src/*"
       ],
       "@sessionforge/db": [
-        "../../packages/db/src/index.ts"
+        "../../packages/db/src/index"
       ]
     },
     "plugins": [
