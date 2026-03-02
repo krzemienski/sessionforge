@@ -62,6 +62,15 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "file_watch",
 ]);
 
+export const automationRunStatusEnum = pgEnum("automation_run_status", [
+  "pending",
+  "scanning",
+  "extracting",
+  "generating",
+  "complete",
+  "failed",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -299,6 +308,32 @@ export const apiKeys = pgTable(
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const automationRuns = pgTable(
+  "automation_runs",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    triggerId: text("trigger_id")
+      .notNull()
+      .references(() => contentTriggers.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    status: automationRunStatusEnum("status").notNull().default("pending"),
+    sessionsScanned: integer("sessions_scanned").notNull().default(0),
+    insightsExtracted: integer("insights_extracted").notNull().default(0),
+    postId: text("post_id").references(() => posts.id),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+    durationMs: integer("duration_ms"),
+  },
+  (table) => [
+    index("automationRuns_workspaceId_idx").on(table.workspaceId),
+    index("automationRuns_triggerId_idx").on(table.triggerId),
+    index("automationRuns_startedAt_idx").on(table.startedAt),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -332,6 +367,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  automationRuns: many(automationRuns),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -364,7 +400,7 @@ export const insightsRelations = relations(insights, ({ one, many }) => ({
   posts: many(posts),
 }));
 
-export const postsRelations = relations(posts, ({ one }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   workspace: one(workspaces, {
     fields: [posts.workspaceId],
     references: [workspaces.id],
@@ -373,15 +409,17 @@ export const postsRelations = relations(posts, ({ one }) => ({
     fields: [posts.insightId],
     references: [insights.id],
   }),
+  automationRuns: many(automationRuns),
 }));
 
 export const contentTriggersRelations = relations(
   contentTriggers,
-  ({ one }) => ({
+  ({ one, many }) => ({
     workspace: one(workspaces, {
       fields: [contentTriggers.workspaceId],
       references: [workspaces.id],
     }),
+    automationRuns: many(automationRuns),
   })
 );
 
@@ -391,3 +429,21 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const automationRunsRelations = relations(
+  automationRuns,
+  ({ one }) => ({
+    trigger: one(contentTriggers, {
+      fields: [automationRuns.triggerId],
+      references: [contentTriggers.id],
+    }),
+    workspace: one(workspaces, {
+      fields: [automationRuns.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [automationRuns.postId],
+      references: [posts.id],
+    }),
+  })
+);
