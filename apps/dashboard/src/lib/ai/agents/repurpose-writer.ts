@@ -1,9 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getModelForAgent } from "../orchestration/model-selector";
 import { getToolsForAgent } from "../orchestration/tool-registry";
-import type { AgentType } from "../orchestration/tool-registry";
 import { handlePostManagerTool } from "../tools/post-manager";
-import { handleInsightTool } from "../tools/insight-tools";
 import { TWITTER_THREAD_PROMPT } from "../prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "../prompts/social/linkedin-post";
 import { CHANGELOG_FROM_POST_PROMPT } from "../prompts/repurpose/changelog-from-post";
@@ -50,8 +48,8 @@ export function streamRepurposeWriter(input: RepurposeWriterInput): Response {
 
   const run = async () => {
     try {
-      const model = getModelForAgent("repurpose-writer" as unknown as AgentType);
-      const tools = getToolsForAgent("repurpose-writer" as unknown as AgentType);
+      const model = getModelForAgent("repurpose-writer");
+      const tools = getToolsForAgent("repurpose-writer");
       const systemPrompt = PROMPTS[input.targetFormat];
       const formatLabel = FORMAT_LABELS[input.targetFormat];
       const contentType = CONTENT_TYPES[input.targetFormat];
@@ -157,13 +155,6 @@ async function dispatchTool(
   toolName: string,
   toolInput: Record<string, unknown>
 ): Promise<unknown> {
-  if (
-    toolName.startsWith("get_insight") ||
-    toolName === "get_top_insights" ||
-    toolName === "create_insight"
-  ) {
-    return handleInsightTool(workspaceId, toolName, toolInput);
-  }
   if (
     toolName === "create_post" ||
     toolName === "update_post" ||

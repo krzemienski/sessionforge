@@ -56,7 +56,7 @@ const AGENT_TOOL_SETS: Record<AgentType, (keyof typeof ALL_TOOLS)[]> = {
   "social-writer": ["session", "insight", "post"],
   "changelog-writer": ["session", "post"],
   "editor-chat": ["post", "markdown"],
-  "repurpose-writer": ["post", "markdown"],
+  "repurpose-writer": ["post"],
 };
 
 /**
