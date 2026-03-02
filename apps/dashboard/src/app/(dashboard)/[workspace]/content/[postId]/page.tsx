@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost } from "@/hooks/use-content";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, History } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { ExportDropdown } from "@/components/content/export-dropdown";
@@ -14,6 +14,13 @@ const MarkdownEditor = dynamic(
   { ssr: false, loading: () => <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg animate-pulse" /> }
 );
 
+const RevisionHistoryPanel = dynamic(
+  () => import("@/components/editor/revision-history-panel").then((m) => m.RevisionHistoryPanel),
+  { ssr: false, loading: () => <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg animate-pulse" /> }
+);
+
+const AUTO_SAVE_INTERVAL_MS = 2 * 60 * 1000;
+
 export default function ContentEditorPage() {
   const { workspace, postId } = useParams<{ workspace: string; postId: string }>();
   const router = useRouter();
@@ -23,19 +30,41 @@ export default function ContentEditorPage() {
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
   const [externalMd, setExternalMd] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const initializedRef = useRef(false);
+  const lastSavedMarkdownRef = useRef("");
 
   useEffect(() => {
     if (post.data && !initializedRef.current) {
       setTitle(post.data.title || "");
       setMarkdown(post.data.markdown || "");
       setStatus(post.data.status || "draft");
+      lastSavedMarkdownRef.current = post.data.markdown || "";
       initializedRef.current = true;
     }
   }, [post.data]);
 
+  // Auto-save every 2 minutes when content has changed since last save
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (initializedRef.current && markdown !== lastSavedMarkdownRef.current) {
+        update.mutate({
+          id: postId,
+          title,
+          markdown,
+          status,
+          versionType: "minor",
+          editType: "auto_save",
+        });
+        lastSavedMarkdownRef.current = markdown;
+      }
+    }, AUTO_SAVE_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [postId, title, markdown, status, update]);
+
   function handleSave() {
-    update.mutate({ id: postId, title, markdown, status });
+    update.mutate({ id: postId, title, markdown, status, versionType: "major", editType: "user_edit" });
+    lastSavedMarkdownRef.current = markdown;
   }
 
   const handleMarkdownChange = useCallback((md: string) => {
@@ -47,7 +76,15 @@ export default function ContentEditorPage() {
     setExternalMd(newMd);
     // Reset external trigger after a tick so future updates work
     setTimeout(() => setExternalMd(null), 100);
-  }, []);
+    // Save AI edits immediately as a minor ai_generated revision
+    update.mutate({
+      id: postId,
+      markdown: newMd,
+      versionType: "minor",
+      editType: "ai_generated",
+    });
+    lastSavedMarkdownRef.current = newMd;
+  }, [postId, update]);
 
   if (post.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
@@ -72,6 +109,17 @@ export default function ContentEditorPage() {
             <option value="archived">Archived</option>
           </select>
           <ExportDropdown markdown={markdown} title={title} />
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-sf font-medium text-sm transition-colors ${
+              showHistory
+                ? "bg-sf-accent text-sf-bg-primary"
+                : "bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary hover:text-sf-text-primary"
+            }`}
+          >
+            <History size={16} />
+            History
+          </button>
           <button
             onClick={handleSave}
             disabled={update.isPending}
@@ -103,11 +151,15 @@ export default function ContentEditorPage() {
         </div>
 
         <div className="hidden lg:flex w-[340px] bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex-col">
-          <AIChatSidebar
-            postId={postId}
-            workspace={workspace}
-            onEditsApplied={handleEditsApplied}
-          />
+          {showHistory ? (
+            <RevisionHistoryPanel postId={postId} />
+          ) : (
+            <AIChatSidebar
+              postId={postId}
+              workspace={workspace}
+              onEditsApplied={handleEditsApplied}
+            />
+          )}
         </div>
       </div>
 

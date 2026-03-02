@@ -35,7 +35,14 @@ export function usePost(id: string) {
 export function useUpdatePost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: string; title?: string; markdown?: string; status?: string }) => {
+    mutationFn: async ({ id, ...data }: {
+      id: string;
+      title?: string;
+      markdown?: string;
+      status?: string;
+      versionType?: string;
+      editType?: string;
+    }) => {
       const res = await fetch(`/api/content/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -47,6 +54,7 @@ export function useUpdatePost() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["post", vars.id] });
       qc.invalidateQueries({ queryKey: ["content"] });
+      qc.invalidateQueries({ queryKey: ["revisions", vars.id] });
     },
   });
 }
