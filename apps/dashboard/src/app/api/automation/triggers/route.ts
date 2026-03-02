@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentTriggers, workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
-import { createTriggerSchedule } from "@/lib/qstash";
+import { createTriggerSchedule, createFileWatchSchedule } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { workspaceSlug, name, triggerType, contentType, lookbackWindow, cronExpression } = body;
+  const { workspaceSlug, name, triggerType, contentType, lookbackWindow, cronExpression, debounceMinutes } = body;
 
   if (!workspaceSlug || !triggerType || !contentType) {
     return NextResponse.json(
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
       contentType,
       lookbackWindow: lookbackWindow || "last_7_days",
       cronExpression: cronExpression || null,
+      debounceMinutes: debounceMinutes ?? 30,
     })
     .returning();
 
@@ -77,6 +78,23 @@ export async function POST(request: Request) {
       const [updated] = await db
         .update(contentTriggers)
         .set({ qstashScheduleId })
+        .where(eq(contentTriggers.id, trigger.id))
+        .returning();
+
+      return NextResponse.json(updated, { status: 201 });
+    } catch {
+      // QStash schedule creation failed (e.g. placeholder credentials) — return
+      // trigger without a scheduleId rather than failing the whole request
+    }
+  }
+
+  if (triggerType === "file_watch") {
+    try {
+      qstashScheduleId = await createFileWatchSchedule(trigger.id);
+
+      const [updated] = await db
+        .update(contentTriggers)
+        .set({ qstashScheduleId, watchStatus: "watching" })
         .where(eq(contentTriggers.id, trigger.id))
         .returning();
 
