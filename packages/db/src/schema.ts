@@ -237,17 +237,20 @@ export const posts = pgTable(
     contentType: contentTypeEnum("content_type").notNull(),
     status: postStatusEnum("status").default("draft"),
     insightId: text("insight_id").references(() => insights.id),
+    parentPostId: text("parent_post_id").references((): any => posts.id),
     sourceMetadata: jsonb("source_metadata").$type<{
       triggerId?: string;
       sessionIds: string[];
       insightIds: string[];
       lookbackWindow?: string;
+      parentPostId?: string;
       generatedBy:
         | "blog_writer"
         | "social_writer"
         | "changelog_writer"
         | "editor_chat"
-        | "manual";
+        | "manual"
+        | "repurpose_writer";
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
@@ -364,7 +367,7 @@ export const insightsRelations = relations(insights, ({ one, many }) => ({
   posts: many(posts),
 }));
 
-export const postsRelations = relations(posts, ({ one }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   workspace: one(workspaces, {
     fields: [posts.workspaceId],
     references: [workspaces.id],
@@ -372,6 +375,14 @@ export const postsRelations = relations(posts, ({ one }) => ({
   insight: one(insights, {
     fields: [posts.insightId],
     references: [insights.id],
+  }),
+  parentPost: one(posts, {
+    fields: [posts.parentPostId],
+    references: [posts.id],
+    relationName: "post_repurposed_from",
+  }),
+  repurposedPosts: many(posts, {
+    relationName: "post_repurposed_from",
   }),
 }));
 
