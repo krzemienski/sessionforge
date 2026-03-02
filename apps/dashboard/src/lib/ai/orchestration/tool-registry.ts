@@ -9,7 +9,8 @@ export type AgentType =
   | "blog-writer"
   | "social-writer"
   | "changelog-writer"
-  | "editor-chat";
+  | "editor-chat"
+  | "repurpose-writer";
 
 type AnthropicTool = {
   name: string;
@@ -35,6 +36,7 @@ const AGENT_TOOL_SETS: Record<AgentType, (keyof typeof ALL_TOOLS)[]> = {
   "social-writer": ["session", "insight", "post"],
   "changelog-writer": ["session", "post"],
   "editor-chat": ["post", "markdown"],
+  "repurpose-writer": ["post", "markdown"],
 };
 
 export function getToolsForAgent(agentType: AgentType): AnthropicTool[] {

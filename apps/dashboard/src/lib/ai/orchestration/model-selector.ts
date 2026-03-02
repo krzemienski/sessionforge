@@ -6,6 +6,7 @@ const OPUS_AGENTS: AgentType[] = [
   "social-writer",
   "changelog-writer",
   "editor-chat",
+  "repurpose-writer",
 ];
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
