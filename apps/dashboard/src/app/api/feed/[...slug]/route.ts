@@ -1,0 +1,162 @@
+import { db } from "@/lib/db";
+import { posts, workspaces } from "@sessionforge/db";
+import { eq, desc, and } from "drizzle-orm";
+import { marked } from "marked";
+
+export const dynamic = "force-dynamic";
+
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function toRfc822(date: Date | null | undefined): string {
+  if (!date) return new Date().toUTCString();
+  return date.toUTCString();
+}
+
+function toIso8601(date: Date | null | undefined): string {
+  if (!date) return new Date().toISOString();
+  return date.toISOString();
+}
+
+function buildRss(
+  workspaceName: string,
+  workspaceSlug: string,
+  baseUrl: string,
+  feedItems: { title: string; id: string; createdAt: Date | null; htmlContent: string }[]
+): string {
+  const channelLink = `${baseUrl}/${workspaceSlug}`;
+  const selfLink = `${baseUrl}/api/feed/${workspaceSlug}.xml`;
+  const lastBuildDate = feedItems.length > 0 ? toRfc822(feedItems[0].createdAt) : toRfc822(new Date());
+
+  const items = feedItems
+    .map((item) => {
+      const itemLink = `${baseUrl}/${workspaceSlug}/content/${item.id}`;
+      return `    <item>
+      <title>${escapeXml(item.title)}</title>
+      <link>${escapeXml(itemLink)}</link>
+      <guid isPermaLink="true">${escapeXml(itemLink)}</guid>
+      <pubDate>${toRfc822(item.createdAt)}</pubDate>
+      <content:encoded><![CDATA[${item.htmlContent}]]></content:encoded>
+    </item>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>${escapeXml(workspaceName)}</title>
+    <link>${escapeXml(channelLink)}</link>
+    <description>${escapeXml(`Published posts from ${workspaceName} on SessionForge`)}</description>
+    <lastBuildDate>${lastBuildDate}</lastBuildDate>
+    <atom:link href="${escapeXml(selfLink)}" rel="self" type="application/rss+xml"/>
+${items}
+  </channel>
+</rss>`;
+}
+
+function buildAtom(
+  workspaceName: string,
+  workspaceSlug: string,
+  baseUrl: string,
+  feedItems: { title: string; id: string; createdAt: Date | null; updatedAt: Date | null; htmlContent: string }[]
+): string {
+  const feedId = `${baseUrl}/api/feed/${workspaceSlug}.atom`;
+  const channelLink = `${baseUrl}/${workspaceSlug}`;
+  const updated = feedItems.length > 0 ? toIso8601(feedItems[0].updatedAt ?? feedItems[0].createdAt) : toIso8601(new Date());
+
+  const entries = feedItems
+    .map((item) => {
+      const entryId = `${baseUrl}/${workspaceSlug}/content/${item.id}`;
+      return `  <entry>
+    <title>${escapeXml(item.title)}</title>
+    <id>${escapeXml(entryId)}</id>
+    <link href="${escapeXml(entryId)}"/>
+    <published>${toIso8601(item.createdAt)}</published>
+    <updated>${toIso8601(item.updatedAt ?? item.createdAt)}</updated>
+    <content type="html"><![CDATA[${item.htmlContent}]]></content>
+  </entry>`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>${escapeXml(workspaceName)}</title>
+  <id>${escapeXml(feedId)}</id>
+  <link href="${escapeXml(channelLink)}"/>
+  <link href="${escapeXml(feedId)}" rel="self"/>
+  <updated>${updated}</updated>
+${entries}
+</feed>`;
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ slug: string[] }> }
+) {
+  const { slug } = await params;
+  const slugStr = slug.join("/");
+
+  let workspaceSlug: string;
+  let format: "rss" | "atom";
+
+  if (slugStr.endsWith(".atom")) {
+    workspaceSlug = slugStr.slice(0, -5);
+    format = "atom";
+  } else if (slugStr.endsWith(".xml")) {
+    workspaceSlug = slugStr.slice(0, -4);
+    format = "rss";
+  } else {
+    workspaceSlug = slugStr;
+    format = "rss";
+  }
+
+  const workspace = await db.query.workspaces.findFirst({
+    where: eq(workspaces.slug, workspaceSlug),
+  });
+
+  if (!workspace) {
+    return new Response("Workspace not found", { status: 404 });
+  }
+
+  const publishedPosts = await db.query.posts.findMany({
+    where: and(
+      eq(posts.workspaceId, workspace.id),
+      eq(posts.status, "published")
+    ),
+    orderBy: [desc(posts.createdAt)],
+    limit: 50,
+  });
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+
+  const feedItems = await Promise.all(
+    publishedPosts.map(async (post) => ({
+      title: post.title,
+      id: post.id,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+      htmlContent: await marked(post.markdown ?? ""),
+    }))
+  );
+
+  if (format === "atom") {
+    const xml = buildAtom(workspace.name, workspaceSlug, baseUrl, feedItems);
+    return new Response(xml, {
+      status: 200,
+      headers: { "Content-Type": "application/atom+xml; charset=utf-8" },
+    });
+  }
+
+  const xml = buildRss(workspace.name, workspaceSlug, baseUrl, feedItems);
+  return new Response(xml, {
+    status: 200,
+    headers: { "Content-Type": "application/rss+xml; charset=utf-8" },
+  });
+}
