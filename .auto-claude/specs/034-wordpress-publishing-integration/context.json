@@ -1,0 +1,130 @@
+{
+  "task": "034-wordpress-publishing-integration",
+  "summary": "Add WordPress REST API publishing integration to SessionForge. Users connect their WordPress site in workspace settings using an application password, then publish blog posts directly from the content editor.",
+  "investigation_date": "2026-03-02",
+
+  "files_to_create": [
+    {
+      "path": "packages/db/src/schema.ts",
+      "action": "modify",
+      "description": "Add wordpressConnections pgTable and wordpressPublishedUrl + wordpressPostId columns to posts table"
+    },
+    {
+      "path": "apps/dashboard/src/lib/wordpress/crypto.ts",
+      "action": "create",
+      "description": "AES-256-CBC encryption/decryption for application passwords using BETTER_AUTH_SECRET"
+    },
+    {
+      "path": "apps/dashboard/src/lib/wordpress/client.ts",
+      "action": "create",
+      "description": "WordPressClient class with testConnection, getCategories, getTags, createPost methods"
+    },
+    {
+      "path": "apps/dashboard/src/app/api/workspace/[slug]/wordpress/route.ts",
+      "action": "create",
+      "description": "GET/POST/DELETE route for WordPress connection management"
+    },
+    {
+      "path": "apps/dashboard/src/app/api/workspace/[slug]/wordpress/test/route.ts",
+      "action": "create",
+      "description": "POST route to test WordPress connection and return site info + taxonomy lists"
+    },
+    {
+      "path": "apps/dashboard/src/app/api/content/[id]/wordpress/publish/route.ts",
+      "action": "create",
+      "description": "POST route to publish a SessionForge post to WordPress and store the returned URL"
+    },
+    {
+      "path": "apps/dashboard/src/app/(dashboard)/[workspace]/settings/wordpress/page.tsx",
+      "action": "create",
+      "description": "WordPress connection settings page with connect/test/disconnect UI"
+    },
+    {
+      "path": "apps/dashboard/src/components/content/wordpress-publish-modal.tsx",
+      "action": "create",
+      "description": "Modal for configuring WordPress publish options (categories, tags, excerpt, status)"
+    },
+    {
+      "path": "apps/dashboard/src/hooks/use-content.ts",
+      "action": "modify",
+      "description": "Add useWordPressConnection and useWordPressPublish hooks"
+    },
+    {
+      "path": "apps/dashboard/src/components/content/export-dropdown.tsx",
+      "action": "modify",
+      "description": "Add postId/workspace props and 'Publish to WordPress' menu item"
+    },
+    {
+      "path": "apps/dashboard/src/app/(dashboard)/[workspace]/content/[postId]/page.tsx",
+      "action": "modify",
+      "description": "Pass postId/workspace to ExportDropdown and show wordpressPublishedUrl link"
+    },
+    {
+      "path": "apps/dashboard/src/app/(dashboard)/[workspace]/settings/layout.tsx",
+      "action": "modify",
+      "description": "Add WordPress nav item — check if this file exists first, may need to create it"
+    }
+  ],
+
+  "key_patterns": {
+    "auth_check": "const session = await auth.api.getSession({ headers: await headers() }); if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });",
+    "workspace_ownership": "const workspace = await db.select({ id: workspaces.id }).from(workspaces).where(and(eq(workspaces.ownerId, session.user.id), eq(workspaces.slug, slug))).limit(1); if (!workspace.length) return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });",
+    "db_import": "import { db } from '@/lib/db'; import { posts, workspaces, wordpressConnections } from '@sessionforge/db';",
+    "client_component": "'use client'; import { useParams } from 'next/navigation'; import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';",
+    "tailwind_tokens": "Use sf-bg-primary, sf-bg-secondary, sf-bg-tertiary, sf-text-primary, sf-text-secondary, sf-border, sf-border-strong, sf-border-focus, sf-accent, sf-accent-dim, rounded-sf, rounded-sf-lg for all UI",
+    "api_route_exports": "Always export const dynamic = 'force-dynamic'; at top of API route files",
+    "async_params": "{ params }: { params: Promise<{ slug: string }> } — always await params before destructuring in Next.js 15",
+    "toast": "import { showToast } from '@/components/ui/toast'; showToast('message', 'success' | 'error')",
+    "cn_util": "import { cn } from '@/lib/utils';",
+    "markdown_to_html": "import { markdownToHtml } from '@/lib/export'; — already exists, converts markdown string to HTML"
+  },
+
+  "existing_dependencies": {
+    "note": "All dependencies below are already in apps/dashboard/package.json — no new npm packages needed",
+    "available": [
+      "node crypto (built-in) — for AES encryption",
+      "lucide-react — Globe, X, Check, ChevronDown icons etc.",
+      "@tanstack/react-query — useQuery, useMutation",
+      "drizzle-orm — eq, and, or operators",
+      "next — NextRequest, NextResponse, headers()",
+      "better-auth — auth.api.getSession"
+    ]
+  },
+
+  "wordpress_api_notes": {
+    "base_url": "Normalize: strip trailing slash, add /wp-json/wp/v2",
+    "auth": "Basic auth: base64(username + ':' + appPassword) — set Authorization header",
+    "endpoints": {
+      "me": "GET /wp-json/wp/v2/users/me — test connection, returns { name, url, description }",
+      "categories": "GET /wp-json/wp/v2/categories?per_page=100 — returns [{id, name, slug}]",
+      "tags": "GET /wp-json/wp/v2/tags?per_page=100 — returns [{id, name, slug}]",
+      "posts": "POST /wp-json/wp/v2/posts — body: { title, content (HTML), excerpt, categories (int[]), tags (int[]), featured_media (int), status ('draft'|'publish') }"
+    },
+    "wordpress_com_difference": "For wordpress.com sites, the API base is https://public-api.wordpress.com/wp/v2/sites/{site-domain}"
+  },
+
+  "schema_additions": {
+    "wordpress_connections_table": {
+      "table_name": "wordpress_connections",
+      "columns": {
+        "id": "text primaryKey UUID",
+        "workspaceId": "text notNull references workspaces(id) cascade",
+        "siteUrl": "text notNull",
+        "username": "text notNull",
+        "encryptedAppPassword": "text notNull",
+        "isActive": "boolean default true",
+        "createdAt": "timestamp defaultNow",
+        "updatedAt": "timestamp defaultNow $onUpdateFn"
+      },
+      "indexes": ["index on workspaceId"]
+    },
+    "posts_additions": {
+      "wordpressPublishedUrl": "text nullable",
+      "wordpressPostId": "integer nullable"
+    }
+  },
+
+  "settings_nav_note": "Check if apps/dashboard/src/app/(dashboard)/[workspace]/settings/layout.tsx exists. If it does, add Globe + WordPress nav link there. If not, add link on the settings/page.tsx directly. The existing settings pages (style, api-keys) don't seem to use a shared layout — check by looking at the pattern.",
+
+  "encryption_key_note": "Use process.env.BETTER_AUTH_SECRET as the master key for encrypting app passwords. Hash it with crypto.createHash('sha256') to get a reliable 32-byte key for AES-256-CBC. Store as 'iv_hex:encrypted_hex' string."
+}

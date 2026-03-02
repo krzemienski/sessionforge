@@ -1,0 +1,164 @@
+{
+  "feature": "WordPress Publishing Integration",
+  "description": "Integrate with the WordPress REST API (wp-json) to enable one-click publishing of blog posts to self-hosted WordPress sites and WordPress.com. Users connect via application password, then publish posts with categories, tags, featured images, and SEO metadata. Supports both draft and published states.",
+  "workflow_type": "feature",
+  "created_at": "2026-03-02T17:58:28.803Z",
+  "updated_at": "2026-03-02T17:58:28.803Z",
+  "status": "pending",
+  "planStatus": "approved",
+  "xstateState": "backlog",
+  "executionPhase": "build",
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Database Schema",
+      "description": "Add wordpressConnections table and wordpressPublishedUrl column to posts, then run migration",
+      "subtasks": [
+        {
+          "id": "1.1",
+          "title": "Add wordpressConnections table to schema",
+          "description": "Add a new pgTable 'wordpress_connections' to packages/db/src/schema.ts with fields: id, workspaceId (FK to workspaces, cascade delete), siteUrl, username, encryptedAppPassword, isActive boolean default true, createdAt, updatedAt. Add wordpressConnections to workspacesRelations (many). Add wordpressConnectionsRelations pointing back to workspace.",
+          "status": "pending",
+          "files": ["packages/db/src/schema.ts"]
+        },
+        {
+          "id": "1.2",
+          "title": "Add wordpressPublishedUrl column to posts table",
+          "description": "Add nullable text column 'wordpress_published_url' to the posts table in packages/db/src/schema.ts so we can store the WordPress post URL after publishing. Also add wordpressPostId integer column to store the WP post ID.",
+          "status": "pending",
+          "files": ["packages/db/src/schema.ts"]
+        },
+        {
+          "id": "1.3",
+          "title": "Run DB migration (generate and push)",
+          "description": "Run 'bun run db:generate' then 'bun run db:push' from the repo root to apply schema changes to the Neon PostgreSQL database. Verify migration succeeds without errors.",
+          "status": "pending",
+          "files": []
+        }
+      ]
+    },
+    {
+      "id": "phase-2",
+      "name": "WordPress API Client Library",
+      "description": "Create reusable WordPress REST API client and password encryption utilities",
+      "subtasks": [
+        {
+          "id": "2.1",
+          "title": "Create password encryption utilities",
+          "description": "Create apps/dashboard/src/lib/wordpress/crypto.ts with encryptAppPassword(plaintext: string): string and decryptAppPassword(encrypted: string): string using Node.js crypto module (AES-256-CBC) with BETTER_AUTH_SECRET as the key (hashed to 32 bytes via SHA-256). Store as 'iv:ciphertext' hex string.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/lib/wordpress/crypto.ts"]
+        },
+        {
+          "id": "2.2",
+          "title": "Create WordPress REST API client",
+          "description": "Create apps/dashboard/src/lib/wordpress/client.ts with a WordPressClient class: constructor(siteUrl, username, appPassword), getApiBase() normalizes URL to ensure it ends with /wp-json/wp/v2, testConnection() calls /users/me with Basic auth and returns site info, getCategories() and getTags() for listing, createPost(params: { title, htmlContent, excerpt, categories, tags, featuredMediaId, status }) POSTs to /posts. All methods throw descriptive errors on failure. Handles both WordPress.com (wordpress.com/wp-json) and self-hosted sites.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/lib/wordpress/client.ts"]
+        }
+      ]
+    },
+    {
+      "id": "phase-3",
+      "name": "Backend API Routes",
+      "description": "Create API routes for managing WordPress connections and publishing posts",
+      "subtasks": [
+        {
+          "id": "3.1",
+          "title": "Create WordPress connection CRUD route",
+          "description": "Create apps/dashboard/src/app/api/workspace/[slug]/wordpress/route.ts with: GET (fetch connection for workspace, returns { connected, siteUrl, username } without password), POST (save connection: body has siteUrl, username, appPassword — encrypt password with crypto.ts before inserting/upserting to wordpressConnections), DELETE (set isActive=false or hard delete). Follow style/route.ts pattern for auth/ownership.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/app/api/workspace/[slug]/wordpress/route.ts"]
+        },
+        {
+          "id": "3.2",
+          "title": "Create WordPress connection test route",
+          "description": "Create apps/dashboard/src/app/api/workspace/[slug]/wordpress/test/route.ts with POST handler: (1) fetch stored connection, (2) decrypt app password, (3) instantiate WordPressClient and call testConnection(), (4) also fetch categories and tags, (5) return { success: true, siteTitle, wpVersion, categories: [{id, name}], tags: [{id, name}] } or { success: false, error: string }.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/app/api/workspace/[slug]/wordpress/test/route.ts"]
+        },
+        {
+          "id": "3.3",
+          "title": "Create WordPress publish route",
+          "description": "Create apps/dashboard/src/app/api/content/[id]/wordpress/publish/route.ts with POST handler: (1) verify post ownership via workspace join, (2) fetch workspace WordPress connection, (3) decrypt app password, (4) convert post markdown to HTML using markdownToHtml() from @/lib/export, (5) call WordPressClient.createPost() with { title, htmlContent, excerpt, categories, tags, featuredMediaId, status: 'draft'|'publish' }, (6) update posts row with wordpressPublishedUrl and wordpressPostId, (7) return { success, wordpressPostId, wordpressUrl }.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/app/api/content/[id]/wordpress/publish/route.ts"]
+        }
+      ]
+    },
+    {
+      "id": "phase-4",
+      "name": "WordPress Settings UI",
+      "description": "Add WordPress connection management page in workspace settings",
+      "subtasks": [
+        {
+          "id": "4.1",
+          "title": "Create WordPress settings page",
+          "description": "Create apps/dashboard/src/app/(dashboard)/[workspace]/settings/wordpress/page.tsx as a 'use client' component using useParams, useQuery, useMutation, useQueryClient. Show: (1) section header 'WordPress Integration', (2) if connected: green status indicator with site URL, username, Test Connection button, Disconnect button; (3) if not connected: form with Site URL input (placeholder 'https://myblog.com'), Username input, Application Password input (type=password), Connect button. On connect success: invalidate query. On test: show modal/alert with site title and categories/tags list. Follow api-keys/page.tsx pattern with sf-* Tailwind classes.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/app/(dashboard)/[workspace]/settings/wordpress/page.tsx"]
+        },
+        {
+          "id": "4.2",
+          "title": "Add WordPress link to settings navigation",
+          "description": "Find the settings layout/navigation (check apps/dashboard/src/app/(dashboard)/[workspace]/settings/layout.tsx). Add a WordPress nav item with Globe icon linking to /[workspace]/settings/wordpress. If no layout.tsx exists, add link directly to settings/page.tsx.",
+          "status": "pending",
+          "files": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/settings/layout.tsx",
+            "apps/dashboard/src/app/(dashboard)/[workspace]/settings/page.tsx"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase-5",
+      "name": "Publish UI Components",
+      "description": "Add Publish to WordPress option to the content editor with modal for configuring publish settings",
+      "subtasks": [
+        {
+          "id": "5.1",
+          "title": "Add useWordPressConnection and useWordPressPublish hooks",
+          "description": "Add to apps/dashboard/src/hooks/use-content.ts: (1) useWordPressConnection(workspace: string) — useQuery fetching GET /api/workspace/[workspace]/wordpress, returns { connected, siteUrl, username } or null; (2) useWordPressPublish() — useMutation posting to /api/content/[id]/wordpress/publish with body { categories, tags, excerpt, featuredImageUrl, wpStatus }. On success, invalidate ['post', id] and ['content'] queries.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/hooks/use-content.ts"]
+        },
+        {
+          "id": "5.2",
+          "title": "Create WordPressPublishModal component",
+          "description": "Create apps/dashboard/src/components/content/wordpress-publish-modal.tsx — a modal overlay (fixed inset-0 backdrop) with: (1) title 'Publish to WordPress', (2) connection status (site URL if connected, or warning if not), (3) excerpt textarea, (4) categories multi-select (fetched from /wordpress/test endpoint or stored), (5) tags input (comma-separated), (6) featured image URL input, (7) radio: 'Publish immediately' vs 'Save as WordPress draft', (8) 'Publish' button that calls useWordPressPublish(). On success shows WordPress URL link. On error shows error message. Uses sf-* Tailwind classes, X close button.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/components/content/wordpress-publish-modal.tsx"]
+        },
+        {
+          "id": "5.3",
+          "title": "Update ExportDropdown to add WordPress publish option",
+          "description": "Update apps/dashboard/src/components/content/export-dropdown.tsx: (1) add props postId: string, workspace: string, (2) call useWordPressConnection(workspace) inside component, (3) add a horizontal divider <hr> after the Download .md item, (4) add a 'Publish to WordPress' button with Globe icon (lucide-react) — disabled with tooltip 'Connect WordPress in Settings' when not connected, (5) clicking opens WordPressPublishModal (manage open state). Import and render WordPressPublishModal conditionally.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/components/content/export-dropdown.tsx"]
+        },
+        {
+          "id": "5.4",
+          "title": "Wire up content editor page with WordPress features",
+          "description": "Update apps/dashboard/src/app/(dashboard)/[workspace]/content/[postId]/page.tsx: (1) pass postId={postId} workspace={workspace} to ExportDropdown, (2) if post.data.wordpressPublishedUrl exists, show a 'View on WordPress' link (Globe icon, opens in new tab) in the toolbar near the Save button.",
+          "status": "pending",
+          "files": ["apps/dashboard/src/app/(dashboard)/[workspace]/content/[postId]/page.tsx"]
+        }
+      ]
+    }
+  ],
+  "qa_checklist": [
+    "Connect a WordPress site successfully in Settings > WordPress",
+    "Test connection shows site title plus categories and tags list",
+    "Disconnect removes stored connection",
+    "Publish a blog post to WordPress as 'draft' — verify in WP admin dashboard",
+    "Publish a blog post to WordPress as 'published' — verify live URL is accessible",
+    "Published WordPress URL appears as 'View on WordPress' link in content editor",
+    "Error message shown when WordPress site URL is unreachable",
+    "Error message shown when application password is invalid",
+    "Settings navigation shows WordPress link with Globe icon",
+    "Export dropdown shows WordPress option only when connection is active",
+    "Application password is encrypted in DB (no plaintext visible)",
+    "Works with self-hosted WordPress.org site",
+    "Works with WordPress.com hosted site"
+  ]
+}
