@@ -94,7 +94,7 @@ export function streamRepurposeWriter(input: RepurposeWriterInput): Response {
                   toolUse.name,
                   toolUse.input as Record<string, unknown>
                 );
-                send("tool_result", { tool: toolUse.name, success: true });
+                send("tool_result", { tool: toolUse.name, success: true, result });
                 return {
                   type: "tool_result" as const,
                   tool_use_id: toolUse.id,
