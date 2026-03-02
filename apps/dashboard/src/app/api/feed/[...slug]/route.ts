@@ -42,7 +42,7 @@ function buildRss(
       <link>${escapeXml(itemLink)}</link>
       <guid isPermaLink="true">${escapeXml(itemLink)}</guid>
       <pubDate>${toRfc822(item.createdAt)}</pubDate>
-      <content:encoded><![CDATA[${item.htmlContent}]]></content:encoded>
+      <content:encoded><![CDATA[${safeCdata(item.htmlContent)}]]></content:encoded>
     </item>`;
     })
     .join("\n");
@@ -58,6 +58,11 @@ function buildRss(
 ${items}
   </channel>
 </rss>`;
+}
+
+function safeCdata(html: string): string {
+  // Prevent CDATA section from being prematurely closed by ]]> in content
+  return html.replace(/]]>/g, "]]]]><![CDATA[>");
 }
 
 function buildAtom(
@@ -79,7 +84,7 @@ function buildAtom(
     <link href="${escapeXml(entryId)}"/>
     <published>${toIso8601(item.createdAt)}</published>
     <updated>${toIso8601(item.updatedAt ?? item.createdAt)}</updated>
-    <content type="html"><![CDATA[${item.htmlContent}]]></content>
+    <content type="html"><![CDATA[${safeCdata(item.htmlContent)}]]></content>
   </entry>`;
     })
     .join("\n");
@@ -87,10 +92,12 @@ function buildAtom(
   return `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>${escapeXml(workspaceName)}</title>
+  <subtitle>${escapeXml(`Published posts from ${workspaceName} on SessionForge`)}</subtitle>
   <id>${escapeXml(feedId)}</id>
   <link href="${escapeXml(channelLink)}"/>
   <link href="${escapeXml(feedId)}" rel="self"/>
   <updated>${updated}</updated>
+  <author><name>${escapeXml(workspaceName)}</name></author>
 ${entries}
 </feed>`;
 }

@@ -52,8 +52,9 @@ export default function SettingsPage() {
   };
 
   const workspaceSlug = ws.data?.slug || workspace;
-  const rssUrl = `/api/feed/${workspaceSlug}.xml`;
-  const atomUrl = `/api/feed/${workspaceSlug}.atom`;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const rssUrl = `${origin}/api/feed/${workspaceSlug}.xml`;
+  const atomUrl = `${origin}/api/feed/${workspaceSlug}.atom`;
 
   if (ws.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
