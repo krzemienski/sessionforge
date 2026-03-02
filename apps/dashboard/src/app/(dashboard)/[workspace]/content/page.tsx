@@ -1,9 +1,9 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useContent } from "@/hooks/use-content";
+import { useContent, useExportContent } from "@/hooks/use-content";
 import { useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Download, X, Loader2 } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 
@@ -30,6 +30,23 @@ export default function ContentPage() {
   const content = useContent(workspace, { limit: 50, status: statusFilter || undefined });
   const contentList = content.data?.posts ?? [];
 
+  const [showExport, setShowExport] = useState(false);
+  const [exportType, setExportType] = useState("");
+  const [exportStatus, setExportStatus] = useState("");
+  const [exportDateFrom, setExportDateFrom] = useState("");
+  const [exportDateTo, setExportDateTo] = useState("");
+  const { exportContent, isExporting, exportCount } = useExportContent();
+
+  const handleExport = async () => {
+    await exportContent(workspace as string, {
+      type: exportType || undefined,
+      status: exportStatus || undefined,
+      dateFrom: exportDateFrom || undefined,
+      dateTo: exportDateTo || undefined,
+    });
+    setShowExport(false);
+  };
+
   const tabs = [
     { label: "All", value: "" },
     { label: "Drafts", value: "draft" },
@@ -41,7 +58,96 @@ export default function ContentPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold font-display">Content</h1>
+        <button
+          onClick={() => setShowExport(!showExport)}
+          className="flex items-center gap-2 bg-sf-bg-secondary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors"
+        >
+          <Download size={16} /> Export
+        </button>
       </div>
+
+      {showExport && (
+        <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 mb-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sf-text-primary text-sm">Export Options</h3>
+            <button onClick={() => setShowExport(false)} className="text-sf-text-muted hover:text-sf-text-secondary">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              value={exportType}
+              onChange={(e) => setExportType(e.target.value)}
+              className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary"
+            >
+              <option value="">All Types</option>
+              {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <select
+              value={exportStatus}
+              onChange={(e) => setExportStatus(e.target.value)}
+              className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary"
+            >
+              <option value="">All Statuses</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-sf-text-muted mb-1">From</label>
+              <input
+                type="date"
+                value={exportDateFrom}
+                onChange={(e) => setExportDateFrom(e.target.value)}
+                className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-sf-text-muted mb-1">To</label>
+              <input
+                type="date"
+                value={exportDateTo}
+                onChange={(e) => setExportDateTo(e.target.value)}
+                className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary"
+              />
+            </div>
+          </div>
+          {exportCount !== null && exportCount >= 50 && !isExporting && (
+            <p className="text-xs text-sf-text-muted">
+              {exportCount} files — large exports may take a moment to prepare.
+            </p>
+          )}
+          {isExporting && (
+            <p className="text-xs text-sf-text-muted flex items-center gap-1.5">
+              <Loader2 size={12} className="animate-spin" /> Building zip archive…
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium disabled:opacity-50 transition-opacity"
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" /> Exporting…
+                </>
+              ) : (
+                <>
+                  <Download size={14} /> Download ZIP
+                </>
+              )}
+            </button>
+            <button onClick={() => setShowExport(false)} className="text-sf-text-secondary px-4 py-2 text-sm">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 mb-6">
         {tabs.map((tab) => (

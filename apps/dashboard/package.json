@@ -19,6 +19,7 @@
     "better-auth": "^1.2",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.39",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.576.0",
     "next": "^15.1",
     "react": "^19",
@@ -27,13 +28,14 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "typescript": "^5.7",
+    "@sessionforge/tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "^4",
+    "@types/jszip": "^3.4.1",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/node": "^22",
-    "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4",
     "postcss": "^8",
-    "@sessionforge/tsconfig": "workspace:*"
+    "tailwindcss": "^4",
+    "typescript": "^5.7"
   }
 }
