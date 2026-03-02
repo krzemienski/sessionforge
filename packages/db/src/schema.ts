@@ -240,8 +240,8 @@ export const posts = pgTable(
     parentPostId: text("parent_post_id").references((): any => posts.id),
     sourceMetadata: jsonb("source_metadata").$type<{
       triggerId?: string;
-      sessionIds: string[];
-      insightIds: string[];
+      sessionIds?: string[];
+      insightIds?: string[];
       lookbackWindow?: string;
       parentPostId?: string;
       generatedBy:

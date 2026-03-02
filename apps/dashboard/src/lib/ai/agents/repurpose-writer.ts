@@ -56,9 +56,10 @@ export function streamRepurposeWriter(input: RepurposeWriterInput): Response {
       const formatLabel = FORMAT_LABELS[input.targetFormat];
       const contentType = CONTENT_TYPES[input.targetFormat];
 
+      const baseInstruction = `Create a ${formatLabel} from the blog post with ID "${input.sourcePostId}". First fetch the post content using get_post. Then create the derived post using create_post with content_type "${contentType}", parentPostId set to "${input.sourcePostId}", and sourceMetadata including parentPostId: "${input.sourcePostId}" and generatedBy: "repurpose_writer".`;
       const userMessage = input.customInstructions
-        ? `Create a ${formatLabel} from the blog post with ID "${input.sourcePostId}". First fetch the post content using get_post. Then create the derived post using create_post with content_type "${contentType}" and sourceMetadata.parentPostId set to "${input.sourcePostId}".\n\nAdditional instructions: ${input.customInstructions}`
-        : `Create a ${formatLabel} from the blog post with ID "${input.sourcePostId}". First fetch the post content using get_post. Then create the derived post using create_post with content_type "${contentType}" and sourceMetadata.parentPostId set to "${input.sourcePostId}".`;
+        ? `${baseInstruction}\n\nAdditional instructions: ${input.customInstructions}`
+        : baseInstruction;
 
       const messages: Anthropic.MessageParam[] = [
         { role: "user", content: userMessage },
