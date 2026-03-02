@@ -37,6 +37,21 @@ export async function createTriggerSchedule(
   return scheduleId;
 }
 
+export async function createFileWatchSchedule(
+  triggerId: string
+): Promise<string> {
+  const destination = `${process.env.NEXT_PUBLIC_APP_URL}/api/automation/file-watch`;
+
+  const { scheduleId } = await client.schedules.create({
+    destination,
+    cron: "*/5 * * * *",
+    body: JSON.stringify({ triggerId }),
+    headers: { "Content-Type": "application/json" },
+  });
+
+  return scheduleId;
+}
+
 export async function deleteTriggerSchedule(scheduleId: string): Promise<void> {
   await client.schedules.delete(scheduleId);
 }
