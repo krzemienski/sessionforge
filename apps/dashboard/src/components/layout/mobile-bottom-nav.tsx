@@ -7,7 +7,7 @@ import {
   LayoutDashboard,
   ScrollText,
   Lightbulb,
-  FileText,
+  CalendarDays,
   Settings,
 } from "lucide-react";
 
@@ -15,7 +15,7 @@ const tabs = [
   { label: "Home", icon: LayoutDashboard, href: "" },
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
   { label: "Insights", icon: Lightbulb, href: "/insights" },
-  { label: "Content", icon: FileText, href: "/content" },
+  { label: "Content", icon: CalendarDays, href: "/content" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 
