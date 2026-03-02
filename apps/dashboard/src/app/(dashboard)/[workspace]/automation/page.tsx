@@ -3,8 +3,9 @@
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Zap, Plus, Trash2 } from "lucide-react";
+import { Zap, Plus, Trash2, Clock } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
+import { getNextRunTime, formatNextRun } from "@/lib/automation/cron-utils";
 
 export default function AutomationPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -110,6 +111,18 @@ export default function AutomationPage() {
               {t.triggerType === "scheduled" ? `Scheduled` : t.triggerType} · {t.contentType?.replace(/_/g, " ")} · {t.lookbackWindow?.replace(/_/g, " ")}
             </p>
             {t.cronExpression && <p className="text-xs text-sf-text-muted font-code mt-1">{t.cronExpression}</p>}
+            {t.triggerType === "scheduled" && t.cronExpression && (() => {
+              const nextRun = getNextRunTime(t.cronExpression);
+              return nextRun ? (
+                <p className="text-xs text-sf-text-secondary mt-1">Next run: {formatNextRun(nextRun)}</p>
+              ) : null;
+            })()}
+            {t.qstashScheduleId && (
+              <span className="inline-flex items-center gap-1 text-xs text-sf-accent mt-1">
+                <Clock size={11} />
+                Scheduled
+              </span>
+            )}
             {t.lastRunAt && <p className="text-xs text-sf-text-muted mt-1">Last run: {timeAgo(t.lastRunAt)} ({t.lastRunStatus || "unknown"})</p>}
           </div>
         ))}

@@ -7,6 +7,8 @@ import { ArrowLeft, Save, ExternalLink, Send } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { HashnodePublishModal } from "@/components/publish/hashnode-publish-modal";
+import { ExportDropdown } from "@/components/content/export-dropdown";
+import { SocialCopyButton } from "@/components/content/social-copy-button";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -87,6 +89,7 @@ export default function ContentEditorPage() {
             <option value="published">Published</option>
             <option value="archived">Archived</option>
           </select>
+          <ExportDropdown markdown={markdown} title={title} />
           <button
             onClick={handleSave}
             disabled={update.isPending}
@@ -139,6 +142,12 @@ export default function ContentEditorPage() {
               <ExternalLink size={12} />
               Hashnode
             </a>
+          )}
+          {(post.data?.contentType === "twitter_thread" || post.data?.contentType === "linkedin_post") && (
+            <SocialCopyButton
+              markdown={markdown}
+              contentType={post.data.contentType as "twitter_thread" | "linkedin_post"}
+            />
           )}
           <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
         </div>
