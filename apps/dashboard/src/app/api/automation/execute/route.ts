@@ -65,10 +65,7 @@ export async function POST(request: Request) {
         .set({ lastRunStatus: "failed", lastRunAt: new Date() })
         .where(eq(contentTriggers.id, triggerId));
 
-      throw new AppError(
-        error instanceof Error ? error.message : "Execution failed",
-        ERROR_CODES.INTERNAL_ERROR
-      );
+      throw new AppError("Automation pipeline execution failed", ERROR_CODES.INTERNAL_ERROR);
     }
   })(request);
 }
