@@ -29,6 +29,7 @@ export interface UpdatePostInput {
   content?: string;
   status?: PostStatus;
   toneUsed?: ToneProfile;
+  publishedAt?: Date;
 }
 
 function markdownToHtml(markdown: string): string {
@@ -74,6 +75,13 @@ export async function updatePost(
   if (input.title !== undefined) updates.title = input.title;
   if (input.status !== undefined) updates.status = input.status;
   if (input.toneUsed !== undefined) updates.toneUsed = input.toneUsed;
+
+  // Set publishedAt when transitioning to 'published' status (only if not explicitly provided)
+  if (input.status === "published") {
+    updates.publishedAt = input.publishedAt ?? new Date();
+  } else if (input.publishedAt !== undefined) {
+    updates.publishedAt = input.publishedAt;
+  }
 
   if (input.markdown !== undefined) {
     updates.markdown = input.markdown;
