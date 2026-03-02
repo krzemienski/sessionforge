@@ -5,11 +5,19 @@ import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { updatePost } from "@/lib/ai/tools/post-manager";
+import { withFrontmatter } from "@/lib/seo/frontmatter";
+import type { SeoMetadata } from "@/lib/seo/scoring";
+
+// seoMetadata column predates the TypeScript schema, so we extend the inferred type locally.
+type PostRow = Awaited<
+  ReturnType<typeof db.query.posts.findFirst<{ with: { workspace: true; insight: true } }>>
+>;
+type PostWithSeo = NonNullable<PostRow> & { seoMetadata?: SeoMetadata | null };
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -20,7 +28,7 @@ export async function GET(
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, id),
     with: { workspace: true, insight: true },
-  });
+  }) as PostWithSeo | undefined;
 
   if (!post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
@@ -28,6 +36,15 @@ export async function GET(
 
   if (post.workspace.ownerId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  if (searchParams.get("frontmatter") === "true") {
+    return NextResponse.json({
+      ...post,
+      markdown: withFrontmatter(post.markdown ?? "", post.title, post.seoMetadata ?? {}),
+      hasFrontmatter: true,
+    });
   }
 
   return NextResponse.json(post);
