@@ -3,9 +3,10 @@
 import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost } from "@/hooks/use-content";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, ExternalLink, Send } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
+import { HashnodePublishModal } from "@/components/publish/hashnode-publish-modal";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -21,6 +22,8 @@ export default function ContentEditorPage() {
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
   const [externalMd, setExternalMd] = useState<string | null>(null);
+  const [hashnodeModalOpen, setHashnodeModalOpen] = useState(false);
+  const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -28,6 +31,7 @@ export default function ContentEditorPage() {
       setTitle(post.data.title || "");
       setMarkdown(post.data.markdown || "");
       setStatus(post.data.status || "draft");
+      setHashnodeUrl(post.data.hashnodeUrl || null);
       initializedRef.current = true;
     }
   }, [post.data]);
@@ -47,11 +51,16 @@ export default function ContentEditorPage() {
     setTimeout(() => setExternalMd(null), 100);
   }, []);
 
+  const handleHashnodeSuccess = useCallback((url: string) => {
+    setHashnodeUrl(url);
+  }, []);
+
   if (post.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
   }
 
   const wordCount = markdown.split(/\s+/).filter(Boolean).length;
+  const isBlogPost = post.data?.contentType === "blog_post";
 
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
@@ -60,6 +69,15 @@ export default function ContentEditorPage() {
           <ArrowLeft size={16} /> Content
         </button>
         <div className="flex items-center gap-3">
+          {isBlogPost && (
+            <button
+              onClick={() => setHashnodeModalOpen(true)}
+              className="flex items-center gap-2 border border-sf-border text-sf-text-secondary px-4 py-2 rounded-sf font-medium text-sm hover:text-sf-text-primary hover:border-sf-border-focus transition-colors"
+            >
+              <Send size={15} />
+              Publish to Hashnode
+            </button>
+          )}
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -110,8 +128,29 @@ export default function ContentEditorPage() {
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-sf-border">
         <span className="text-xs text-sf-text-muted">{wordCount} words</span>
-        <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
+        <div className="flex items-center gap-3">
+          {hashnodeUrl && (
+            <a
+              href={hashnodeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-sf-accent hover:underline"
+            >
+              <ExternalLink size={12} />
+              Hashnode
+            </a>
+          )}
+          <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
+        </div>
       </div>
+
+      <HashnodePublishModal
+        postId={postId}
+        workspace={workspace}
+        isOpen={hashnodeModalOpen}
+        onClose={() => setHashnodeModalOpen(false)}
+        onSuccess={handleHashnodeSuccess}
+      />
     </div>
   );
 }
