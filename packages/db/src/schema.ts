@@ -160,6 +160,24 @@ export const styleSettings = pgTable(
   ]
 );
 
+export const integrationSettings = pgTable(
+  "integration_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    hashnodeApiToken: text("hashnode_api_token"),
+    hashnodePublicationId: text("hashnode_publication_id"),
+    hashnodeDefaultCanonicalDomain: text("hashnode_default_canonical_domain"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("integrationSettings_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
 export const claudeSessions = pgTable(
   "claude_sessions",
   {
@@ -251,6 +269,7 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    hashnodeUrl: text("hashnode_url"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -327,6 +346,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
     references: [users.id],
   }),
   styleSettings: one(styleSettings),
+  integrationSettings: one(integrationSettings),
   claudeSessions: many(claudeSessions),
   insights: many(insights),
   posts: many(posts),
@@ -340,6 +360,16 @@ export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const integrationSettingsRelations = relations(
+  integrationSettings,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [integrationSettings.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
 
 export const claudeSessionsRelations = relations(
   claudeSessions,
