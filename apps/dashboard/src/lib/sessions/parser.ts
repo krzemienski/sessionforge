@@ -1,19 +1,44 @@
+/**
+ * Session file parser for extracting structured data from Claude JSONL session files.
+ * Streams each file line-by-line to minimise memory usage, collecting tool usage,
+ * modified file paths, cost data, timestamps, and errors from the raw event log.
+ */
+
 import fs from "fs/promises";
 import readline from "readline";
 import { createReadStream } from "fs";
 
+/** Structured summary of the events recorded in a single Claude session file. */
 export interface ParsedSession {
+  /** Total number of human and assistant messages in the session. */
   messageCount: number;
+  /** Deduplicated list of Anthropic tool names invoked during the session. */
   toolsUsed: string[];
+  /** Deduplicated list of file paths written or edited during the session. */
   filesModified: string[];
+  /** Error messages recorded in `error`-type JSONL entries. */
   errorsEncountered: string[];
+  /** Cumulative cost in USD summed from all `summary` entries. */
   costUsd: number;
+  /** Timestamp of the earliest event in the file, or `null` if none found. */
   startedAt: Date | null;
+  /** Timestamp of the latest event in the file, or `null` if none found. */
   endedAt: Date | null;
 }
 
+/**
+ * Tool names that indicate a file write or edit operation.
+ * When these tools are invoked the parser extracts the target `file_path`
+ * and adds it to the session's `filesModified` set.
+ */
 const FILE_TOOL_NAMES = new Set(["Write", "Edit", "MultiEdit"]);
 
+/**
+ * Extracts a `Date` from the `timestamp` field of a raw JSONL entry.
+ *
+ * @param entry - A parsed JSONL object that may contain a `timestamp` string.
+ * @returns A valid `Date` instance, or `null` if the field is absent or unparseable.
+ */
 function extractTimestamp(entry: Record<string, unknown>): Date | null {
   const ts = entry.timestamp;
   if (typeof ts === "string") {
@@ -23,6 +48,22 @@ function extractTimestamp(entry: Record<string, unknown>): Date | null {
   return null;
 }
 
+/**
+ * Parses a Claude session JSONL file and returns a structured summary.
+ *
+ * Opens the file using a streaming readline interface to avoid loading the
+ * entire file into memory. Each line is parsed as a JSON object and
+ * classified by its `type` field:
+ * - `human` / `assistant` — increments `messageCount`; assistant blocks are
+ *   inspected for `tool_use` entries to populate `toolsUsed` and `filesModified`
+ * - `summary` — accumulates `costUSD` into `costUsd`
+ * - `error` — appends the `message` to `errorsEncountered`
+ *
+ * Malformed lines and unreadable files are silently skipped.
+ *
+ * @param filePath - Absolute path to the `.jsonl` session file to parse.
+ * @returns A {@link ParsedSession} containing all extracted session data.
+ */
 export async function parseSessionFile(
   filePath: string
 ): Promise<ParsedSession> {
