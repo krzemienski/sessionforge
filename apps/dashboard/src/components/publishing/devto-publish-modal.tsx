@@ -60,7 +60,7 @@ export function DevtoPublishModal({
     const payload = {
       postId,
       workspaceSlug: workspace,
-      published: !isDraft,
+      published: isAlreadyPublished ? undefined : !isDraft,
       tags: parsedTags.length > 0 ? parsedTags : undefined,
       canonicalUrl: canonicalUrl.trim() || undefined,
       series: series.trim() || undefined,
