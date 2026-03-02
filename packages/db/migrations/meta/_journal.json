@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
+      "when": 1772474057363,
+      "tag": "0000_tearful_quentin_quire",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
       "when": 1772474264757,
-      "tag": "0000_bouncy_titania",
+      "tag": "0001_add_onboarding_completed",
       "breakpoints": true
     }
   ]

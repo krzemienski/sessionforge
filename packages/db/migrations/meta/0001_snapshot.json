@@ -1,6 +1,6 @@
 {
-  "id": "5ab9de05-4fe5-4549-abad-83ce170a558a",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "a1b2c3d4-0001-0001-0001-onboarding001",
+  "prevId": "5ab9de05-4fe5-4549-abad-83ce170a558a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1363,6 +1363,13 @@
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
+        },
+        "onboarding_completed": {
+          "name": "onboarding_completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},

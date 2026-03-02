@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Settings, Save, PlayCircle } from "lucide-react";
+import { Settings, Save, PlayCircle, Copy, Check } from "lucide-react";
 
 export default function SettingsPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [scanPaths, setScanPaths] = useState("");
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     if (ws.data) {
@@ -43,6 +44,18 @@ export default function SettingsPage() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workspace"] }),
   });
+
+  const handleCopy = (text: string, field: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    });
+  };
+
+  const workspaceSlug = ws.data?.slug || workspace;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const rssUrl = `${origin}/api/feed/${workspaceSlug}.xml`;
+  const atomUrl = `${origin}/api/feed/${workspaceSlug}.atom`;
 
   if (ws.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
@@ -115,6 +128,49 @@ export default function SettingsPage() {
           <PlayCircle size={16} />
           Resume Setup Wizard
         </button>
+      </div>
+
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-4 mt-6">
+        <div>
+          <h2 className="text-base font-semibold text-sf-text-primary mb-1">RSS Feeds</h2>
+          <p className="text-xs text-sf-text-muted">Subscribe to your workspace&apos;s published posts via RSS or Atom feeds.</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-sf-text-secondary mb-1">RSS 2.0</label>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={rssUrl}
+              className="flex-1 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none"
+            />
+            <button
+              onClick={() => handleCopy(rssUrl, "rss")}
+              className="flex items-center gap-1.5 px-3 py-2 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-secondary hover:bg-sf-bg-hover hover:text-sf-text-primary transition-colors"
+            >
+              {copiedField === "rss" ? <Check size={14} className="text-sf-success" /> : <Copy size={14} />}
+              {copiedField === "rss" ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-sf-text-secondary mb-1">Atom</label>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={atomUrl}
+              className="flex-1 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none"
+            />
+            <button
+              onClick={() => handleCopy(atomUrl, "atom")}
+              className="flex items-center gap-1.5 px-3 py-2 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-secondary hover:bg-sf-bg-hover hover:text-sf-text-primary transition-colors"
+            >
+              {copiedField === "atom" ? <Check size={14} className="text-sf-success" /> : <Copy size={14} />}
+              {copiedField === "atom" ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
