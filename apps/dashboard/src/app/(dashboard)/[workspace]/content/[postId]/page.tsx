@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost } from "@/hooks/use-content";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, ChevronDown, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 
@@ -11,6 +11,15 @@ const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
   { ssr: false, loading: () => <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg animate-pulse" /> }
 );
+
+const REPURPOSE_OPTIONS = [
+  { label: "Twitter Thread", format: "twitter_thread" },
+  { label: "LinkedIn Post", format: "linkedin_post" },
+  { label: "Changelog Entry", format: "changelog" },
+  { label: "TL;DR Summary", format: "tldr" },
+] as const;
+
+type RepurposeFormat = (typeof REPURPOSE_OPTIONS)[number]["format"];
 
 export default function ContentEditorPage() {
   const { workspace, postId } = useParams<{ workspace: string; postId: string }>();
@@ -21,7 +30,10 @@ export default function ContentEditorPage() {
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
   const [externalMd, setExternalMd] = useState<string | null>(null);
+  const [repurposing, setRepurposing] = useState<string | null>(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const initializedRef = useRef(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (post.data && !initializedRef.current) {
@@ -31,6 +43,18 @@ export default function ContentEditorPage() {
       initializedRef.current = true;
     }
   }, [post.data]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
 
   function handleSave() {
     update.mutate({ id: postId, title, markdown, status });
@@ -47,11 +71,102 @@ export default function ContentEditorPage() {
     setTimeout(() => setExternalMd(null), 100);
   }, []);
 
+  async function handleRepurpose(format: RepurposeFormat, label: string) {
+    setDropdownOpen(false);
+    setRepurposing(label);
+
+    try {
+      const res = await fetch("/api/agents/repurpose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceSlug: workspace, sourcePostId: postId, targetFormat: format }),
+      });
+
+      if (!res.ok || !res.body) {
+        setRepurposing(null);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let pendingCreatePost = false;
+      let newPostId: string | null = null;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // SSE messages are separated by double newlines
+          const messages = buffer.split("\n\n");
+          buffer = messages.pop() ?? "";
+
+          for (const message of messages) {
+            if (!message.trim()) continue;
+
+            let eventType = "";
+            let eventData = "";
+
+            for (const line of message.split("\n")) {
+              if (line.startsWith("event: ")) {
+                eventType = line.slice(7).trim();
+              } else if (line.startsWith("data: ")) {
+                eventData = line.slice(6).trim();
+              }
+            }
+
+            if (!eventType) continue;
+
+            try {
+              if (eventType === "tool_use") {
+                const parsed = JSON.parse(eventData);
+                if (parsed?.tool === "create_post") {
+                  pendingCreatePost = true;
+                }
+              } else if (eventType === "tool_result" && pendingCreatePost) {
+                pendingCreatePost = false;
+                const parsed = JSON.parse(eventData);
+                if (parsed?.success && parsed?.result?.id) {
+                  newPostId = parsed.result.id;
+                }
+              } else if (eventType === "complete" || eventType === "done") {
+                if (newPostId) {
+                  router.push(`/${workspace}/content/${newPostId}`);
+                }
+                setRepurposing(null);
+                return;
+              } else if (eventType === "error") {
+                setRepurposing(null);
+                return;
+              }
+            } catch {
+              // ignore parse errors for individual events
+            }
+          }
+        }
+
+        if (newPostId) {
+          router.push(`/${workspace}/content/${newPostId}`);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch {
+      // ignore errors
+    } finally {
+      setRepurposing(null);
+    }
+  }
+
   if (post.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
   }
 
   const wordCount = markdown.split(/\s+/).filter(Boolean).length;
+  const isBlogPost = post.data?.contentType === "blog_post";
 
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
@@ -69,6 +184,38 @@ export default function ContentEditorPage() {
             <option value="published">Published</option>
             <option value="archived">Archived</option>
           </select>
+          {isBlogPost && (
+            <div className="relative" ref={dropdownRef}>
+              {repurposing ? (
+                <div className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border px-3 py-2 rounded-sf text-sm text-sf-text-secondary">
+                  <Loader2 size={14} className="animate-spin" />
+                  Generating {repurposing}…
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setDropdownOpen((o) => !o)}
+                    className="flex items-center gap-1.5 bg-sf-bg-tertiary border border-sf-border px-3 py-2 rounded-sf text-sm text-sf-text-primary hover:border-sf-accent transition-colors"
+                  >
+                    Repurpose <ChevronDown size={14} />
+                  </button>
+                  {dropdownOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-lg z-10 overflow-hidden">
+                      {REPURPOSE_OPTIONS.map(({ label, format }) => (
+                        <button
+                          key={format}
+                          onClick={() => handleRepurpose(format, label)}
+                          className="w-full text-left px-3 py-2 text-sm text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
           <button
             onClick={handleSave}
             disabled={update.isPending}
