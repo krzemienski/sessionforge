@@ -316,7 +316,13 @@ export const writingSkills = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
-  (table) => [index("writingSkills_workspaceId_idx").on(table.workspaceId)]
+  (table) => [
+    index("writingSkills_workspaceId_idx").on(table.workspaceId),
+    uniqueIndex("writingSkills_workspace_filePath_uidx").on(
+      table.workspaceId,
+      table.filePath
+    ),
+  ]
 );
 
 // ── Relations (PRD §4.3) ──
