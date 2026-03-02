@@ -50,6 +50,13 @@ export async function extractInsight(input: ExtractInsightInput) {
     messages,
   });
 
+  let createdInsight: {
+    id: string;
+    title: string;
+    category: string;
+    compositeScore: number;
+  } | null = null;
+
   // Tool dispatch loop
   while (response.stop_reason === "tool_use") {
     const toolUseBlocks = response.content.filter(
@@ -67,6 +74,21 @@ export async function extractInsight(input: ExtractInsightInput) {
               toolUse.name,
               toolUse.input as Record<string, unknown>
             );
+
+            if (
+              toolUse.name === "create_insight" &&
+              result &&
+              typeof result === "object"
+            ) {
+              const r = result as {
+                id: string;
+                title: string;
+                category: string;
+                compositeScore: number;
+              };
+              if (!createdInsight) createdInsight = r;
+            }
+
             return {
               type: "tool_result" as const,
               tool_use_id: toolUse.id,
@@ -101,6 +123,7 @@ export async function extractInsight(input: ExtractInsightInput) {
   return {
     result: textBlock?.type === "text" ? textBlock.text : null,
     usage: response.usage,
+    insight: createdInsight,
   };
 }
 

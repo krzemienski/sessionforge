@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { extractInsight } from "@/lib/ai/agents/insight-extractor";
+import { fireWebhookEvent } from "@/lib/webhooks/events";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,15 @@ export async function POST(request: Request) {
       workspaceId: workspace.id,
       sessionId,
     });
+
+    if (result.insight) {
+      void fireWebhookEvent(workspace.id, "insight.extracted", {
+        insightId: result.insight.id,
+        title: result.insight.title,
+        category: result.insight.category,
+        compositeScore: result.insight.compositeScore,
+      });
+    }
 
     return NextResponse.json(result);
   } catch (error) {

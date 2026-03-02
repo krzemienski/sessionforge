@@ -13,6 +13,7 @@ import { BLOG_CONVERSATIONAL_PROMPT } from "@/lib/ai/prompts/blog/conversational
 import { TWITTER_THREAD_PROMPT } from "@/lib/ai/prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "@/lib/ai/prompts/social/linkedin-post";
 import { CHANGELOG_PROMPT } from "@/lib/ai/prompts/changelog";
+import { fireWebhookEvent } from "@/lib/webhooks/events";
 import type { AgentType } from "@/lib/ai/orchestration/tool-registry";
 
 export const dynamic = "force-dynamic";
@@ -189,6 +190,12 @@ export async function POST(req: NextRequest) {
   if (!createdPost) {
     return apiError("Content generation completed but no post was created", 500);
   }
+
+  void fireWebhookEvent(wsId, "content.generated", {
+    postId: createdPost.id,
+    title: createdPost.title,
+    contentType: createdPost.contentType,
+  });
 
   return apiResponse(
     {

@@ -18,6 +18,7 @@ import { BLOG_CONVERSATIONAL_PROMPT } from "@/lib/ai/prompts/blog/conversational
 import { TWITTER_THREAD_PROMPT } from "@/lib/ai/prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "@/lib/ai/prompts/social/linkedin-post";
 import { CHANGELOG_PROMPT } from "@/lib/ai/prompts/changelog";
+import { fireWebhookEvent } from "@/lib/webhooks/events";
 import type { contentTypeEnum, lookbackWindowEnum } from "@sessionforge/db";
 
 const client = new Anthropic();
@@ -289,6 +290,12 @@ export async function runAutomationPipeline(
       }
     }
   }
+
+  void fireWebhookEvent(input.workspaceId, "automation.completed", {
+    postsGenerated,
+    sessionsScanned,
+    errors,
+  });
 
   return { postsGenerated, sessionsScanned, errors };
 }
