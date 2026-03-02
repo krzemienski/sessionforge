@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -15,7 +15,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { BarChart2, Eye, Heart, MessageCircle, ThumbsUp, RefreshCw, Trophy, ExternalLink } from "lucide-react";
+import { BarChart2, Eye, Heart, MessageCircle, ThumbsUp, RefreshCw, Trophy, ExternalLink, Settings, ChevronDown, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TIME_WINDOWS = [
@@ -94,6 +94,11 @@ export default function AnalyticsPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const qc = useQueryClient();
   const [window, setWindow] = useState(30);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [devtoApiKey, setDevtoApiKey] = useState("");
+  const [devtoUsername, setDevtoUsername] = useState("");
+  const [hashnodeApiKey, setHashnodeApiKey] = useState("");
+  const [hashnodeUsername, setHashnodeUsername] = useState("");
 
   const metrics = useQuery({
     queryKey: ["analytics-metrics", workspace, window],
@@ -101,6 +106,39 @@ export default function AnalyticsPage() {
       const res = await fetch(`/api/analytics/metrics?workspace=${workspace}&window=${window}`);
       if (!res.ok) throw new Error("Failed to load metrics");
       return res.json();
+    },
+  });
+
+  const platformSettingsQuery = useQuery({
+    queryKey: ["analytics-platform-settings", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/platform-settings?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed to load platform settings");
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (platformSettingsQuery.data) {
+      setDevtoUsername(platformSettingsQuery.data.devtoUsername ?? "");
+      setHashnodeUsername(platformSettingsQuery.data.hashnodeUsername ?? "");
+    }
+  }, [platformSettingsQuery.data]);
+
+  const savePlatformSettings = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => {
+      const res = await fetch("/api/analytics/platform-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to save settings");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["analytics-platform-settings"] });
+      setDevtoApiKey("");
+      setHashnodeApiKey("");
     },
   });
 
@@ -388,6 +426,142 @@ export default function AnalyticsPage() {
           )}
         </>
       )}
+
+      {/* Platform Settings */}
+      <div className="mt-8 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden">
+        <button
+          onClick={() => setSettingsOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-sf-bg-hover transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Settings size={16} className="text-sf-text-secondary" />
+            <span className="text-sm font-semibold text-sf-text-primary">Platform Settings</span>
+            <div className="flex items-center gap-2 ml-2">
+              {platformSettingsQuery.data?.devtoConnected && (
+                <span className="px-2 py-0.5 rounded-sf-full text-xs font-medium text-blue-400 bg-blue-400/10">
+                  Dev.to connected
+                </span>
+              )}
+              {platformSettingsQuery.data?.hashnodeConnected && (
+                <span className="px-2 py-0.5 rounded-sf-full text-xs font-medium text-purple-400 bg-purple-400/10">
+                  Hashnode connected
+                </span>
+              )}
+            </div>
+          </div>
+          <ChevronDown
+            size={16}
+            className={cn(
+              "text-sf-text-secondary transition-transform",
+              settingsOpen && "rotate-180"
+            )}
+          />
+        </button>
+
+        {settingsOpen && (
+          <div className="px-6 pb-6 border-t border-sf-border space-y-6 pt-5">
+            {/* Dev.to */}
+            <div>
+              <h3 className="text-xs font-semibold text-sf-text-secondary uppercase tracking-wide mb-3">
+                Dev.to
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-sf-text-secondary mb-1">
+                    API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={devtoApiKey}
+                    onChange={(e) => setDevtoApiKey(e.target.value)}
+                    placeholder={
+                      platformSettingsQuery.data?.devtoConnected
+                        ? platformSettingsQuery.data.devtoApiKey ?? "••••••••••••"
+                        : "Enter Dev.to API key"
+                    }
+                    className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none focus:border-sf-border-focus"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-sf-text-secondary mb-1">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={devtoUsername}
+                    onChange={(e) => setDevtoUsername(e.target.value)}
+                    placeholder="your-username"
+                    className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none focus:border-sf-border-focus"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Hashnode */}
+            <div>
+              <h3 className="text-xs font-semibold text-sf-text-secondary uppercase tracking-wide mb-3">
+                Hashnode
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-sf-text-secondary mb-1">
+                    API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={hashnodeApiKey}
+                    onChange={(e) => setHashnodeApiKey(e.target.value)}
+                    placeholder={
+                      platformSettingsQuery.data?.hashnodeConnected
+                        ? platformSettingsQuery.data.hashnodeApiKey ?? "••••••••••••"
+                        : "Enter Hashnode API key"
+                    }
+                    className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none focus:border-sf-border-focus"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-sf-text-secondary mb-1">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={hashnodeUsername}
+                    onChange={(e) => setHashnodeUsername(e.target.value)}
+                    placeholder="your-username"
+                    className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none focus:border-sf-border-focus"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() =>
+                  savePlatformSettings.mutate({
+                    workspaceSlug: workspace,
+                    devtoApiKey: devtoApiKey || undefined,
+                    devtoUsername: devtoUsername || undefined,
+                    hashnodeApiKey: hashnodeApiKey || undefined,
+                    hashnodeUsername: hashnodeUsername || undefined,
+                  })
+                }
+                disabled={savePlatformSettings.isPending}
+                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+              >
+                <Save size={16} />
+                {savePlatformSettings.isPending ? "Saving..." : "Save Settings"}
+              </button>
+
+              {savePlatformSettings.isSuccess && (
+                <p className="text-sm text-sf-success">Settings saved.</p>
+              )}
+              {savePlatformSettings.isError && (
+                <p className="text-sm text-sf-danger">Failed to save settings.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
