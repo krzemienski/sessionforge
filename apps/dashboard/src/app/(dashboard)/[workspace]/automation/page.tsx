@@ -26,6 +26,25 @@ function getStatusClass(status: string) {
   }
 }
 
+function getStatusLabel(status: string) {
+  switch (status) {
+    case "pending":
+      return "Queued";
+    case "scanning":
+      return "Scanning sessions";
+    case "extracting":
+      return "Extracting insights";
+    case "generating":
+      return "Generating content";
+    case "complete":
+      return "Complete";
+    case "failed":
+      return "Failed";
+    default:
+      return status;
+  }
+}
+
 function formatDuration(startedAt: string | null, completedAt: string | null) {
   if (!startedAt || !completedAt) return null;
   const secs = (new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000;
@@ -103,7 +122,8 @@ export default function AutomationPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ triggerId }),
       });
-      if (!res.ok) throw new Error("Failed");
+      if (res.status === 409) throw new Error("Pipeline already running");
+      if (!res.ok) throw new Error("Failed to start pipeline");
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
@@ -166,10 +186,14 @@ export default function AutomationPage() {
                     <button
                       onClick={() => execute.mutate(t.id)}
                       disabled={execute.isPending}
+                      title={execute.error && execute.variables === t.id ? execute.error.message : undefined}
                       className="flex items-center gap-1.5 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf text-xs font-medium hover:border-sf-accent hover:text-sf-accent transition-colors disabled:opacity-50"
                     >
                       <Play size={12} /> Run Now
                     </button>
+                    {execute.isError && execute.variables === t.id && (
+                      <span className="text-xs text-red-400">{execute.error.message}</span>
+                    )}
                     <button
                       onClick={() => toggle.mutate({ id: t.id, enabled: !t.enabled })}
                       className={cn("w-10 h-5 rounded-full transition-colors relative", t.enabled ? "bg-sf-accent" : "bg-sf-bg-tertiary border border-sf-border")}
@@ -200,7 +224,7 @@ export default function AutomationPage() {
                       return (
                         <div key={run.id} className="flex items-center gap-2 text-xs text-sf-text-secondary flex-wrap">
                           <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium", getStatusClass(run.status))}>
-                            {run.status}
+                            {getStatusLabel(run.status)}
                           </span>
                           <span className="text-sf-text-muted">{run.startedAt ? timeAgo(run.startedAt) : "—"}</span>
                           {duration && <span className="text-sf-text-muted">· {duration}</span>}
