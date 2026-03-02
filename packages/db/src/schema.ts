@@ -301,6 +301,23 @@ export const apiKeys = pgTable(
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const wordpressConnections = pgTable(
+  "wordpress_connections",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    siteUrl: text("site_url").notNull(),
+    username: text("username").notNull(),
+    encryptedAppPassword: text("encrypted_app_password").notNull(),
+    isActive: boolean("is_active").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [index("wordpressConnections_workspaceId_idx").on(table.workspaceId)]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -334,6 +351,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  wordpressConnections: many(wordpressConnections),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -393,3 +411,13 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const wordpressConnectionsRelations = relations(
+  wordpressConnections,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [wordpressConnections.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
