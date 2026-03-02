@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   ScrollText,
-  Lightbulb,
   FileText,
   BarChart3,
   Settings,
