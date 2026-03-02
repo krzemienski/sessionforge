@@ -12,6 +12,7 @@ import {
   Settings,
   Palette,
   KeyRound,
+  Brain,
   LogOut,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
@@ -28,6 +29,7 @@ const mainNav = [
 const settingsNav = [
   { label: "Settings", icon: Settings, href: "/settings" },
   { label: "Style", icon: Palette, href: "/settings/style" },
+  { label: "Writing Skills", icon: Brain, href: "/settings/skills" },
   { label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
 ];
 
