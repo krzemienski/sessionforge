@@ -39,8 +39,8 @@ export function streamSocialWriter(input: SocialWriterInput): Response {
       const systemPrompt = PROMPTS[input.platform];
 
       const userMessage = input.customInstructions
-        ? `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details. Then create the post with content_type "${CONTENT_TYPES[input.platform]}".\n\nAdditional instructions: ${input.customInstructions}`
-        : `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details and session data. Then save it with create_post using content_type "${CONTENT_TYPES[input.platform]}".`;
+        ? `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details. Then create the post with content_type "${CONTENT_TYPES[input.platform]}". When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
+        : `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details and session data. Then save it with create_post using content_type "${CONTENT_TYPES[input.platform]}". When calling create_post, set aiDraftMarkdown equal to the markdown content.`;
 
       const messages: Anthropic.MessageParam[] = [
         { role: "user", content: userMessage },

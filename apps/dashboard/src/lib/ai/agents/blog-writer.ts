@@ -37,8 +37,8 @@ export function streamBlogWriter(input: BlogWriterInput): Response {
       const systemPrompt = PROMPTS[input.tone ?? "technical"];
 
       const userMessage = input.customInstructions
-        ? `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post.\n\nAdditional instructions: ${input.customInstructions}`
-        : `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post using create_post.`;
+        ? `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post. When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
+        : `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post using create_post. When calling create_post, set aiDraftMarkdown equal to the markdown content.`;
 
       const messages: Anthropic.MessageParam[] = [
         { role: "user", content: userMessage },
