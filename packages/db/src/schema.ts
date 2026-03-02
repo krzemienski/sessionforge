@@ -255,13 +255,16 @@ export const posts = pgTable(
         | "social_writer"
         | "changelog_writer"
         | "editor_chat"
-        | "manual";
+        | "manual"
+        | "newsletter_writer";
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
     aiDraftMarkdown: text("ai_draft_markdown"),
     editDistance: integer("edit_distance"),
     styleProfileUsed: text("style_profile_used"),
+    badgeEnabled: boolean("badge_enabled").default(false),
+    platformFooterEnabled: boolean("platform_footer_enabled").default(false),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),

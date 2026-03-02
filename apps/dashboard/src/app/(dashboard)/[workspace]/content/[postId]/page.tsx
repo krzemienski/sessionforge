@@ -10,6 +10,8 @@ import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
+import { SourceCard } from "@/components/content/source-card";
+import { AuthenticityBadge } from "@/components/content/authenticity-badge";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -27,6 +29,8 @@ export default function ContentEditorPage() {
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
   const [externalMd, setExternalMd] = useState<string | null>(null);
+  const [badgeEnabled, setBadgeEnabled] = useState(false);
+  const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
   const initializedRef = useRef(false);
 
@@ -35,9 +39,21 @@ export default function ContentEditorPage() {
       setTitle(post.data.title || "");
       setMarkdown(post.data.markdown || "");
       setStatus(post.data.status || "draft");
+      setBadgeEnabled(post.data.badgeEnabled ?? false);
+      setPlatformFooterEnabled(post.data.platformFooterEnabled ?? false);
       initializedRef.current = true;
     }
   }, [post.data]);
+
+  function handleBadgeToggle(value: boolean) {
+    setBadgeEnabled(value);
+    update.mutate({ id: postId, badgeEnabled: value });
+  }
+
+  function handleFooterToggle(value: boolean) {
+    setPlatformFooterEnabled(value);
+    update.mutate({ id: postId, platformFooterEnabled: value });
+  }
 
   function handleSave() {
     update.mutate({ id: postId, title, markdown, status });
@@ -123,11 +139,21 @@ export default function ContentEditorPage() {
           )}
         </div>
 
-        <div className="hidden lg:flex w-[340px] bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex-col">
-          <AIChatSidebar
+        <div className="hidden lg:flex w-[340px] flex-col gap-3">
+          <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
+            <AIChatSidebar
+              postId={postId}
+              workspace={workspace}
+              onEditsApplied={handleEditsApplied}
+            />
+          </div>
+          {post.data?.insightId && <SourceCard postId={postId} />}
+          <AuthenticityBadge
             postId={postId}
-            workspace={workspace}
-            onEditsApplied={handleEditsApplied}
+            badgeEnabled={badgeEnabled}
+            platformFooterEnabled={platformFooterEnabled}
+            onBadgeToggle={handleBadgeToggle}
+            onFooterToggle={handleFooterToggle}
           />
         </div>
       </div>

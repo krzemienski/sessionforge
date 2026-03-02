@@ -57,7 +57,7 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { title, markdown, status, toneUsed } = body;
+  const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled } = body;
 
   try {
     const updated = await updatePost(existing.workspaceId, id, {
@@ -65,6 +65,8 @@ export async function PUT(
       markdown,
       status,
       toneUsed,
+      badgeEnabled,
+      platformFooterEnabled,
     });
 
     return NextResponse.json(updated);
