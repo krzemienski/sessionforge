@@ -88,7 +88,7 @@ export async function POST(request: Request) {
 
       await db
         .update(contentTriggers)
-        .set({ lastRunStatus: "success", lastRunAt: new Date() })
+        .set({ lastRunStatus: "success", lastRunAt: new Date(), lastFileEventAt: null })
         .where(eq(contentTriggers.id, triggerId));
 
       return NextResponse.json({ polled: true, hasChanges: changes.hasChanges, fired: true, ...result });
