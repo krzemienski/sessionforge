@@ -44,17 +44,6 @@ interface CalendarEntry {
   date: string;
 }
 
-interface CalendarDay {
-  date: string;
-  entries: CalendarEntry[];
-  hasScheduled?: boolean;
-}
-
-interface CalendarData {
-  days: CalendarDay[];
-  streak?: number;
-}
-
 function buildMonthGrid(year: number, month: number): (string | null)[] {
   // month is 1-based
   const firstDay = new Date(year, month - 1, 1).getDay();
@@ -157,15 +146,34 @@ export function CalendarView({ workspace }: CalendarViewProps) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const calendar = useContentCalendar(workspace, year, month);
-  const calendarData: CalendarData = calendar.data ?? { days: [] };
 
+  // Fix 2: API returns days as a Record<dateKey, { posts: [] }>, not an array.
   const dayMap = useMemo(() => {
     const map: Record<string, CalendarEntry[]> = {};
-    for (const day of calendarData.days ?? []) {
-      map[day.date] = day.entries ?? [];
+    const daysRecord = (calendar.data?.days ?? {}) as Record<string, { posts: any[] }>;
+    for (const [dateKey, dayData] of Object.entries(daysRecord)) {
+      map[dateKey] = (dayData.posts ?? []).map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        status: p.status,
+        contentType: p.contentType,
+        date: dateKey,
+      }));
     }
     return map;
-  }, [calendarData.days]);
+  }, [calendar.data?.days]);
+
+  // Fix 5: Build a Set of dates that have scheduled automation runs (blue dots).
+  const scheduledDates = useMemo(() => {
+    const dates = new Set<string>();
+    const nextRuns = (calendar.data?.nextRuns ?? {}) as Record<string, string>;
+    for (const iso of Object.values(nextRuns)) {
+      const d = new Date(iso);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      dates.add(key);
+    }
+    return dates;
+  }, [calendar.data?.nextRuns]);
 
   const monthCells = useMemo(() => buildMonthGrid(year, month), [year, month]);
   const weekCount = Math.ceil(monthCells.length / 7);
@@ -294,15 +302,8 @@ export function CalendarView({ workspace }: CalendarViewProps) {
         </div>
       </div>
 
-      {/* Streak banner */}
-      {calendarData.streak != null && calendarData.streak > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-sf-accent/10 border border-sf-accent/20 rounded-sf text-sm">
-          <span className="text-lg">🔥</span>
-          <span className="text-sf-accent font-medium">
-            {calendarData.streak}-{calendarData.streak === 1 ? "week" : "weeks"} publishing streak
-          </span>
-        </div>
-      )}
+      {/* Fix 4: Streak banner removed — streak is already shown in the content page header.
+          The calendar API does not return a streak field, so the banner was always hidden. */}
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-sf-text-muted">
@@ -337,6 +338,10 @@ export function CalendarView({ workspace }: CalendarViewProps) {
             const statusCounts: Record<string, number> = {};
             for (const e of entries) {
               statusCounts[e.status] = (statusCounts[e.status] || 0) + 1;
+            }
+            // Fix 5: Add a blue "scheduled" dot if an automation run lands on this date
+            if (dateStr && scheduledDates.has(dateStr)) {
+              statusCounts["scheduled"] = (statusCounts["scheduled"] || 0) + 1;
             }
 
             return (

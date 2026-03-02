@@ -79,7 +79,7 @@ export default function ContentPage() {
             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-sf-accent/10 border border-sf-accent/20 rounded-sf-full">
               <span className="text-base leading-none">🔥</span>
               <span className="text-xs font-medium text-sf-accent">
-                {streakCount}-week streak
+                {streakCount}-{streakCount === 1 ? "day" : "days"} streak
               </span>
             </div>
           )}

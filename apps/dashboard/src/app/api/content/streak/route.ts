@@ -7,6 +7,8 @@ import { eq, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
+type Post = typeof posts.$inferSelect & { publishedAt?: Date | null };
+
 function toDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -33,12 +35,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
   }
 
-  const publishedPosts = await db.query.posts.findMany({
+  const publishedPosts = (await db.query.posts.findMany({
     where: and(
       eq(posts.workspaceId, workspace.id),
       eq(posts.status, "published")
     ),
-  });
+  })) as Post[];
 
   const publishedDates = new Set<string>();
   for (const post of publishedPosts) {
