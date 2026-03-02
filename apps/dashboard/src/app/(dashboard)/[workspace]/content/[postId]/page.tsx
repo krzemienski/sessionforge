@@ -6,6 +6,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Save, ChevronDown, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
+import { ExportDropdown } from "@/components/content/export-dropdown";
+import { SocialCopyButton } from "@/components/content/social-copy-button";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -184,6 +186,7 @@ export default function ContentEditorPage() {
             <option value="published">Published</option>
             <option value="archived">Archived</option>
           </select>
+          <ExportDropdown markdown={markdown} title={title} />
           {isBlogPost && (
             <div className="relative" ref={dropdownRef}>
               {repurposing ? (
@@ -257,7 +260,15 @@ export default function ContentEditorPage() {
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-sf-border">
         <span className="text-xs text-sf-text-muted">{wordCount} words</span>
-        <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
+        <div className="flex items-center gap-3">
+          {(post.data?.contentType === "twitter_thread" || post.data?.contentType === "linkedin_post") && (
+            <SocialCopyButton
+              markdown={markdown}
+              contentType={post.data.contentType as "twitter_thread" | "linkedin_post"}
+            />
+          )}
+          <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
+        </div>
       </div>
     </div>
   );
