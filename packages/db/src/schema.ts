@@ -24,7 +24,9 @@ export const lookbackWindowEnum = pgEnum("lookback_window", [
 ]);
 
 export const postStatusEnum = pgEnum("post_status", [
+  "idea",
   "draft",
+  "in_review",
   "published",
   "archived",
 ]);
@@ -251,6 +253,7 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    publishedAt: timestamp("published_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
