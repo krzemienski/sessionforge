@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const mainNav = [
   { label: "Dashboard", icon: LayoutDashboard, href: "" },
@@ -95,15 +96,19 @@ export function AppSidebar({
       <div className="p-3 border-t border-sf-border">
         <div className="flex items-center justify-between px-3 py-2">
           <span className="text-sf-text-primary text-sm truncate">{userName}</span>
-          <button
-            onClick={async () => {
-              await signOut();
-              router.push("/login");
-            }}
-            className="text-sf-text-muted hover:text-sf-danger transition-colors"
-          >
-            <LogOut size={16} />
-          </button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <button
+              onClick={async () => {
+                await signOut();
+                router.push("/login");
+              }}
+              className="flex items-center justify-center w-8 h-8 rounded-sf text-sf-text-muted hover:text-sf-danger hover:bg-sf-bg-hover transition-colors"
+              aria-label="Sign out"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </aside>
