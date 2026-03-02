@@ -2,6 +2,9 @@ import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import os from "os";
+import { db } from "@/lib/db";
+import { writingSkills } from "@sessionforge/db";
+import { eq, and } from "drizzle-orm";
 
 export interface SkillInfo {
   name: string;
@@ -64,6 +67,38 @@ export async function getSkillByName(name: string): Promise<string | null> {
   }
 
   return null;
+}
+
+// ── DB-backed skill injection ──
+
+type AgentType = "blog" | "social" | "changelog";
+
+export async function getActiveSkillsForAgentType(
+  workspaceId: string,
+  agentType: AgentType
+): Promise<string[]> {
+  const skills = await db.query.writingSkills.findMany({
+    where: and(
+      eq(writingSkills.workspaceId, workspaceId),
+      eq(writingSkills.enabled, true)
+    ),
+  });
+
+  return skills
+    .filter((skill) => {
+      const applies = skill.appliesTo as string[] | null;
+      if (!applies) return false;
+      return applies.includes(agentType) || applies.includes("all");
+    })
+    .map((skill) => skill.instructions);
+}
+
+export function buildSkillSystemPromptSuffix(skills: string[]): string {
+  if (skills.length === 0) return "";
+  const list = skills
+    .map((instruction, i) => `${i + 1}. ${instruction}`)
+    .join("\n");
+  return `\n\n## Writing Skills\nApply these writing instructions:\n${list}`;
 }
 
 // MCP tool definitions

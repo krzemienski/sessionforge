@@ -4,7 +4,7 @@ import { getToolsForAgent } from "../orchestration/tool-registry";
 import { handleSessionReaderTool } from "../tools/session-reader";
 import { handleInsightTool } from "../tools/insight-tools";
 import { handlePostManagerTool } from "../tools/post-manager";
-import { handleSkillLoaderTool } from "../tools/skill-loader";
+import { handleSkillLoaderTool, getActiveSkillsForAgentType, buildSkillSystemPromptSuffix } from "../tools/skill-loader";
 import { BLOG_TECHNICAL_PROMPT } from "../prompts/blog/technical";
 import { BLOG_TUTORIAL_PROMPT } from "../prompts/blog/tutorial";
 import { BLOG_CONVERSATIONAL_PROMPT } from "../prompts/blog/conversational";
@@ -34,7 +34,8 @@ export function streamBlogWriter(input: BlogWriterInput): Response {
     try {
       const model = getModelForAgent("blog-writer");
       const tools = getToolsForAgent("blog-writer");
-      const systemPrompt = PROMPTS[input.tone ?? "technical"];
+      const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "blog");
+      const systemPrompt = PROMPTS[input.tone ?? "technical"] + buildSkillSystemPromptSuffix(activeSkills);
 
       const userMessage = input.customInstructions
         ? `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post.\n\nAdditional instructions: ${input.customInstructions}`
