@@ -1,11 +1,14 @@
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
-import { eq, and, desc } from "drizzle-orm";
-import type { contentTypeEnum, postStatusEnum, toneProfileEnum } from "@sessionforge/db";
+import { eq, and } from "drizzle-orm";
+import type { contentTypeEnum, postStatusEnum, toneProfileEnum, editTypeEnum, versionTypeEnum } from "@sessionforge/db";
+import { createRevision } from "@/lib/revisions/manager";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
 type PostStatus = (typeof postStatusEnum.enumValues)[number];
 type ToneProfile = (typeof toneProfileEnum.enumValues)[number];
+type EditType = (typeof editTypeEnum.enumValues)[number];
+type VersionType = (typeof versionTypeEnum.enumValues)[number];
 
 export interface CreatePostInput {
   workspaceId: string;
@@ -29,6 +32,9 @@ export interface UpdatePostInput {
   content?: string;
   status?: PostStatus;
   toneUsed?: ToneProfile;
+  versionType?: VersionType;
+  editType?: EditType;
+  createdBy?: string;
 }
 
 function markdownToHtml(markdown: string): string {
@@ -61,6 +67,14 @@ export async function createPost(input: CreatePostInput) {
     })
     .returning();
 
+  await createRevision({
+    postId: created.id,
+    title: created.title,
+    markdown: input.markdown,
+    versionType: "major",
+    editType: "ai_generated",
+  });
+
   return created;
 }
 
@@ -92,6 +106,15 @@ export async function updatePost(
   if (!updated) {
     throw new Error(`Post ${postId} not found`);
   }
+
+  await createRevision({
+    postId: updated.id,
+    title: updated.title,
+    markdown: updated.markdown,
+    versionType: input.versionType ?? "minor",
+    editType: input.editType ?? "user_edit",
+    createdBy: input.createdBy,
+  });
 
   return updated;
 }
