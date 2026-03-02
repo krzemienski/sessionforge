@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions, workspaces } from "@sessionforge/db";
-import { eq, desc, asc, gte, and, sql } from "drizzle-orm";
+import { eq, desc, asc, gte, lte, and, sql, isNotNull, isNull } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,12 @@ export async function GET(req: NextRequest) {
   const minMessages = searchParams.get("minMessages")
     ? parseInt(searchParams.get("minMessages")!)
     : null;
+  const maxMessages = searchParams.get("maxMessages")
+    ? parseInt(searchParams.get("maxMessages")!)
+    : null;
+  const dateFrom = searchParams.get("dateFrom");
+  const dateTo = searchParams.get("dateTo");
+  const hasSummaryParam = searchParams.get("hasSummary");
 
   const workspace = await db
     .select({ id: workspaces.id })
@@ -40,17 +46,33 @@ export async function GET(req: NextRequest) {
   if (minMessages !== null) {
     conditions.push(gte(claudeSessions.messageCount, minMessages));
   }
+  if (maxMessages !== null) {
+    conditions.push(lte(claudeSessions.messageCount, maxMessages));
+  }
+  if (dateFrom) {
+    conditions.push(gte(claudeSessions.startedAt, new Date(dateFrom)));
+  }
+  if (dateTo) {
+    conditions.push(lte(claudeSessions.startedAt, new Date(dateTo)));
+  }
+  if (hasSummaryParam === "true") {
+    conditions.push(isNotNull(claudeSessions.summary));
+  } else if (hasSummaryParam === "false") {
+    conditions.push(isNull(claudeSessions.summary));
+  }
 
   const where = and(...conditions);
 
-  const validSortColumns: Record<string, typeof claudeSessions.startedAt> = {
+  const validSortColumns = {
     startedAt: claudeSessions.startedAt,
-    messageCount: claudeSessions.messageCount as unknown as typeof claudeSessions.startedAt,
-    costUsd: claudeSessions.costUsd as unknown as typeof claudeSessions.startedAt,
-    durationSeconds: claudeSessions.durationSeconds as unknown as typeof claudeSessions.startedAt,
+    messageCount: claudeSessions.messageCount,
+    costUsd: claudeSessions.costUsd,
+    durationSeconds: claudeSessions.durationSeconds,
+    endedAt: claudeSessions.endedAt,
   };
 
-  const sortCol = validSortColumns[sort] ?? claudeSessions.startedAt;
+  const sortCol =
+    validSortColumns[sort as keyof typeof validSortColumns] ?? claudeSessions.startedAt;
   const orderFn = order === "asc" ? asc : desc;
 
   const [rows, countResult] = await Promise.all([
@@ -68,7 +90,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   return NextResponse.json({
-    data: rows,
+    sessions: rows,
     total: Number(countResult[0]?.count ?? 0),
     limit,
     offset,
