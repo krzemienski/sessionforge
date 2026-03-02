@@ -133,6 +133,7 @@ export const workspaces = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     sessionBasePath: text("session_base_path").default("~/.claude"),
+    lastScanAt: timestamp("last_scan_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
