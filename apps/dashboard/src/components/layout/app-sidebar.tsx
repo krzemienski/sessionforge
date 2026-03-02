@@ -13,6 +13,7 @@ import {
   Palette,
   KeyRound,
   LogOut,
+  Search,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -34,9 +35,11 @@ const settingsNav = [
 export function AppSidebar({
   workspace,
   userName,
+  onOpenSearch,
 }: {
   workspace: string;
   userName: string;
+  onOpenSearch: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -72,6 +75,19 @@ export function AppSidebar({
             {item.label}
           </Link>
         ))}
+
+        <div className="h-px bg-sf-border my-3" />
+
+        <button
+          onClick={onOpenSearch}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-sf text-sm font-display transition-colors text-sf-text-secondary hover:bg-sf-bg-hover hover:text-sf-text-primary"
+        >
+          <Search size={18} />
+          <span className="flex-1 text-left">Search</span>
+          <kbd className="text-xs text-sf-text-muted bg-sf-bg-primary border border-sf-border rounded px-1.5 py-0.5 font-sans">
+            ⌘K
+          </kbd>
+        </button>
 
         <div className="h-px bg-sf-border my-3" />
 
