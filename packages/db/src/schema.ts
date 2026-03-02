@@ -62,6 +62,12 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "file_watch",
 ]);
 
+export const metricsPlatformEnum = pgEnum("metrics_platform", [
+  "devto",
+  "hashnode",
+  "manual",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -299,6 +305,51 @@ export const apiKeys = pgTable(
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const contentMetrics = pgTable(
+  "content_metrics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id").references(() => posts.id, { onDelete: "set null" }),
+    platform: metricsPlatformEnum("platform").notNull(),
+    externalId: text("external_id"),
+    title: text("title").notNull(),
+    url: text("url"),
+    views: integer("views").default(0),
+    reactions: integer("reactions").default(0),
+    comments: integer("comments").default(0),
+    likes: integer("likes").default(0),
+    publishedAt: timestamp("published_at"),
+    fetchedAt: timestamp("fetched_at").defaultNow(),
+  },
+  (table) => [
+    index("contentMetrics_workspaceId_idx").on(table.workspaceId),
+    index("contentMetrics_fetchedAt_idx").on(table.fetchedAt),
+    index("contentMetrics_platform_idx").on(table.platform),
+  ]
+);
+
+export const platformSettings = pgTable(
+  "platform_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    devtoApiKey: text("devto_api_key"),
+    devtoUsername: text("devto_username"),
+    hashnodeApiKey: text("hashnode_api_key"),
+    hashnodeUsername: text("hashnode_username"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("platformSettings_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -332,6 +383,8 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  contentMetrics: many(contentMetrics),
+  platformSettings: one(platformSettings),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -364,7 +417,7 @@ export const insightsRelations = relations(insights, ({ one, many }) => ({
   posts: many(posts),
 }));
 
-export const postsRelations = relations(posts, ({ one }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   workspace: one(workspaces, {
     fields: [posts.workspaceId],
     references: [workspaces.id],
@@ -373,6 +426,7 @@ export const postsRelations = relations(posts, ({ one }) => ({
     fields: [posts.insightId],
     references: [insights.id],
   }),
+  contentMetrics: many(contentMetrics),
 }));
 
 export const contentTriggersRelations = relations(
@@ -391,3 +445,24 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const contentMetricsRelations = relations(contentMetrics, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [contentMetrics.workspaceId],
+    references: [workspaces.id],
+  }),
+  post: one(posts, {
+    fields: [contentMetrics.postId],
+    references: [posts.id],
+  }),
+}));
+
+export const platformSettingsRelations = relations(
+  platformSettings,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [platformSettings.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
