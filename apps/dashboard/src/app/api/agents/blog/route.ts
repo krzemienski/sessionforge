@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { streamBlogWriter } from "@/lib/ai/agents/blog-writer";
+import { checkQuota, recordUsage } from "@/lib/billing/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,29 @@ export async function POST(request: Request) {
   if (!workspace || workspace.ownerId !== session.user.id) {
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
   }
+
+  const quota = await checkQuota(session.user.id, "content_generation");
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: "Monthly content generation quota exceeded",
+        quota: {
+          limit: quota.limit,
+          remaining: quota.remaining,
+          percentUsed: quota.percentUsed,
+        },
+      },
+      { status: 402 }
+    );
+  }
+
+  const estimatedCost = 0.05;
+  await recordUsage(
+    session.user.id,
+    workspace.id,
+    "content_generation",
+    estimatedCost
+  );
 
   return streamBlogWriter({
     workspaceId: workspace.id,
