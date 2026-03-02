@@ -1,2 +1,5 @@
 {"t":0,"agent":"system","event":"skill_invoked","skill_name":"planning-with-files"}
 {"t":0,"agent":"system","event":"skill_invoked","skill_name":"cook"}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"team"}
+{"t":0,"agent":"a6f45d3","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"better-auth"}
