@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, triggerCreateSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { createTriggerSchedule } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,23 @@ export async function POST(req: Request) {
         cronExpression: cronExpression || null,
       })
       .returning();
+
+    if (triggerType === "scheduled" && cronExpression) {
+      try {
+        const qstashScheduleId = await createTriggerSchedule(trigger.id, cronExpression);
+
+        const [updated] = await db
+          .update(contentTriggers)
+          .set({ qstashScheduleId })
+          .where(eq(contentTriggers.id, trigger.id))
+          .returning();
+
+        return NextResponse.json(updated, { status: 201 });
+      } catch {
+        // QStash schedule creation failed (e.g. placeholder credentials) — return
+        // trigger without a scheduleId rather than failing the whole request
+      }
+    }
 
     return NextResponse.json(trigger, { status: 201 });
   })(req);
