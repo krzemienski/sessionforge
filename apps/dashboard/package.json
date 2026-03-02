@@ -26,13 +26,18 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
-    "typescript": "^5.7",
+    "@sessionforge/tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/node": "^22",
-    "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4",
+    "@vitest/coverage-v8": "^4.0.18",
+    "happy-dom": "^20.7.0",
     "postcss": "^8",
-    "@sessionforge/tsconfig": "workspace:*"
+    "tailwindcss": "^4",
+    "typescript": "^5.7",
+    "vitest": "^4.0.18"
   }
 }
