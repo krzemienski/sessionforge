@@ -275,6 +275,7 @@ export const contentTriggers = pgTable(
     contentType: contentTypeEnum("content_type").notNull(),
     lookbackWindow: lookbackWindowEnum("lookback_window").default("last_7_days"),
     cronExpression: text("cron_expression"),
+    qstashScheduleId: text("qstash_schedule_id"),
     enabled: boolean("enabled").default(true),
     lastRunAt: timestamp("last_run_at"),
     lastRunStatus: text("last_run_status"),
