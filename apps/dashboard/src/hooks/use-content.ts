@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-export function useContent(workspace: string, params?: { limit?: number; offset?: number; status?: string; type?: string }) {
+export function useContent(workspace: string, params?: { limit?: number; offset?: number; status?: string; type?: string; tone?: string; dateFrom?: string; dateTo?: string; search?: string }) {
   return useQuery({
     queryKey: ["content", workspace, params],
     queryFn: async () => {
@@ -12,6 +12,10 @@ export function useContent(workspace: string, params?: { limit?: number; offset?
       if (params?.offset) sp.set("offset", String(params.offset));
       if (params?.status) sp.set("status", params.status);
       if (params?.type) sp.set("type", params.type);
+      if (params?.tone) sp.set("tone", params.tone);
+      if (params?.dateFrom) sp.set("dateFrom", params.dateFrom);
+      if (params?.dateTo) sp.set("dateTo", params.dateTo);
+      if (params?.search) sp.set("search", params.search);
       const res = await fetch(`/api/content?${sp}`);
       if (!res.ok) throw new Error("Failed to fetch content");
       return res.json();
