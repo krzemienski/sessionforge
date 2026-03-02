@@ -40,7 +40,13 @@ export default function ContentEditorPage() {
     update.mutate({ id: postId, title, markdown, status });
   }, [update, postId, title, markdown, status]);
 
+  const handlePublish = useCallback(() => {
+    setStatus('published');
+    update.mutate({ id: postId, title, markdown, status: 'published' });
+  }, [update, postId, title, markdown]);
+
   useKeyboardShortcut(SHORTCUTS.Actions[2], handleSave, { captureInInputs: true });
+  useKeyboardShortcut(SHORTCUTS.Actions[3], handlePublish, { captureInInputs: true });
 
   const handleMarkdownChange = useCallback((md: string) => {
     setMarkdown(md);

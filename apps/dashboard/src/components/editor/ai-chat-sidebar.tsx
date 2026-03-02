@@ -250,7 +250,7 @@ export function AIChatSidebar({ postId, workspace, onEditsApplied }: AIChatSideb
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && !e.metaKey && handleSend()}
             placeholder="Ask AI to edit..."
             disabled={isStreaming}
             className="flex-1 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary placeholder:text-sf-text-muted focus:outline-none focus:border-sf-border-focus disabled:opacity-50"
