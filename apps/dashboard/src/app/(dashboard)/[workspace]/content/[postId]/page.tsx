@@ -8,6 +8,8 @@ import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
+import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
+import { SHORTCUTS } from "@/lib/keyboard-shortcuts";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -34,9 +36,11 @@ export default function ContentEditorPage() {
     }
   }, [post.data]);
 
-  function handleSave() {
+  const handleSave = useCallback(() => {
     update.mutate({ id: postId, title, markdown, status });
-  }
+  }, [update, postId, title, markdown, status]);
+
+  useKeyboardShortcut(SHORTCUTS.Actions[2], handleSave, { captureInInputs: true });
 
   const handleMarkdownChange = useCallback((md: string) => {
     setMarkdown(md);

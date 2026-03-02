@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Bot, User, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
+import { SHORTCUTS } from "@/lib/keyboard-shortcuts";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -31,7 +33,21 @@ export function AIChatSidebar({ postId, workspace, onEditsApplied }: AIChatSideb
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  async function handleSend() {
+  const fetchUpdatedMarkdown = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/content/${postId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.markdown) {
+          onEditsApplied(data.markdown);
+        }
+      }
+    } catch {
+      // Silent fail — user can manually refresh
+    }
+  }, [postId, onEditsApplied]);
+
+  const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
 
@@ -157,21 +173,9 @@ export function AIChatSidebar({ postId, workspace, onEditsApplied }: AIChatSideb
       setIsStreaming(false);
       setStatusText("");
     }
-  }
+  }, [input, isStreaming, messages, postId, workspace, fetchUpdatedMarkdown]);
 
-  async function fetchUpdatedMarkdown() {
-    try {
-      const res = await fetch(`/api/content/${postId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.markdown) {
-          onEditsApplied(data.markdown);
-        }
-      }
-    } catch {
-      // Silent fail — user can manually refresh
-    }
-  }
+  useKeyboardShortcut(SHORTCUTS.Actions[1], handleSend, { captureInInputs: true });
 
   return (
     <div className="flex flex-col h-full">
