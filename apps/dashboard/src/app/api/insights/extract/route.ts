@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { extractInsight } from "@/lib/ai/agents/insight-extractor";
+import { checkQuota, recordUsage } from "@/lib/billing/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +31,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
   }
 
+  const quota = await checkQuota(session.user.id, "insight_extraction");
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: "Monthly insight extraction quota exceeded",
+        quota: {
+          limit: quota.limit,
+          remaining: quota.remaining,
+          percentUsed: quota.percentUsed,
+        },
+      },
+      { status: 402 }
+    );
+  }
+
   try {
     const result = await extractInsight({
       workspaceId: workspace.id,
       sessionId,
     });
+
+    const estimatedCost = 0.01;
+    await recordUsage(
+      session.user.id,
+      workspace.id,
+      "insight_extraction",
+      estimatedCost
+    );
 
     return NextResponse.json(result);
   } catch (error) {
