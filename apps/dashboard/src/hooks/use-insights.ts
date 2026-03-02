@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-export function useInsights(workspace: string, params?: { limit?: number; offset?: number; minScore?: number; category?: string }) {
+export function useInsights(workspace: string, params?: { limit?: number; offset?: number; minScore?: number; category?: string; sessionId?: string; dateFrom?: string; dateTo?: string }) {
   return useQuery({
     queryKey: ["insights", workspace, params],
     queryFn: async () => {
@@ -11,6 +11,9 @@ export function useInsights(workspace: string, params?: { limit?: number; offset
       if (params?.offset) sp.set("offset", String(params.offset));
       if (params?.minScore) sp.set("minScore", String(params.minScore));
       if (params?.category) sp.set("category", params.category);
+      if (params?.sessionId) sp.set("sessionId", params.sessionId);
+      if (params?.dateFrom) sp.set("dateFrom", params.dateFrom);
+      if (params?.dateTo) sp.set("dateTo", params.dateTo);
       const res = await fetch(`/api/insights?${sp}`);
       if (!res.ok) throw new Error("Failed to fetch insights");
       return res.json();
