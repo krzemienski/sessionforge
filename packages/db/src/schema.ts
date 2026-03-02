@@ -62,6 +62,28 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "file_watch",
 ]);
 
+export const planTierEnum = pgEnum("plan_tier", [
+  "free",
+  "solo",
+  "pro",
+  "team",
+]);
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "active",
+  "canceled",
+  "past_due",
+  "trialing",
+  "incomplete",
+  "incomplete_expired",
+]);
+
+export const usageEventTypeEnum = pgEnum("usage_event_type", [
+  "session_scan",
+  "insight_extraction",
+  "content_generation",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -301,12 +323,81 @@ export const apiKeys = pgTable(
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planTier: planTierEnum("plan_tier").notNull().default("free"),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    currentPeriodStart: timestamp("current_period_start"),
+    currentPeriodEnd: timestamp("current_period_end"),
+    status: subscriptionStatusEnum("status").notNull().default("active"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("subscriptions_userId_idx").on(table.userId),
+    index("subscriptions_stripeCustomerId_idx").on(table.stripeCustomerId),
+  ]
+);
+
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    eventType: usageEventTypeEnum("event_type").notNull(),
+    costUsd: real("cost_usd").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("usageEvents_userId_idx").on(table.userId),
+    index("usageEvents_workspaceId_idx").on(table.workspaceId),
+    index("usageEvents_createdAt_idx").on(table.createdAt),
+  ]
+);
+
+export const usageMonthlySummary = pgTable(
+  "usage_monthly_summary",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    month: text("month").notNull(),
+    sessionScans: integer("session_scans").notNull().default(0),
+    insightExtractions: integer("insight_extractions").notNull().default(0),
+    contentGenerations: integer("content_generations").notNull().default(0),
+    estimatedCostUsd: real("estimated_cost_usd").notNull().default(0),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("usageMonthlySummary_userId_month_uidx").on(
+      table.userId,
+      table.month
+    ),
+    index("usageMonthlySummary_userId_idx").on(table.userId),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
   workspaces: many(workspaces),
   authSessions: many(authSessions),
   accounts: many(accounts),
+  subscriptions: many(subscriptions),
+  usageEvents: many(usageEvents),
+  usageMonthlySummary: many(usageMonthlySummary),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -334,6 +425,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  usageEvents: many(usageEvents),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -393,3 +485,31 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [subscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const usageEventsRelations = relations(usageEvents, ({ one }) => ({
+  user: one(users, {
+    fields: [usageEvents.userId],
+    references: [users.id],
+  }),
+  workspace: one(workspaces, {
+    fields: [usageEvents.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+export const usageMonthlySummaryRelations = relations(
+  usageMonthlySummary,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [usageMonthlySummary.userId],
+      references: [users.id],
+    }),
+  })
+);
