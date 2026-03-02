@@ -254,7 +254,8 @@ export const posts = pgTable(
         | "social_writer"
         | "changelog_writer"
         | "editor_chat"
-        | "manual";
+        | "manual"
+        | "newsletter_writer";
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
