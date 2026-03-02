@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useInsight } from "@/hooks/use-insights";
+import { useAgentRun } from "@/hooks/use-agent-run";
+import { AgentStatus } from "@/components/agents/agent-status";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,11 +23,31 @@ export default function InsightDetailPage() {
   const insight = useInsight(insightId);
   const ins = insight.data;
 
+  const blogRun = useAgentRun<{ insightId: string; tone: string; workspaceSlug: string }>(
+    "/api/agents/blog"
+  );
+  const twitterRun = useAgentRun<{ insightId: string; platform: string; workspaceSlug: string }>(
+    "/api/agents/social"
+  );
+
+  // Navigate to content page on successful completion
+  useEffect(() => {
+    if (blogRun.status === "completed" || twitterRun.status === "completed") {
+      router.push(`/${workspace}/content`);
+    }
+  }, [blogRun.status, twitterRun.status, workspace, router]);
+
   if (insight.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
   }
 
   if (!ins) return <p className="text-sf-text-muted">Insight not found.</p>;
+
+  const isAgentBusy =
+    blogRun.status === "running" ||
+    blogRun.status === "retrying" ||
+    twitterRun.status === "running" ||
+    twitterRun.status === "retrying";
 
   return (
     <div>
@@ -78,33 +101,50 @@ export default function InsightDetailPage() {
         </div>
       )}
 
-      <div className="flex gap-3">
-        <button
-          onClick={() => {
-            fetch("/api/agents/blog", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ insightId: ins.id, tone: "technical", workspaceSlug: workspace }),
-            });
-            router.push(`/${workspace}/content`);
-          }}
-          className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
-        >
-          Generate Blog Post
-        </button>
-        <button
-          onClick={() => {
-            fetch("/api/agents/social", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ insightId: ins.id, platform: "twitter", workspaceSlug: workspace }),
-            });
-            router.push(`/${workspace}/content`);
-          }}
-          className="bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf text-sm hover:bg-sf-bg-hover transition-colors"
-        >
-          Generate Twitter Thread
-        </button>
+      <div className="flex flex-col gap-4">
+        <div>
+          <button
+            disabled={isAgentBusy}
+            onClick={() =>
+              blogRun.run({ insightId: ins.id, tone: "technical", workspaceSlug: workspace })
+            }
+            className={cn(
+              "bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm transition-colors",
+              isAgentBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-sf-accent-dim"
+            )}
+          >
+            Generate Blog Post
+          </button>
+          <AgentStatus
+            status={blogRun.status}
+            retryInfo={blogRun.retryInfo}
+            error={blogRun.error}
+            onRetry={blogRun.retry}
+            agentLabel="blog post"
+          />
+        </div>
+
+        <div>
+          <button
+            disabled={isAgentBusy}
+            onClick={() =>
+              twitterRun.run({ insightId: ins.id, platform: "twitter", workspaceSlug: workspace })
+            }
+            className={cn(
+              "bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf text-sm transition-colors",
+              isAgentBusy ? "opacity-50 cursor-not-allowed" : "hover:bg-sf-bg-hover"
+            )}
+          >
+            Generate Twitter Thread
+          </button>
+          <AgentStatus
+            status={twitterRun.status}
+            retryInfo={twitterRun.retryInfo}
+            error={twitterRun.error}
+            onRetry={twitterRun.retry}
+            agentLabel="Twitter thread"
+          />
+        </div>
       </div>
     </div>
   );
