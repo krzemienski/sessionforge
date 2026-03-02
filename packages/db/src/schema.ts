@@ -259,6 +259,8 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    badgeEnabled: boolean("badge_enabled").default(false),
+    platformFooterEnabled: boolean("platform_footer_enabled").default(false),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
