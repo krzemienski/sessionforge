@@ -4,6 +4,7 @@ import { posts } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
 import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
 import { updatePost } from "@/lib/ai/tools/post-manager";
+import { fireWebhookEvent } from "@/lib/webhooks/events";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,14 @@ export async function PATCH(
       markdown,
       status: status as Parameters<typeof updatePost>[2]["status"],
     });
+
+    if (status === "published") {
+      fireWebhookEvent(wsId, "content.published", {
+        postId: id,
+        title: updated.title,
+        contentType: updated.contentType,
+      });
+    }
 
     return apiResponse(updated, {});
   } catch (error) {

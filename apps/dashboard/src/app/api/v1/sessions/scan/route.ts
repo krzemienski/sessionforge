@@ -7,6 +7,7 @@ import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";
 import { indexSessions } from "@/lib/sessions/indexer";
+import { fireWebhookEvent } from "@/lib/webhooks/events";
 
 export const dynamic = "force-dynamic";
 
@@ -44,10 +45,19 @@ export async function POST(req: NextRequest) {
 
   const result = await indexSessions(ws.id, normalized);
 
+  const durationMs = Date.now() - start;
+
+  fireWebhookEvent(ws.id, "scan.completed", {
+    scanned: result.scanned,
+    indexed: result.indexed,
+    errors: result.errors,
+    durationMs,
+  });
+
   return apiResponse({
     scanned: result.scanned,
     indexed: result.indexed,
     errors: result.errors,
-    durationMs: Date.now() - start,
+    durationMs,
   });
 }
