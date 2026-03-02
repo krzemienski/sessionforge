@@ -3,8 +3,35 @@
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Zap, Plus, Trash2 } from "lucide-react";
+import { Zap, Plus, Trash2, Play } from "lucide-react";
+import Link from "next/link";
 import { cn, timeAgo } from "@/lib/utils";
+
+const ACTIVE_STATUSES = ["pending", "scanning", "extracting", "generating"];
+
+function getStatusClass(status: string) {
+  switch (status) {
+    case "pending":
+      return "bg-yellow-500 text-white";
+    case "scanning":
+    case "extracting":
+    case "generating":
+      return "bg-blue-500 text-white animate-pulse";
+    case "complete":
+      return "bg-green-500 text-white";
+    case "failed":
+      return "bg-red-500 text-white";
+    default:
+      return "bg-sf-bg-tertiary text-sf-text-secondary";
+  }
+}
+
+function formatDuration(startedAt: string | null, completedAt: string | null) {
+  if (!startedAt || !completedAt) return null;
+  const secs = (new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000;
+  if (secs < 60) return `${Math.round(secs)}s`;
+  return `${(secs / 60).toFixed(1)}m`;
+}
 
 export default function AutomationPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -21,6 +48,20 @@ export default function AutomationPage() {
       const res = await fetch(`/api/automation/triggers?workspace=${workspace}`);
       if (!res.ok) throw new Error("Failed");
       return res.json();
+    },
+  });
+
+  const runs = useQuery({
+    queryKey: ["runs", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/automation/runs?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      const data = query.state.data as { runs?: any[] } | undefined;
+      const hasActive = (data?.runs ?? []).some((r: any) => ACTIVE_STATUSES.includes(r.status));
+      return hasActive ? 3000 : 0;
     },
   });
 
@@ -55,7 +96,28 @@ export default function AutomationPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["triggers"] }),
   });
 
+  const execute = useMutation({
+    mutationFn: async (triggerId: string) => {
+      const res = await fetch("/api/automation/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ triggerId }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
+  });
+
   const triggerList = triggers.data?.triggers ?? [];
+  const runList: any[] = runs.data?.runs ?? [];
+
+  const runsByTrigger = runList.reduce<Record<string, any[]>>((acc, run) => {
+    const key = run.triggerId ?? "unknown";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(run);
+    return acc;
+  }, {});
 
   return (
     <div>
@@ -91,28 +153,76 @@ export default function AutomationPage() {
         </div>
       )}
 
-      <div className="space-y-3">
-        {triggerList.map((t: any) => (
-          <div key={t.id} className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-sf-text-primary">{t.name}</h3>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => toggle.mutate({ id: t.id, enabled: !t.enabled })}
-                  className={cn("w-10 h-5 rounded-full transition-colors relative", t.enabled ? "bg-sf-accent" : "bg-sf-bg-tertiary border border-sf-border")}
-                >
-                  <div className={cn("w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform", t.enabled ? "translate-x-5" : "translate-x-0.5")} />
-                </button>
-                <button onClick={() => del.mutate(t.id)} className="text-sf-text-muted hover:text-sf-danger"><Trash2 size={16} /></button>
+      <div className="space-y-6">
+        {triggerList.map((t: any) => {
+          const triggerRuns: any[] = runsByTrigger[t.id] ?? [];
+          return (
+            <div key={t.id}>
+              {/* Trigger card */}
+              <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-sf-text-primary">{t.name}</h3>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => execute.mutate(t.id)}
+                      disabled={execute.isPending}
+                      className="flex items-center gap-1.5 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf text-xs font-medium hover:border-sf-accent hover:text-sf-accent transition-colors disabled:opacity-50"
+                    >
+                      <Play size={12} /> Run Now
+                    </button>
+                    <button
+                      onClick={() => toggle.mutate({ id: t.id, enabled: !t.enabled })}
+                      className={cn("w-10 h-5 rounded-full transition-colors relative", t.enabled ? "bg-sf-accent" : "bg-sf-bg-tertiary border border-sf-border")}
+                    >
+                      <div className={cn("w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform", t.enabled ? "translate-x-5" : "translate-x-0.5")} />
+                    </button>
+                    <button onClick={() => del.mutate(t.id)} className="text-sf-text-muted hover:text-sf-danger"><Trash2 size={16} /></button>
+                  </div>
+                </div>
+                <p className="text-xs text-sf-text-secondary">
+                  {t.triggerType === "scheduled" ? `Scheduled` : t.triggerType} · {t.contentType?.replace(/_/g, " ")} · {t.lookbackWindow?.replace(/_/g, " ")}
+                </p>
+                {t.cronExpression && <p className="text-xs text-sf-text-muted font-code mt-1">{t.cronExpression}</p>}
+                {t.lastRunAt && <p className="text-xs text-sf-text-muted mt-1">Last run: {timeAgo(t.lastRunAt)} ({t.lastRunStatus || "unknown"})</p>}
+              </div>
+
+              {/* Recent Runs for this trigger */}
+              <div className="mt-2 ml-4">
+                <h4 className="text-xs font-medium text-sf-text-muted mb-2">
+                  Recent Runs{triggerRuns.length > 0 && <span className="text-sf-text-secondary ml-1">({triggerRuns.length})</span>}
+                </h4>
+                {triggerRuns.length === 0 ? (
+                  <p className="text-xs text-sf-text-muted italic">No runs yet - click Run Now to start</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {triggerRuns.map((run: any) => {
+                      const duration = formatDuration(run.startedAt ?? null, run.completedAt ?? null);
+                      return (
+                        <div key={run.id} className="flex items-center gap-2 text-xs text-sf-text-secondary flex-wrap">
+                          <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium", getStatusClass(run.status))}>
+                            {run.status}
+                          </span>
+                          <span className="text-sf-text-muted">{run.startedAt ? timeAgo(run.startedAt) : "—"}</span>
+                          {duration && <span className="text-sf-text-muted">· {duration}</span>}
+                          {run.postId && (
+                            <Link href={`/${workspace}/content/${run.postId}`} className="text-sf-accent hover:underline ml-1">
+                              View post →
+                            </Link>
+                          )}
+                          {run.status === "failed" && run.errorMessage && (
+                            <span className="text-red-400 truncate max-w-xs" title={run.errorMessage}>
+                              {run.errorMessage.length > 60 ? `${run.errorMessage.slice(0, 60)}…` : run.errorMessage}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
-            <p className="text-xs text-sf-text-secondary">
-              {t.triggerType === "scheduled" ? `Scheduled` : t.triggerType} · {t.contentType?.replace(/_/g, " ")} · {t.lookbackWindow?.replace(/_/g, " ")}
-            </p>
-            {t.cronExpression && <p className="text-xs text-sf-text-muted font-code mt-1">{t.cronExpression}</p>}
-            {t.lastRunAt && <p className="text-xs text-sf-text-muted mt-1">Last run: {timeAgo(t.lastRunAt)} ({t.lastRunStatus || "unknown"})</p>}
-          </div>
-        ))}
+          );
+        })}
 
         {triggerList.length === 0 && !triggers.isLoading && (
           <div className="text-center py-12">
