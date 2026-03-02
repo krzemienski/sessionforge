@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useSessions, useScanSessions } from "@/hooks/use-sessions";
 import { timeAgo, formatDuration } from "@/lib/utils";
 import { useState } from "react";
@@ -66,7 +67,24 @@ export default function SessionsPage() {
         {sessionList.length === 0 && !sessions.isLoading && (
           <div className="text-center py-12">
             <ScrollText size={40} className="mx-auto text-sf-text-muted mb-3" />
-            <p className="text-sf-text-secondary">No sessions found. Try scanning or expanding the lookback window.</p>
+            <p className="text-sf-text-primary font-medium mb-1">No sessions found</p>
+            <p className="text-sf-text-secondary mb-6 text-sm">Scan your Claude projects to import sessions and start generating insights.</p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => scan.mutate(30)}
+                disabled={scan.isPending}
+                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+              >
+                <Zap size={16} />
+                {scan.isPending ? "Scanning..." : "Scan Now"}
+              </button>
+              <Link
+                href="/onboarding"
+                className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
+              >
+                View setup guide →
+              </Link>
+            </div>
           </div>
         )}
       </div>
