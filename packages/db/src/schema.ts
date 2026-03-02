@@ -62,6 +62,12 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "file_watch",
 ]);
 
+export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
+  "owner",
+  "editor",
+  "viewer",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -252,6 +258,9 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -260,6 +269,7 @@ export const posts = pgTable(
       table.workspaceId,
       table.createdAt
     ),
+    index("posts_createdBy_idx").on(table.createdBy),
   ]
 );
 
@@ -300,6 +310,86 @@ export const apiKeys = pgTable(
   },
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
+
+// ── Team Workspaces tables (from 023-team-workspaces-collaboration) ──
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: workspaceMemberRoleEnum("role").notNull().default("viewer"),
+    invitedBy: text("invited_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    joinedAt: timestamp("joined_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("workspaceMembers_workspaceId_userId_uidx").on(
+      table.workspaceId,
+      table.userId
+    ),
+    index("workspaceMembers_workspaceId_idx").on(table.workspaceId),
+    index("workspaceMembers_userId_idx").on(table.userId),
+  ]
+);
+
+export const workspaceInvites = pgTable(
+  "workspace_invites",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: workspaceMemberRoleEnum("role").notNull().default("viewer"),
+    token: text("token").notNull().unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    invitedBy: text("invited_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    acceptedAt: timestamp("accepted_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("workspaceInvites_workspaceId_idx").on(table.workspaceId),
+    index("workspaceInvites_email_idx").on(table.email),
+  ]
+);
+
+export const workspaceActivity = pgTable(
+  "workspace_activity",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    action: text("action").notNull(),
+    resourceType: text("resource_type"),
+    resourceId: text("resource_id"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("workspaceActivity_workspaceId_idx").on(table.workspaceId),
+    index("workspaceActivity_workspaceId_createdAt_idx").on(
+      table.workspaceId,
+      table.createdAt
+    ),
+    index("workspaceActivity_userId_idx").on(table.userId),
+  ]
+);
+
+// ── Dev.to Integration tables (from 008-one-click-dev-to-publishing) ──
 
 export const devtoIntegrations = pgTable(
   "devto_integrations",
@@ -352,6 +442,12 @@ export const usersRelations = relations(users, ({ many }) => ({
   workspaces: many(workspaces),
   authSessions: many(authSessions),
   accounts: many(accounts),
+  workspaceMemberships: many(workspaceMembers, {
+    relationName: "memberUser",
+  }),
+  sentInvites: many(workspaceInvites),
+  activityEntries: many(workspaceActivity),
+  posts: many(posts),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -379,6 +475,9 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  members: many(workspaceMembers),
+  invites: many(workspaceInvites),
+  activity: many(workspaceActivity),
   devtoIntegrations: many(devtoIntegrations),
   devtoPublications: many(devtoPublications),
 }));
@@ -422,6 +521,10 @@ export const postsRelations = relations(posts, ({ one }) => ({
     fields: [posts.insightId],
     references: [insights.id],
   }),
+  author: one(users, {
+    fields: [posts.createdBy],
+    references: [users.id],
+  }),
   devtoPublication: one(devtoPublications, {
     fields: [posts.id],
     references: [devtoPublications.postId],
@@ -444,6 +547,54 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const workspaceMembersRelations = relations(
+  workspaceMembers,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [workspaceMembers.workspaceId],
+      references: [workspaces.id],
+    }),
+    user: one(users, {
+      fields: [workspaceMembers.userId],
+      references: [users.id],
+      relationName: "memberUser",
+    }),
+    inviter: one(users, {
+      fields: [workspaceMembers.invitedBy],
+      references: [users.id],
+      relationName: "memberInviter",
+    }),
+  })
+);
+
+export const workspaceInvitesRelations = relations(
+  workspaceInvites,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [workspaceInvites.workspaceId],
+      references: [workspaces.id],
+    }),
+    inviter: one(users, {
+      fields: [workspaceInvites.invitedBy],
+      references: [users.id],
+    }),
+  })
+);
+
+export const workspaceActivityRelations = relations(
+  workspaceActivity,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [workspaceActivity.workspaceId],
+      references: [workspaces.id],
+    }),
+    user: one(users, {
+      fields: [workspaceActivity.userId],
+      references: [users.id],
+    }),
+  })
+);
 
 export const devtoIntegrationsRelations = relations(
   devtoIntegrations,
