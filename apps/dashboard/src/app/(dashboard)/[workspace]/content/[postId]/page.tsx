@@ -10,6 +10,8 @@ import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
+import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
+import { SHORTCUTS } from "@/lib/keyboard-shortcuts";
 import { SourceCard } from "@/components/content/source-card";
 import { AuthenticityBadge } from "@/components/content/authenticity-badge";
 
@@ -55,9 +57,17 @@ export default function ContentEditorPage() {
     update.mutate({ id: postId, platformFooterEnabled: value });
   }
 
-  function handleSave() {
+  const handleSave = useCallback(() => {
     update.mutate({ id: postId, title, markdown, status });
-  }
+  }, [update, postId, title, markdown, status]);
+
+  const handlePublish = useCallback(() => {
+    setStatus('published');
+    update.mutate({ id: postId, title, markdown, status: 'published' });
+  }, [update, postId, title, markdown]);
+
+  useKeyboardShortcut(SHORTCUTS.Actions[2], handleSave, { captureInInputs: true });
+  useKeyboardShortcut(SHORTCUTS.Actions[3], handlePublish, { captureInInputs: true });
 
   const handleMarkdownChange = useCallback((md: string) => {
     setMarkdown(md);

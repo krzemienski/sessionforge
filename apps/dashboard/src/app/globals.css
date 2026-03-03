@@ -52,6 +52,49 @@
   --font-code: 'Fira Code', monospace;
 }
 
+/* Light mode (default) — overrides @layer theme since regular CSS wins on specificity */
+:root {
+  /* Backgrounds */
+  --color-sf-bg-primary: #FFFFFF;
+  --color-sf-bg-secondary: #F7F7F7;
+  --color-sf-bg-tertiary: #EFEFEF;
+  --color-sf-bg-hover: #E5E5E5;
+  --color-sf-bg-active: #D8D8D8;
+
+  /* Borders */
+  --color-sf-border: #E0E0E0;
+  --color-sf-border-focus: #BDBDBD;
+
+  /* Text */
+  --color-sf-text-primary: #0A0A0A;
+  --color-sf-text-secondary: #444444;
+  --color-sf-text-muted: #888888;
+}
+
+/* Dark mode — restores original dark-mode values */
+.dark {
+  /* Backgrounds */
+  --color-sf-bg-primary: #0A0A0A;
+  --color-sf-bg-secondary: #111111;
+  --color-sf-bg-tertiary: #1A1A1A;
+  --color-sf-bg-hover: #222222;
+  --color-sf-bg-active: #2A2A2A;
+
+  /* Borders */
+  --color-sf-border: #2A2A2A;
+  --color-sf-border-focus: #3A3A3A;
+
+  /* Text */
+  --color-sf-text-primary: #EDEDED;
+  --color-sf-text-secondary: #888888;
+  --color-sf-text-muted: #555555;
+}
+
+html,
+body {
+  transition: color 150ms, background-color 150ms;
+}
+
 body {
   font-family: var(--font-body);
 }
