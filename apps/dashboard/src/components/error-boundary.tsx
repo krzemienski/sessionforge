@@ -66,6 +66,7 @@ export class ErrorBoundary extends React.Component<
               <RotateCcw className="h-4 w-4" />
               Try Again
             </button>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/"
               className="flex items-center gap-2 rounded-sf border border-sf-border bg-sf-bg-secondary px-4 py-2 text-sm font-medium text-sf-text-primary transition-colors hover:bg-sf-bg-hover"

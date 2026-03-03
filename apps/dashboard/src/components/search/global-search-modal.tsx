@@ -219,7 +219,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
               <Search size={32} className="mx-auto text-sf-text-muted mb-3" />
               <p className="text-sf-text-secondary text-sm font-body">
                 No results for{" "}
-                <span className="text-sf-text-primary font-medium">"{query}"</span>
+                <span className="text-sf-text-primary font-medium">&ldquo;{query}&rdquo;</span>
               </p>
               <p className="text-sf-text-muted text-xs mt-1 font-body">
                 Try searching for React, debugging, or architecture
