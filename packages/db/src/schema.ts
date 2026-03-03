@@ -68,6 +68,18 @@ export const metricsPlatformEnum = pgEnum("metrics_platform", [
   "manual",
 ]);
 
+export const editTypeEnum = pgEnum("edit_type", [
+  "user_edit",
+  "ai_generated",
+  "auto_save",
+  "restore",
+]);
+
+export const versionTypeEnum = pgEnum("version_type", [
+  "major",
+  "minor",
+]);
+
 export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
   "owner",
   "editor",
@@ -510,6 +522,38 @@ export const platformSettings = pgTable(
   ]
 );
 
+// ── Revision History tables (from 027-content-revision-history-version-tracking) ──
+
+export const postRevisions = pgTable(
+  "post_revisions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    versionType: versionTypeEnum("version_type").notNull(),
+    editType: editTypeEnum("edit_type").notNull(),
+    contentSnapshot: text("content_snapshot"),
+    contentDiff: jsonb("content_diff").$type<
+      { count?: number; added?: boolean; removed?: boolean; value: string }[]
+    >(),
+    parentRevisionId: text("parent_revision_id"),
+    title: text("title").notNull(),
+    wordCount: integer("word_count").default(0),
+    wordCountDelta: integer("word_count_delta").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    createdBy: text("created_by"),
+  },
+  (table) => [
+    index("postRevisions_postId_idx").on(table.postId),
+    index("postRevisions_postId_versionNumber_idx").on(
+      table.postId,
+      table.versionNumber
+    ),
+  ]
+);
+
 // ── Team Workspaces tables (from 023-team-workspaces-collaboration) ──
 
 export const workspaceMembers = pgTable(
@@ -849,6 +893,14 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     references: [writingStyleProfiles.id],
   }),
   automationRuns: many(automationRuns),
+  revisions: many(postRevisions),
+}));
+
+export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
+  post: one(posts, {
+    fields: [postRevisions.postId],
+    references: [posts.id],
+  }),
 }));
 
 export const contentTriggersRelations = relations(
