@@ -87,6 +87,15 @@ export const styleProfileGenerationStatusEnum = pgEnum(
   ["pending", "generating", "completed", "failed"]
 );
 
+export const automationRunStatusEnum = pgEnum("automation_run_status", [
+  "pending",
+  "scanning",
+  "extracting",
+  "generating",
+  "complete",
+  "failed",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -622,6 +631,34 @@ export const writingSkills = pgTable(
   ]
 );
 
+// ── Automation Runs (from 013-working-automation-pipeline) ──
+
+export const automationRuns = pgTable(
+  "automation_runs",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    triggerId: text("trigger_id")
+      .notNull()
+      .references(() => contentTriggers.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    status: automationRunStatusEnum("status").notNull().default("pending"),
+    sessionsScanned: integer("sessions_scanned").notNull().default(0),
+    insightsExtracted: integer("insights_extracted").notNull().default(0),
+    postId: text("post_id").references(() => posts.id),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+    durationMs: integer("duration_ms"),
+  },
+  (table) => [
+    index("automationRuns_workspaceId_idx").on(table.workspaceId),
+    index("automationRuns_triggerId_idx").on(table.triggerId),
+    index("automationRuns_startedAt_idx").on(table.startedAt),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -671,6 +708,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   agentRuns: many(agentRuns),
   writingSkills: many(writingSkills),
   sessionBookmarks: many(sessionBookmarks),
+  automationRuns: many(automationRuns),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -754,15 +792,17 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.styleProfileUsed],
     references: [writingStyleProfiles.id],
   }),
+  automationRuns: many(automationRuns),
 }));
 
 export const contentTriggersRelations = relations(
   contentTriggers,
-  ({ one }) => ({
+  ({ one, many }) => ({
     workspace: one(workspaces, {
       fields: [contentTriggers.workspaceId],
       references: [workspaces.id],
     }),
+    automationRuns: many(automationRuns),
   })
 );
 
@@ -874,6 +914,24 @@ export const sessionBookmarksRelations = relations(
     session: one(claudeSessions, {
       fields: [sessionBookmarks.sessionId],
       references: [claudeSessions.id],
+    }),
+  })
+);
+
+export const automationRunsRelations = relations(
+  automationRuns,
+  ({ one }) => ({
+    trigger: one(contentTriggers, {
+      fields: [automationRuns.triggerId],
+      references: [contentTriggers.id],
+    }),
+    workspace: one(workspaces, {
+      fields: [automationRuns.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [automationRuns.postId],
+      references: [posts.id],
     }),
   })
 );
