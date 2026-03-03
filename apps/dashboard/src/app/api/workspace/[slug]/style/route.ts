@@ -7,6 +7,43 @@ import { eq, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { slug } = await params;
+
+  const workspace = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(
+      and(
+        eq(workspaces.ownerId, session.user.id),
+        eq(workspaces.slug, slug)
+      )
+    )
+    .limit(1);
+
+  if (!workspace.length) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+
+  const rows = await db
+    .select()
+    .from(styleSettings)
+    .where(eq(styleSettings.workspaceId, workspace[0].id))
+    .limit(1);
+
+  if (!rows.length) {
+    return NextResponse.json(null, { status: 404 });
+  }
+
+  return NextResponse.json(rows[0]);
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }

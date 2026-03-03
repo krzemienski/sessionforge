@@ -12,7 +12,7 @@ export default function SettingsPage() {
   const ws = useQuery({
     queryKey: ["workspace", workspace],
     queryFn: async () => {
-      const res = await fetch(`/api/workspaces?slug=${workspace}`);
+      const res = await fetch(`/api/workspace/${workspace}`);
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -33,7 +33,7 @@ export default function SettingsPage() {
 
   const update = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
-      const res = await fetch(`/api/workspaces/${ws.data?.id}`, {
+      const res = await fetch(`/api/workspace/${workspace}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
