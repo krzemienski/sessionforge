@@ -6,6 +6,7 @@ import { contentTriggers } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import {
   createTriggerSchedule,
+  createFileWatchSchedule,
   deleteTriggerSchedule,
 } from "@/lib/qstash";
 
@@ -59,13 +60,16 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { name, triggerType, contentType, lookbackWindow, cronExpression, enabled } = body;
+  const { name, triggerType, contentType, lookbackWindow, cronExpression, enabled, debounceMinutes } = body;
 
   const willBeEnabled = enabled !== undefined ? enabled : existing.enabled;
   const effectiveCron =
     cronExpression !== undefined ? cronExpression : existing.cronExpression;
+  const effectiveTriggerType =
+    triggerType !== undefined ? triggerType : existing.triggerType;
 
   let qstashScheduleId: string | null = existing.qstashScheduleId ?? null;
+  let watchStatus: string | null = existing.watchStatus ?? null;
 
   if (!willBeEnabled) {
     // Disabling: tear down any existing QStash schedule
@@ -77,8 +81,11 @@ export async function PUT(
       }
       qstashScheduleId = null;
     }
+    if (effectiveTriggerType === "file_watch") {
+      watchStatus = "paused";
+    }
   } else if (willBeEnabled && effectiveCron) {
-    // Enabling or updating: recreate schedule when something relevant changed
+    // Enabling or updating scheduled trigger: recreate schedule when something relevant changed
     const cronChanged =
       cronExpression !== undefined &&
       cronExpression !== existing.cronExpression;
@@ -99,6 +106,26 @@ export async function PUT(
         qstashScheduleId = null;
       }
     }
+  } else if (willBeEnabled && effectiveTriggerType === "file_watch") {
+    // Enabling file_watch trigger: create or restore the poll schedule
+    const justEnabled = enabled === true && !existing.enabled;
+    const noScheduleYet = !existing.qstashScheduleId;
+
+    if (justEnabled || noScheduleYet) {
+      if (existing.qstashScheduleId) {
+        try {
+          await deleteTriggerSchedule(existing.qstashScheduleId);
+        } catch {
+          // Proceed even if old schedule cleanup fails
+        }
+      }
+      try {
+        qstashScheduleId = await createFileWatchSchedule(id);
+        watchStatus = "watching";
+      } catch {
+        qstashScheduleId = null;
+      }
+    }
   }
 
   const [updated] = await db
@@ -110,6 +137,8 @@ export async function PUT(
       ...(lookbackWindow !== undefined && { lookbackWindow }),
       ...(cronExpression !== undefined && { cronExpression }),
       ...(enabled !== undefined && { enabled }),
+      ...(debounceMinutes !== undefined && { debounceMinutes }),
+      ...(effectiveTriggerType === "file_watch" && { watchStatus }),
       qstashScheduleId,
     })
     .where(eq(contentTriggers.id, id))
