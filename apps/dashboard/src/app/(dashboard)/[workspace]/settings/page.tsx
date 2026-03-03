@@ -1,12 +1,13 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Settings, Save, Copy, Check } from "lucide-react";
+import { Settings, Save, PlayCircle, Copy, Check } from "lucide-react";
 
 export default function SettingsPage() {
   const { workspace } = useParams<{ workspace: string }>();
+  const router = useRouter();
   const qc = useQueryClient();
 
   const ws = useQuery({
@@ -113,6 +114,20 @@ export default function SettingsPage() {
         </button>
 
         {update.isSuccess && <p className="text-sm text-sf-success">Settings saved.</p>}
+      </div>
+
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 mt-6">
+        <h2 className="text-base font-semibold font-display mb-1">Setup Wizard</h2>
+        <p className="text-sm text-sf-text-secondary mb-4">
+          Re-run the onboarding wizard to update your workspace configuration or connect new integrations.
+        </p>
+        <button
+          onClick={() => router.push("/onboarding")}
+          className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf font-medium text-sm hover:border-sf-border-focus transition-colors"
+        >
+          <PlayCircle size={16} />
+          Resume Setup Wizard
+        </button>
       </div>
 
       <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-4 mt-6">
