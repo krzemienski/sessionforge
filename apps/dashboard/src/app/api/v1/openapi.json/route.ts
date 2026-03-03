@@ -94,7 +94,14 @@ const openApiDocument = {
           summary: { type: "string" },
           category: {
             type: "string",
-            enum: ["pattern", "tool_usage", "workflow", "error", "collaboration"],
+            enum: [
+              "novel_problem_solving",
+              "tool_pattern_discovery",
+              "before_after_transformation",
+              "failure_recovery",
+              "architecture_decision",
+              "performance_optimization",
+            ],
           },
           compositeScore: { type: "number", minimum: 0, maximum: 1 },
           createdAt: { type: "string", format: "date-time" },
@@ -120,11 +127,11 @@ const openApiDocument = {
           markdown: { type: "string" },
           contentType: {
             type: "string",
-            enum: ["blog_post", "twitter_thread", "linkedin_post", "changelog"],
+            enum: ["blog_post", "twitter_thread", "linkedin_post", "devto_post", "changelog", "newsletter", "custom"],
           },
           status: {
             type: "string",
-            enum: ["draft", "review", "published"],
+            enum: ["draft", "published", "archived"],
           },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
@@ -156,7 +163,7 @@ const openApiDocument = {
           insightId: { type: "string", format: "uuid", description: "ID of the insight to generate content from" },
           contentType: {
             type: "string",
-            enum: ["blog_post", "twitter_thread", "linkedin_post", "changelog"],
+            enum: ["blog_post", "twitter_thread", "linkedin_post", "devto_post", "changelog", "newsletter", "custom"],
             description: "Type of content to generate",
           },
           tone: {
@@ -189,7 +196,7 @@ const openApiDocument = {
           markdown: { type: "string", description: "New post body in Markdown" },
           status: {
             type: "string",
-            enum: ["draft", "review", "published"],
+            enum: ["draft", "published", "archived"],
             description: "New post status",
           },
         },
@@ -457,7 +464,14 @@ const openApiDocument = {
             in: "query",
             schema: {
               type: "string",
-              enum: ["pattern", "tool_usage", "workflow", "error", "collaboration"],
+              enum: [
+                "novel_problem_solving",
+                "tool_pattern_discovery",
+                "before_after_transformation",
+                "failure_recovery",
+                "architecture_decision",
+                "performance_optimization",
+              ],
             },
             description: "Filter by insight category",
           },
@@ -512,7 +526,7 @@ const openApiDocument = {
             in: "query",
             schema: {
               type: "string",
-              enum: ["blog_post", "twitter_thread", "linkedin_post", "changelog"],
+              enum: ["blog_post", "twitter_thread", "linkedin_post", "devto_post", "changelog", "newsletter", "custom"],
             },
             description: "Filter by content type",
           },
@@ -521,7 +535,7 @@ const openApiDocument = {
             in: "query",
             schema: {
               type: "string",
-              enum: ["draft", "review", "published"],
+              enum: ["draft", "published", "archived"],
             },
             description: "Filter by status",
           },
