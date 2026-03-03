@@ -8,6 +8,7 @@ import { extractInsight } from "@/lib/ai/agents/insight-extractor";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, insightExtractSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { fireWebhookEvent } from "@/lib/webhooks/events";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,16 @@ export async function POST(req: Request) {
       workspaceId: workspace.id,
       sessionId,
     });
+
+    const insight = result.insight;
+    if (insight) {
+      void fireWebhookEvent(workspace.id, "insight.extracted", {
+        insightId: insight.id,
+        title: insight.title,
+        category: insight.category,
+        compositeScore: insight.compositeScore,
+      });
+    }
 
     return NextResponse.json(result);
   })(req);

@@ -13,6 +13,7 @@ import { normalizeSession } from "@/lib/sessions/normalizer";
 import { indexSessions } from "@/lib/sessions/indexer";
 import { extractInsight } from "@/lib/ai/agents/insight-extractor";
 import { generateContent } from "@/lib/automation/content-generator";
+import { fireWebhookEvent } from "@/lib/webhooks/events";
 
 type ContentTrigger = typeof contentTriggers.$inferSelect;
 type Workspace = typeof workspaces.$inferSelect;
@@ -165,6 +166,15 @@ export async function executePipeline(
       .update(contentTriggers)
       .set({ lastRunAt: completedAt, lastRunStatus: "success" })
       .where(eq(contentTriggers.id, trigger.id));
+
+    void fireWebhookEvent(workspace.id, "automation.completed", {
+      runId,
+      status: "complete",
+      sessionsScanned: scanResult.scanned,
+      insightsExtracted,
+      postId: generateResult?.postId ?? null,
+      durationMs,
+    });
   } catch (error) {
     // Extracted insights are preserved in the DB even on failure
     const completedAt = new Date();
@@ -186,5 +196,12 @@ export async function executePipeline(
       .update(contentTriggers)
       .set({ lastRunAt: completedAt, lastRunStatus: "failed" })
       .where(eq(contentTriggers.id, trigger.id));
+
+    void fireWebhookEvent(workspace.id, "automation.completed", {
+      runId,
+      status: "failed",
+      error: errorMessage,
+      durationMs,
+    });
   }
 }

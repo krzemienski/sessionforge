@@ -554,6 +554,25 @@ export const postRevisions = pgTable(
   ]
 );
 
+// ── Webhook Endpoints table (from 031-public-rest-api-webhook-events) ──
+
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    events: jsonb("events").$type<string[]>().notNull(),
+    secret: text("secret").notNull(),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [index("webhookEndpoints_workspaceId_idx").on(table.workspaceId)]
+);
+
 // ── Team Workspaces tables (from 023-team-workspaces-collaboration) ──
 
 export const workspaceMembers = pgTable(
@@ -799,6 +818,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   apiKeys: many(apiKeys),
   contentMetrics: many(contentMetrics),
   platformSettings: one(platformSettings),
+  webhookEndpoints: many(webhookEndpoints),
   members: many(workspaceMembers),
   invites: many(workspaceInvites),
   activity: many(workspaceActivity),
@@ -937,6 +957,16 @@ export const platformSettingsRelations = relations(
   ({ one }) => ({
     workspace: one(workspaces, {
       fields: [platformSettings.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
+
+export const webhookEndpointsRelations = relations(
+  webhookEndpoints,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [webhookEndpoints.workspaceId],
       references: [workspaces.id],
     }),
   })

@@ -25,6 +25,13 @@ interface ExtractInsightInput {
   sessionId: string;
 }
 
+type CreatedInsight = {
+  id: string;
+  title: string;
+  category: string;
+  compositeScore: number;
+};
+
 const RETRY_CONFIG = {
   maxAttempts: 3,
   delays: [1000, 4000, 16000],
@@ -32,7 +39,11 @@ const RETRY_CONFIG = {
 };
 
 
-export async function extractInsight(input: ExtractInsightInput) {
+export async function extractInsight(input: ExtractInsightInput): Promise<{
+  result: string | null;
+  usage: Anthropic.Usage;
+  insight: CreatedInsight | null;
+}> {
   // Create agent run record for observability
   let agentRunId: string | undefined;
   try {
@@ -54,6 +65,7 @@ export async function extractInsight(input: ExtractInsightInput) {
   }
 
   let totalAttempts = 0;
+  let createdInsight: CreatedInsight | null = null;
 
   const retryOptions = {
     ...RETRY_CONFIG,
@@ -103,6 +115,16 @@ export async function extractInsight(input: ExtractInsightInput) {
                 toolUse.name,
                 toolUse.input as Record<string, unknown>
               );
+
+              if (
+                toolUse.name === "create_insight" &&
+                result &&
+                typeof result === "object"
+              ) {
+                const r = result as CreatedInsight;
+                if (!createdInsight) createdInsight = r;
+              }
+
               return {
                 type: "tool_result" as const,
                 tool_use_id: toolUse.id,
@@ -162,6 +184,7 @@ export async function extractInsight(input: ExtractInsightInput) {
     return {
       result: resultText,
       usage: response.usage,
+      insight: createdInsight,
     };
   } catch (error) {
     const errorMessage =
@@ -189,15 +212,6 @@ export async function extractInsight(input: ExtractInsightInput) {
 
 /**
  * Routes a model tool call to the appropriate handler.
- *
- * Delegates session-related tools to {@link handleSessionReaderTool} and
- * insight-related tools to {@link handleInsightTool}.
- *
- * @param workspaceId - The workspace context for the tool execution.
- * @param toolName - The name of the tool requested by the model.
- * @param toolInput - The input arguments provided by the model for the tool.
- * @returns The tool result to pass back to the model.
- * @throws {Error} If `toolName` does not match any registered handler.
  */
 async function dispatchTool(
   workspaceId: string,

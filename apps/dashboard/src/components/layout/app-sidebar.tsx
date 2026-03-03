@@ -13,6 +13,7 @@ import {
   Settings,
   Palette,
   KeyRound,
+  Webhook,
   Link2,
   Brain,
   LogOut,
@@ -37,6 +38,7 @@ const settingsNav = [
   { label: "Writing Skills", icon: Brain, href: "/settings/skills" },
   { label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
   { label: "Integrations", icon: Link2, href: "/settings/integrations" },
+  { label: "Webhooks", icon: Webhook, href: "/settings/webhooks" },
 ];
 
 export function AppSidebar({
