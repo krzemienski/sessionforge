@@ -122,7 +122,31 @@ export const agentChatSchema = z.object({
   workspaceSlug: z.string().min(1, "workspaceSlug is required"),
   postId: z.string().min(1, "postId is required"),
   message: z.string().min(1, "message is required"),
-  conversationHistory: z.array(z.record(z.unknown())).optional(),
+  conversationHistory: z.array(z.record(z.string(), z.unknown())).optional(),
+});
+
+export const agentNewsletterSchema = z.object({
+  workspaceSlug: z.string().min(1, "workspaceSlug is required"),
+  lookbackDays: z.number().int().positive().optional().default(7),
+  customInstructions: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Dev.to integration schemas
+// ---------------------------------------------------------------------------
+
+export const devtoConnectSchema = z.object({
+  workspaceSlug: z.string().min(1, "workspaceSlug is required"),
+  apiKey: z.string().min(1, "apiKey is required"),
+});
+
+export const devtoPublishSchema = z.object({
+  postId: z.string().min(1, "postId is required"),
+  workspaceSlug: z.string().min(1, "workspaceSlug is required"),
+  published: z.boolean().optional(),
+  tags: z.array(z.string()).optional(),
+  canonicalUrl: z.string().optional(),
+  series: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -166,6 +190,9 @@ export type AgentBlogInput = z.infer<typeof agentBlogSchema>;
 export type AgentSocialInput = z.infer<typeof agentSocialSchema>;
 export type AgentChangelogInput = z.infer<typeof agentChangelogSchema>;
 export type AgentChatInput = z.infer<typeof agentChatSchema>;
+export type AgentNewsletterInput = z.infer<typeof agentNewsletterSchema>;
+export type DevtoConnectInput = z.infer<typeof devtoConnectSchema>;
+export type DevtoPublishInput = z.infer<typeof devtoPublishSchema>;
 export type TriggerCreateInput = z.infer<typeof triggerCreateSchema>;
 export type TriggerUpdateInput = z.infer<typeof triggerUpdateSchema>;
 export type TriggerExecuteInput = z.infer<typeof triggerExecuteSchema>;
