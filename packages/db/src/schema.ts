@@ -62,6 +62,12 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "file_watch",
 ]);
 
+export const metricsPlatformEnum = pgEnum("metrics_platform", [
+  "devto",
+  "hashnode",
+  "manual",
+]);
+
 export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
   "owner",
   "editor",
@@ -457,6 +463,53 @@ export const sessionBookmarks = pgTable(
   ]
 );
 
+// ── Analytics tables (from 018-content-performance-analytics-dashboard) ──
+
+export const contentMetrics = pgTable(
+  "content_metrics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id").references(() => posts.id, { onDelete: "set null" }),
+    platform: metricsPlatformEnum("platform").notNull(),
+    externalId: text("external_id"),
+    title: text("title").notNull(),
+    url: text("url"),
+    views: integer("views").default(0),
+    reactions: integer("reactions").default(0),
+    comments: integer("comments").default(0),
+    likes: integer("likes").default(0),
+    publishedAt: timestamp("published_at"),
+    fetchedAt: timestamp("fetched_at").defaultNow(),
+  },
+  (table) => [
+    index("contentMetrics_workspaceId_idx").on(table.workspaceId),
+    index("contentMetrics_fetchedAt_idx").on(table.fetchedAt),
+    index("contentMetrics_platform_idx").on(table.platform),
+  ]
+);
+
+export const platformSettings = pgTable(
+  "platform_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    devtoApiKey: text("devto_api_key"),
+    devtoUsername: text("devto_username"),
+    hashnodeApiKey: text("hashnode_api_key"),
+    hashnodeUsername: text("hashnode_username"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("platformSettings_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
 // ── Team Workspaces tables (from 023-team-workspaces-collaboration) ──
 
 export const workspaceMembers = pgTable(
@@ -700,6 +753,8 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  contentMetrics: many(contentMetrics),
+  platformSettings: one(platformSettings),
   members: many(workspaceMembers),
   invites: many(workspaceInvites),
   activity: many(workspaceActivity),
@@ -780,6 +835,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   repurposedPosts: many(posts, {
     relationName: "post_repurposed_from",
   }),
+  contentMetrics: many(contentMetrics),
   author: one(users, {
     fields: [posts.createdBy],
     references: [users.id],
@@ -812,6 +868,27 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const contentMetricsRelations = relations(contentMetrics, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [contentMetrics.workspaceId],
+    references: [workspaces.id],
+  }),
+  post: one(posts, {
+    fields: [contentMetrics.postId],
+    references: [posts.id],
+  }),
+}));
+
+export const platformSettingsRelations = relations(
+  platformSettings,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [platformSettings.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
 
 export const workspaceMembersRelations = relations(
   workspaceMembers,
