@@ -12,6 +12,10 @@ export interface ExportablePost {
   status: PostStatus | null;
   createdAt: Date | null;
   updatedAt: Date | null;
+  /** When true, append an attribution footer to the exported markdown */
+  platformFooterEnabled?: boolean;
+  /** Session duration in minutes — used in the attribution footer text */
+  durationMinutes?: number | null;
 }
 
 export interface ExportFileEntry {
@@ -84,9 +88,22 @@ export function buildFrontmatter(post: ExportablePost): string {
   return lines.join("\n");
 }
 
+function buildAttributionFooter(durationMinutes?: number | null): string {
+  const durationPart =
+    durationMinutes && durationMinutes > 0
+      ? `a real ${durationMinutes}-minute Claude Code coding session`
+      : "a real Claude Code coding session";
+
+  return `\n\n---\n\n> This post was forged from ${durationPart}. Verified by [SessionForge](https://sessionforge.ai).`;
+}
+
 export function buildMarkdownFile(post: ExportablePost): string {
   const frontmatter = buildFrontmatter(post);
-  return `${frontmatter}\n\n${post.markdown}`;
+  const body = `${frontmatter}\n\n${post.markdown}`;
+
+  if (!post.platformFooterEnabled) return body;
+
+  return `${body}${buildAttributionFooter(post.durationMinutes)}`;
 }
 
 export function buildIndexManifest(
