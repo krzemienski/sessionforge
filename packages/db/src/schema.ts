@@ -501,6 +501,34 @@ export const agentRuns = pgTable(
   (table) => [index("agentRuns_workspaceId_idx").on(table.workspaceId)]
 );
 
+// ── Writing Skills (from 021-skill-loader-ui-custom-writing-skills) ──
+
+export const writingSkills = pgTable(
+  "writing_skills",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    instructions: text("instructions").notNull(),
+    appliesTo: jsonb("applies_to").$type<string[]>(),
+    enabled: boolean("enabled").default(true),
+    source: text("source").notNull(),
+    filePath: text("file_path"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("writingSkills_workspaceId_idx").on(table.workspaceId),
+    uniqueIndex("writingSkills_workspace_filePath_uidx").on(
+      table.workspaceId,
+      table.filePath
+    ),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -547,6 +575,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   devtoIntegrations: many(devtoIntegrations),
   devtoPublications: many(devtoPublications),
   agentRuns: many(agentRuns),
+  writingSkills: many(writingSkills),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -705,6 +734,13 @@ export const devtoPublicationsRelations = relations(
 export const agentRunsRelations = relations(agentRuns, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [agentRuns.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+export const writingSkillsRelations = relations(writingSkills, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [writingSkills.workspaceId],
     references: [workspaces.id],
   }),
 }));

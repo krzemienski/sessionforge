@@ -13,6 +13,7 @@ import {
   Palette,
   KeyRound,
   Link2,
+  Brain,
   LogOut,
   Search,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const mainNav = [
 const settingsNav = [
   { label: "Settings", icon: Settings, href: "/settings" },
   { label: "Style", icon: Palette, href: "/settings/style" },
+  { label: "Writing Skills", icon: Brain, href: "/settings/skills" },
   { label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
   { label: "Integrations", icon: Link2, href: "/settings/integrations" },
 ];

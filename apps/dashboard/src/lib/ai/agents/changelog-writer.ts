@@ -10,6 +10,7 @@ import { getToolsForAgent } from "../orchestration/tool-registry";
 import { withRetry, isRateLimitError } from "../orchestration/retry";
 import { handleSessionReaderTool } from "../tools/session-reader";
 import { handlePostManagerTool } from "../tools/post-manager";
+import { getActiveSkillsForAgentType, buildSkillSystemPromptSuffix } from "../tools/skill-loader";
 import { CHANGELOG_PROMPT } from "../prompts/changelog";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
 import { db } from "@/lib/db";
@@ -90,6 +91,9 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
         { role: "user", content: userMessage },
       ];
 
+      const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "changelog");
+      const finalSystemPrompt = CHANGELOG_PROMPT + buildSkillSystemPromptSuffix(activeSkills);
+
       send("status", { phase: "starting", message: "Generating changelog..." });
 
       const { result: initialResponse, attempts: initialAttempts } =
@@ -98,7 +102,7 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
             client.messages.create({
               model,
               max_tokens: 8192,
-              system: CHANGELOG_PROMPT,
+              system: finalSystemPrompt,
               tools: tools as Anthropic.Tool[],
               messages,
             }),
@@ -157,7 +161,7 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
               client.messages.create({
                 model,
                 max_tokens: 8192,
-                system: CHANGELOG_PROMPT,
+                system: finalSystemPrompt,
                 tools: tools as Anthropic.Tool[],
                 messages,
               }),

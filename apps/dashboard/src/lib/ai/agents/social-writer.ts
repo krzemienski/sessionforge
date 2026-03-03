@@ -11,6 +11,7 @@ import { withRetry, isRateLimitError } from "../orchestration/retry";
 import { handleSessionReaderTool } from "../tools/session-reader";
 import { handleInsightTool } from "../tools/insight-tools";
 import { handlePostManagerTool } from "../tools/post-manager";
+import { getActiveSkillsForAgentType, buildSkillSystemPromptSuffix } from "../tools/skill-loader";
 import { TWITTER_THREAD_PROMPT } from "../prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "../prompts/social/linkedin-post";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
@@ -96,7 +97,8 @@ export function streamSocialWriter(input: SocialWriterInput): Response {
     try {
       const model = getModelForAgent("social-writer");
       const tools = getToolsForAgent("social-writer");
-      const systemPrompt = PROMPTS[input.platform];
+      const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "social");
+      const systemPrompt = PROMPTS[input.platform] + buildSkillSystemPromptSuffix(activeSkills);
 
       const userMessage = input.customInstructions
         ? `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details. Then create the post with content_type "${CONTENT_TYPES[input.platform]}".\n\nAdditional instructions: ${input.customInstructions}`
