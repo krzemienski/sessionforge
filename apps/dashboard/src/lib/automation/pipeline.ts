@@ -18,6 +18,7 @@ import { BLOG_CONVERSATIONAL_PROMPT } from "@/lib/ai/prompts/blog/conversational
 import { TWITTER_THREAD_PROMPT } from "@/lib/ai/prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "@/lib/ai/prompts/social/linkedin-post";
 import { CHANGELOG_PROMPT } from "@/lib/ai/prompts/changelog";
+import { NEWSLETTER_PROMPT } from "@/lib/ai/prompts/newsletter";
 import { fireWebhookEvent } from "@/lib/webhooks/events";
 import type { contentTypeEnum, lookbackWindowEnum } from "@sessionforge/db";
 
@@ -48,7 +49,11 @@ const LOOKBACK_DAYS: Record<LookbackWindow, number> = {
   custom: 7,
 };
 
-type PipelineAgentType = "blog-writer" | "social-writer" | "changelog-writer";
+type PipelineAgentType =
+  | "blog-writer"
+  | "social-writer"
+  | "changelog-writer"
+  | "newsletter-writer";
 
 async function runAgentLoop(
   workspaceId: string,
@@ -213,6 +218,21 @@ export async function runAutomationPipeline(
         `Changelog generation failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  } else if (contentType === "newsletter") {
+    const userMessage = `Generate a newsletter digest for the last ${lookbackDays} days. First use list_sessions_by_timeframe with lookbackDays=${lookbackDays} to get all sessions in the time window. Then use get_session_summary for the most interesting sessions to gather content. Finally create the newsletter post with create_post using content_type "newsletter".`;
+    try {
+      const count = await runAgentLoop(
+        workspaceId,
+        NEWSLETTER_PROMPT,
+        userMessage,
+        "newsletter-writer"
+      );
+      postsGenerated += count;
+    } catch (error) {
+      errors.push(
+        `Newsletter generation failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   } else {
     let topInsights: { id: string }[] = [];
     try {
@@ -260,14 +280,6 @@ export async function runAutomationPipeline(
           count = await runAgentLoop(
             workspaceId,
             BLOG_TUTORIAL_PROMPT,
-            userMessage,
-            "blog-writer"
-          );
-        } else if (contentType === "newsletter") {
-          const userMessage = `Write a newsletter section about insight "${insight.id}". First fetch the insight details and related session data. Then create the post using create_post.`;
-          count = await runAgentLoop(
-            workspaceId,
-            BLOG_CONVERSATIONAL_PROMPT,
             userMessage,
             "blog-writer"
           );
