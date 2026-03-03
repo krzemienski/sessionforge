@@ -17,6 +17,7 @@ const OPUS_AGENTS: AgentType[] = [
   "social-writer",
   "changelog-writer",
   "editor-chat",
+  "repurpose-writer",
   "newsletter-writer",
 ];
 
