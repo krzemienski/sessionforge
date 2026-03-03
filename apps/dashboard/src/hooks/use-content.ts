@@ -42,6 +42,8 @@ export function useUpdatePost() {
       status?: string;
       versionType?: string;
       editType?: string;
+      badgeEnabled?: boolean;
+      platformFooterEnabled?: boolean;
     }) => {
       const res = await fetch(`/api/content/${id}`, {
         method: "PUT",

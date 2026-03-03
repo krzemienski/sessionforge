@@ -22,7 +22,7 @@ export interface CreatePostInput {
     sessionIds: string[];
     insightIds: string[];
     lookbackWindow?: string;
-    generatedBy: "blog_writer" | "social_writer" | "changelog_writer" | "editor_chat" | "manual";
+    generatedBy: "blog_writer" | "social_writer" | "changelog_writer" | "editor_chat" | "manual" | "newsletter_writer";
   };
 }
 
@@ -35,6 +35,8 @@ export interface UpdatePostInput {
   versionType?: VersionType;
   editType?: EditType;
   createdBy?: string;
+  badgeEnabled?: boolean;
+  platformFooterEnabled?: boolean;
 }
 
 function markdownToHtml(markdown: string): string {
@@ -88,6 +90,8 @@ export async function updatePost(
   if (input.title !== undefined) updates.title = input.title;
   if (input.status !== undefined) updates.status = input.status;
   if (input.toneUsed !== undefined) updates.toneUsed = input.toneUsed;
+  if (input.badgeEnabled !== undefined) updates.badgeEnabled = input.badgeEnabled;
+  if (input.platformFooterEnabled !== undefined) updates.platformFooterEnabled = input.platformFooterEnabled;
 
   if (input.markdown !== undefined) {
     updates.markdown = input.markdown;

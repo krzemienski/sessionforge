@@ -57,7 +57,7 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { title, markdown, status, toneUsed, versionType, editType } = body;
+  const { title, markdown, status, toneUsed, versionType, editType, badgeEnabled, platformFooterEnabled } = body;
 
   try {
     const updated = await updatePost(existing.workspaceId, id, {
@@ -68,6 +68,8 @@ export async function PUT(
       versionType,
       editType,
       createdBy: session.user.id, // Always use authenticated user ID — never trust client-supplied value
+      badgeEnabled,
+      platformFooterEnabled,
     });
 
     return NextResponse.json(updated);

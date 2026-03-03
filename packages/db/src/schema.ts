@@ -74,6 +74,12 @@ export const versionTypeEnum = pgEnum("version_type", [
   "minor",
 ]);
 
+export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
+  "owner",
+  "editor",
+  "viewer",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -260,10 +266,16 @@ export const posts = pgTable(
         | "social_writer"
         | "changelog_writer"
         | "editor_chat"
-        | "manual";
+        | "manual"
+        | "newsletter_writer";
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    badgeEnabled: boolean("badge_enabled").default(false),
+    platformFooterEnabled: boolean("platform_footer_enabled").default(false),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -272,6 +284,7 @@ export const posts = pgTable(
       table.workspaceId,
       table.createdAt
     ),
+    index("posts_createdBy_idx").on(table.createdBy),
   ]
 );
 
@@ -343,12 +356,143 @@ export const postRevisions = pgTable(
   ]
 );
 
+// ── Team Workspaces tables (from 023-team-workspaces-collaboration) ──
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: workspaceMemberRoleEnum("role").notNull().default("viewer"),
+    invitedBy: text("invited_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    joinedAt: timestamp("joined_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("workspaceMembers_workspaceId_userId_uidx").on(
+      table.workspaceId,
+      table.userId
+    ),
+    index("workspaceMembers_workspaceId_idx").on(table.workspaceId),
+    index("workspaceMembers_userId_idx").on(table.userId),
+  ]
+);
+
+export const workspaceInvites = pgTable(
+  "workspace_invites",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: workspaceMemberRoleEnum("role").notNull().default("viewer"),
+    token: text("token").notNull().unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    invitedBy: text("invited_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    acceptedAt: timestamp("accepted_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("workspaceInvites_workspaceId_idx").on(table.workspaceId),
+    index("workspaceInvites_email_idx").on(table.email),
+  ]
+);
+
+export const workspaceActivity = pgTable(
+  "workspace_activity",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    action: text("action").notNull(),
+    resourceType: text("resource_type"),
+    resourceId: text("resource_id"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("workspaceActivity_workspaceId_idx").on(table.workspaceId),
+    index("workspaceActivity_workspaceId_createdAt_idx").on(
+      table.workspaceId,
+      table.createdAt
+    ),
+    index("workspaceActivity_userId_idx").on(table.userId),
+  ]
+);
+
+// ── Dev.to Integration tables (from 008-one-click-dev-to-publishing) ──
+
+export const devtoIntegrations = pgTable(
+  "devto_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    apiKey: text("api_key").notNull(),
+    username: text("username"),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("devtoIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const devtoPublications = pgTable(
+  "devto_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => devtoIntegrations.id, { onDelete: "cascade" }),
+    devtoArticleId: integer("devto_article_id").notNull(),
+    devtoUrl: text("devto_url"),
+    publishedAsDraft: boolean("published_as_draft").default(false),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("devtoPublications_workspaceId_idx").on(table.workspaceId),
+    index("devtoPublications_postId_idx").on(table.postId),
+    uniqueIndex("devtoPublications_postId_uidx").on(table.postId),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
   workspaces: many(workspaces),
   authSessions: many(authSessions),
   accounts: many(accounts),
+  workspaceMemberships: many(workspaceMembers, {
+    relationName: "memberUser",
+  }),
+  sentInvites: many(workspaceInvites),
+  activityEntries: many(workspaceActivity),
+  posts: many(posts),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -376,6 +520,11 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
+  members: many(workspaceMembers),
+  invites: many(workspaceInvites),
+  activity: many(workspaceActivity),
+  devtoIntegrations: many(devtoIntegrations),
+  devtoPublications: many(devtoPublications),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -417,6 +566,14 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.insightId],
     references: [insights.id],
   }),
+  author: one(users, {
+    fields: [posts.createdBy],
+    references: [users.id],
+  }),
+  devtoPublication: one(devtoPublications, {
+    fields: [posts.id],
+    references: [devtoPublications.postId],
+  }),
   revisions: many(postRevisions),
 }));
 
@@ -443,3 +600,80 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const workspaceMembersRelations = relations(
+  workspaceMembers,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [workspaceMembers.workspaceId],
+      references: [workspaces.id],
+    }),
+    user: one(users, {
+      fields: [workspaceMembers.userId],
+      references: [users.id],
+      relationName: "memberUser",
+    }),
+    inviter: one(users, {
+      fields: [workspaceMembers.invitedBy],
+      references: [users.id],
+      relationName: "memberInviter",
+    }),
+  })
+);
+
+export const workspaceInvitesRelations = relations(
+  workspaceInvites,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [workspaceInvites.workspaceId],
+      references: [workspaces.id],
+    }),
+    inviter: one(users, {
+      fields: [workspaceInvites.invitedBy],
+      references: [users.id],
+    }),
+  })
+);
+
+export const workspaceActivityRelations = relations(
+  workspaceActivity,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [workspaceActivity.workspaceId],
+      references: [workspaces.id],
+    }),
+    user: one(users, {
+      fields: [workspaceActivity.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const devtoIntegrationsRelations = relations(
+  devtoIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [devtoIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    publications: many(devtoPublications),
+  })
+);
+
+export const devtoPublicationsRelations = relations(
+  devtoPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [devtoPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [devtoPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(devtoIntegrations, {
+      fields: [devtoPublications.integrationId],
+      references: [devtoIntegrations.id],
+    }),
+  })
+);

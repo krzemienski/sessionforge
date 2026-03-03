@@ -2,12 +2,16 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost } from "@/hooks/use-content";
+import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, History } from "lucide-react";
+import { ArrowLeft, Save, History, Send, RefreshCw } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
+import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
+import { SourceCard } from "@/components/content/source-card";
+import { AuthenticityBadge } from "@/components/content/authenticity-badge";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -26,11 +30,16 @@ export default function ContentEditorPage() {
   const router = useRouter();
   const post = usePost(postId);
   const update = useUpdatePost();
+  const devtoIntegration = useDevtoIntegration(workspace);
+  const devtoPublication = useDevtoPublication(postId, workspace);
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
   const [externalMd, setExternalMd] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [badgeEnabled, setBadgeEnabled] = useState(false);
+  const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
+  const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
   const initializedRef = useRef(false);
   const lastSavedMarkdownRef = useRef("");
 
@@ -40,6 +49,8 @@ export default function ContentEditorPage() {
       setMarkdown(post.data.markdown || "");
       setStatus(post.data.status || "draft");
       lastSavedMarkdownRef.current = post.data.markdown || "";
+      setBadgeEnabled(post.data.badgeEnabled ?? false);
+      setPlatformFooterEnabled(post.data.platformFooterEnabled ?? false);
       initializedRef.current = true;
     }
   }, [post.data]);
@@ -61,6 +72,16 @@ export default function ContentEditorPage() {
     }, AUTO_SAVE_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [postId, title, markdown, status, update]);
+
+  function handleBadgeToggle(value: boolean) {
+    setBadgeEnabled(value);
+    update.mutate({ id: postId, badgeEnabled: value });
+  }
+
+  function handleFooterToggle(value: boolean) {
+    setPlatformFooterEnabled(value);
+    update.mutate({ id: postId, platformFooterEnabled: value });
+  }
 
   function handleSave() {
     update.mutate({ id: postId, title, markdown, status, versionType: "major", editType: "user_edit" });
@@ -91,6 +112,8 @@ export default function ContentEditorPage() {
   }
 
   const wordCount = markdown.split(/\s+/).filter(Boolean).length;
+  const isDevtoConnected = devtoIntegration.data?.connected && devtoIntegration.data?.enabled;
+  const isAlreadyPublished = devtoPublication.data?.published === true;
 
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
@@ -99,6 +122,20 @@ export default function ContentEditorPage() {
           <ArrowLeft size={16} /> Content
         </button>
         <div className="flex items-center gap-3">
+          {isDevtoConnected && (
+            <button
+              onClick={() => setIsDevtoModalOpen(true)}
+              disabled={devtoPublication.isLoading}
+              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+            >
+              {devtoPublication.isLoading ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+              {isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}
+            </button>
+          )}
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -150,16 +187,26 @@ export default function ContentEditorPage() {
           )}
         </div>
 
-        <div className="hidden lg:flex w-[340px] bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex-col">
-          {showHistory ? (
-            <RevisionHistoryPanel postId={postId} />
-          ) : (
-            <AIChatSidebar
-              postId={postId}
-              workspace={workspace}
-              onEditsApplied={handleEditsApplied}
-            />
-          )}
+        <div className="hidden lg:flex w-[340px] flex-col gap-3">
+          <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
+            {showHistory ? (
+              <RevisionHistoryPanel postId={postId} />
+            ) : (
+              <AIChatSidebar
+                postId={postId}
+                workspace={workspace}
+                onEditsApplied={handleEditsApplied}
+              />
+            )}
+          </div>
+          {post.data?.insightId && <SourceCard postId={postId} />}
+          <AuthenticityBadge
+            postId={postId}
+            badgeEnabled={badgeEnabled}
+            platformFooterEnabled={platformFooterEnabled}
+            onBadgeToggle={handleBadgeToggle}
+            onFooterToggle={handleFooterToggle}
+          />
         </div>
       </div>
 
@@ -175,6 +222,15 @@ export default function ContentEditorPage() {
           <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
         </div>
       </div>
+
+      <DevtoPublishModal
+        postId={postId}
+        workspace={workspace}
+        isOpen={isDevtoModalOpen}
+        onClose={() => setIsDevtoModalOpen(false)}
+        isAlreadyPublished={isAlreadyPublished}
+        existingPublicationUrl={devtoPublication.data?.devtoUrl}
+      />
     </div>
   );
 }
