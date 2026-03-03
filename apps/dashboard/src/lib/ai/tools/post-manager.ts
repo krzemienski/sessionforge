@@ -19,7 +19,7 @@ export interface CreatePostInput {
     sessionIds: string[];
     insightIds: string[];
     lookbackWindow?: string;
-    generatedBy: "blog_writer" | "social_writer" | "changelog_writer" | "editor_chat" | "manual";
+    generatedBy: "blog_writer" | "social_writer" | "changelog_writer" | "editor_chat" | "manual" | "newsletter_writer";
   };
 }
 
@@ -30,6 +30,8 @@ export interface UpdatePostInput {
   status?: PostStatus;
   toneUsed?: ToneProfile;
   publishedAt?: Date;
+  badgeEnabled?: boolean;
+  platformFooterEnabled?: boolean;
 }
 
 function markdownToHtml(markdown: string): string {
@@ -75,6 +77,8 @@ export async function updatePost(
   if (input.title !== undefined) updates.title = input.title;
   if (input.status !== undefined) updates.status = input.status;
   if (input.toneUsed !== undefined) updates.toneUsed = input.toneUsed;
+  if (input.badgeEnabled !== undefined) updates.badgeEnabled = input.badgeEnabled;
+  if (input.platformFooterEnabled !== undefined) updates.platformFooterEnabled = input.platformFooterEnabled;
 
   // Set publishedAt when transitioning to 'published' status (only if not explicitly provided)
   if (input.status === "published") {

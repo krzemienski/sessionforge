@@ -4,6 +4,7 @@ CREATE TYPE "public"."lookback_window" AS ENUM('current_day', 'yesterday', 'last
 CREATE TYPE "public"."post_status" AS ENUM('idea', 'draft', 'in_review', 'published', 'archived');--> statement-breakpoint
 CREATE TYPE "public"."tone_profile" AS ENUM('technical', 'tutorial', 'conversational', 'professional', 'casual');--> statement-breakpoint
 CREATE TYPE "public"."trigger_type" AS ENUM('manual', 'scheduled', 'file_watch');--> statement-breakpoint
+CREATE TYPE "public"."workspace_member_role" AS ENUM('owner', 'editor', 'viewer');--> statement-breakpoint
 CREATE TABLE "accounts" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -79,6 +80,29 @@ CREATE TABLE "content_triggers" (
 	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
+CREATE TABLE "devto_integrations" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"api_key" text NOT NULL,
+	"username" text,
+	"enabled" boolean DEFAULT true,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "devto_publications" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"post_id" text NOT NULL,
+	"integration_id" text NOT NULL,
+	"devto_article_id" integer NOT NULL,
+	"devto_url" text,
+	"published_as_draft" boolean DEFAULT false,
+	"synced_at" timestamp DEFAULT now(),
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
 CREATE TABLE "insights" (
 	"id" text PRIMARY KEY NOT NULL,
 	"workspace_id" text NOT NULL,
@@ -111,6 +135,9 @@ CREATE TABLE "posts" (
 	"source_metadata" jsonb,
 	"tone_used" "tone_profile",
 	"word_count" integer,
+	"badge_enabled" boolean DEFAULT false,
+	"platform_footer_enabled" boolean DEFAULT false,
+	"created_by" text,
 	"published_at" timestamp,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now()
@@ -150,6 +177,40 @@ CREATE TABLE "verifications" (
 	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
+CREATE TABLE "workspace_activity" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"user_id" text,
+	"action" text NOT NULL,
+	"resource_type" text,
+	"resource_id" text,
+	"metadata" jsonb,
+	"created_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "workspace_invites" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"email" text NOT NULL,
+	"role" "workspace_member_role" DEFAULT 'viewer' NOT NULL,
+	"token" text NOT NULL,
+	"expires_at" timestamp NOT NULL,
+	"invited_by" text NOT NULL,
+	"accepted_at" timestamp,
+	"created_at" timestamp DEFAULT now(),
+	CONSTRAINT "workspace_invites_token_unique" UNIQUE("token")
+);
+--> statement-breakpoint
+CREATE TABLE "workspace_members" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"role" "workspace_member_role" DEFAULT 'viewer' NOT NULL,
+	"invited_by" text,
+	"joined_at" timestamp DEFAULT now(),
+	"created_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
 CREATE TABLE "workspaces" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
@@ -166,11 +227,23 @@ ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_workspace_id_workspaces_id_fk" F
 ALTER TABLE "auth_sessions" ADD CONSTRAINT "auth_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "claude_sessions" ADD CONSTRAINT "claude_sessions_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "content_triggers" ADD CONSTRAINT "content_triggers_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "devto_integrations" ADD CONSTRAINT "devto_integrations_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "devto_publications" ADD CONSTRAINT "devto_publications_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "devto_publications" ADD CONSTRAINT "devto_publications_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "devto_publications" ADD CONSTRAINT "devto_publications_integration_id_devto_integrations_id_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."devto_integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "insights" ADD CONSTRAINT "insights_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "insights" ADD CONSTRAINT "insights_session_id_claude_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."claude_sessions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_insight_id_insights_id_fk" FOREIGN KEY ("insight_id") REFERENCES "public"."insights"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "posts" ADD CONSTRAINT "posts_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "style_settings" ADD CONSTRAINT "style_settings_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_activity" ADD CONSTRAINT "workspace_activity_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_activity" ADD CONSTRAINT "workspace_activity_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_invites" ADD CONSTRAINT "workspace_invites_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_invites" ADD CONSTRAINT "workspace_invites_invited_by_users_id_fk" FOREIGN KEY ("invited_by") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_invited_by_users_id_fk" FOREIGN KEY ("invited_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspaces" ADD CONSTRAINT "workspaces_owner_id_users_id_fk" FOREIGN KEY ("owner_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "accounts_userId_idx" ON "accounts" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "apiKeys_workspaceId_idx" ON "api_keys" USING btree ("workspace_id");--> statement-breakpoint
@@ -179,8 +252,21 @@ CREATE INDEX "sessions_workspaceId_idx" ON "claude_sessions" USING btree ("works
 CREATE INDEX "sessions_startedAt_idx" ON "claude_sessions" USING btree ("started_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "sessions_workspace_sessionId_uidx" ON "claude_sessions" USING btree ("workspace_id","session_id");--> statement-breakpoint
 CREATE INDEX "triggers_workspaceId_idx" ON "content_triggers" USING btree ("workspace_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "devtoIntegrations_workspaceId_uidx" ON "devto_integrations" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "devtoPublications_workspaceId_idx" ON "devto_publications" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "devtoPublications_postId_idx" ON "devto_publications" USING btree ("post_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "devtoPublications_postId_uidx" ON "devto_publications" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "insights_workspaceId_idx" ON "insights" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "insights_compositeScore_idx" ON "insights" USING btree ("composite_score");--> statement-breakpoint
 CREATE INDEX "posts_workspaceId_createdAt_idx" ON "posts" USING btree ("workspace_id","created_at");--> statement-breakpoint
+CREATE INDEX "posts_createdBy_idx" ON "posts" USING btree ("created_by");--> statement-breakpoint
 CREATE UNIQUE INDEX "styleSettings_workspaceId_uidx" ON "style_settings" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "workspaceActivity_workspaceId_idx" ON "workspace_activity" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "workspaceActivity_workspaceId_createdAt_idx" ON "workspace_activity" USING btree ("workspace_id","created_at");--> statement-breakpoint
+CREATE INDEX "workspaceActivity_userId_idx" ON "workspace_activity" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "workspaceInvites_workspaceId_idx" ON "workspace_invites" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "workspaceInvites_email_idx" ON "workspace_invites" USING btree ("email");--> statement-breakpoint
+CREATE UNIQUE INDEX "workspaceMembers_workspaceId_userId_uidx" ON "workspace_members" USING btree ("workspace_id","user_id");--> statement-breakpoint
+CREATE INDEX "workspaceMembers_workspaceId_idx" ON "workspace_members" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "workspaceMembers_userId_idx" ON "workspace_members" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "workspaces_slug_uidx" ON "workspaces" USING btree ("slug");
