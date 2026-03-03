@@ -4,12 +4,16 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { eq } from "drizzle-orm";
 import { getModelForAgent } from "../orchestration/model-selector";
 import { getToolsForAgent } from "../orchestration/tool-registry";
+import { withRetry, isRateLimitError } from "../orchestration/retry";
 import { handleSessionReaderTool } from "../tools/session-reader";
 import { handlePostManagerTool } from "../tools/post-manager";
 import { CHANGELOG_PROMPT } from "../prompts/changelog";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
+import { db } from "@/lib/db";
+import { agentRuns } from "../../../../../../packages/db/src/schema";
 
 const client = new Anthropic();
 
@@ -25,18 +29,55 @@ interface ChangelogWriterInput {
   customInstructions?: string;
 }
 
-/**
- * Starts a streaming changelog generation run and returns an SSE response.
- * The agent lists sessions in the lookback window, fetches their summaries,
- * and creates a changelog post via tool calls.
- *
- * @param input - Configuration for the changelog run.
- * @returns A streaming SSE {@link Response} with status, tool, and text events.
- */
+const RETRY_CONFIG = {
+  maxAttempts: 3,
+  delays: [1000, 4000, 16000],
+  rateLimitDelay: 60000,
+};
+
+
 export function streamChangelogWriter(input: ChangelogWriterInput): Response {
   const { stream, send, close } = createSSEStream();
 
   const run = async () => {
+    // Create agent run record for observability
+    let agentRunId: string | undefined;
+    try {
+      const [agentRun] = await db
+        .insert(agentRuns)
+        .values({
+          workspaceId: input.workspaceId,
+          agentType: "changelog-writer",
+          status: "running",
+          inputMetadata: {
+            lookbackDays: input.lookbackDays,
+            projectFilter: input.projectFilter,
+          },
+        })
+        .returning();
+      agentRunId = agentRun.id;
+    } catch {
+      // Logging failure should not block agent execution
+    }
+
+    let totalAttempts = 0;
+
+    const retryOptions = {
+      ...RETRY_CONFIG,
+      onRetry: (attempt: number, error: unknown, delay: number) => {
+        const rateLimit = isRateLimitError(error);
+        send("retry_status", {
+          attempt,
+          maxAttempts: RETRY_CONFIG.maxAttempts,
+          delayMs: delay,
+          isRateLimit: rateLimit,
+          message: rateLimit
+            ? `Rate limited. Retrying in ${delay / 1000}s...`
+            : `Retrying... attempt ${attempt} of 3`,
+        });
+      },
+    };
+
     try {
       const model = getModelForAgent("changelog-writer");
       const tools = getToolsForAgent("changelog-writer");
@@ -51,13 +92,21 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
 
       send("status", { phase: "starting", message: "Generating changelog..." });
 
-      let response = await client.messages.create({
-        model,
-        max_tokens: 8192,
-        system: CHANGELOG_PROMPT,
-        tools: tools as Anthropic.Tool[],
-        messages,
-      });
+      const { result: initialResponse, attempts: initialAttempts } =
+        await withRetry(
+          () =>
+            client.messages.create({
+              model,
+              max_tokens: 8192,
+              system: CHANGELOG_PROMPT,
+              tools: tools as Anthropic.Tool[],
+              messages,
+            }),
+          retryOptions
+        );
+      totalAttempts += initialAttempts;
+
+      let response = initialResponse;
 
       while (response.stop_reason === "tool_use") {
         const toolUseBlocks = response.content.filter(
@@ -102,13 +151,20 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
         messages.push({ role: "assistant", content: response.content });
         messages.push(toolResults);
 
-        response = await client.messages.create({
-          model,
-          max_tokens: 8192,
-          system: CHANGELOG_PROMPT,
-          tools: tools as Anthropic.Tool[],
-          messages,
-        });
+        const { result: nextResponse, attempts: nextAttempts } =
+          await withRetry(
+            () =>
+              client.messages.create({
+                model,
+                max_tokens: 8192,
+                system: CHANGELOG_PROMPT,
+                tools: tools as Anthropic.Tool[],
+                messages,
+              }),
+            retryOptions
+          );
+        totalAttempts += nextAttempts;
+        response = nextResponse;
       }
 
       for (const block of response.content) {
@@ -117,9 +173,44 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
         }
       }
 
+      if (agentRunId) {
+        try {
+          await db
+            .update(agentRuns)
+            .set({
+              status: "completed",
+              completedAt: new Date(),
+              attemptCount: totalAttempts,
+              resultMetadata: { usage: response.usage },
+            })
+            .where(eq(agentRuns.id, agentRunId));
+        } catch {
+          // DB update failure should not prevent success event
+        }
+      }
+
       send("complete", { usage: response.usage });
     } catch (error) {
-      send("error", { message: error instanceof Error ? error.message : String(error) });
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      if (agentRunId) {
+        try {
+          await db
+            .update(agentRuns)
+            .set({
+              status: "failed",
+              completedAt: new Date(),
+              attemptCount: totalAttempts,
+              errorMessage,
+            })
+            .where(eq(agentRuns.id, agentRunId));
+        } catch {
+          // DB update failure should not prevent error event
+        }
+      }
+
+      send("error", { message: errorMessage });
     } finally {
       close();
     }

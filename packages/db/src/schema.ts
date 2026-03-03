@@ -68,6 +68,20 @@ export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
   "viewer",
 ]);
 
+export const agentTypeEnum = pgEnum("agent_type", [
+  "insight-extractor",
+  "blog-writer",
+  "social-writer",
+  "changelog-writer",
+  "editor-chat",
+]);
+
+export const agentRunStatusEnum = pgEnum("agent_run_status", [
+  "running",
+  "completed",
+  "failed",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -447,6 +461,27 @@ export const devtoPublications = pgTable(
   ]
 );
 
+// ── Agent Runs (from 004-error-recovery) ──
+
+export const agentRuns = pgTable(
+  "agent_runs",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    agentType: agentTypeEnum("agent_type").notNull(),
+    status: agentRunStatusEnum("status").default("running"),
+    attemptCount: integer("attempt_count").default(0),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at").defaultNow(),
+    completedAt: timestamp("completed_at"),
+    inputMetadata: jsonb("input_metadata"),
+    resultMetadata: jsonb("result_metadata"),
+  },
+  (table) => [index("agentRuns_workspaceId_idx").on(table.workspaceId)]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -491,6 +526,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   activity: many(workspaceActivity),
   devtoIntegrations: many(devtoIntegrations),
   devtoPublications: many(devtoPublications),
+  agentRuns: many(agentRuns),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -635,3 +671,10 @@ export const devtoPublicationsRelations = relations(
     }),
   })
 );
+
+export const agentRunsRelations = relations(agentRuns, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [agentRuns.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
