@@ -12,7 +12,7 @@ import {
   Settings,
   Palette,
   KeyRound,
-  Plug2,
+  Link2,
   LogOut,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
@@ -30,7 +30,7 @@ const settingsNav = [
   { label: "Settings", icon: Settings, href: "/settings" },
   { label: "Style", icon: Palette, href: "/settings/style" },
   { label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
-  { label: "Integrations", icon: Plug2, href: "/settings/integrations" },
+  { label: "Integrations", icon: Link2, href: "/settings/integrations" },
 ];
 
 export function AppSidebar({
