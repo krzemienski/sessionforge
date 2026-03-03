@@ -1,140 +1,84 @@
-# E2E Validation Plan — SessionForge
+# E2E Validation Plan
+Generated: 2026-03-02T23:15
+Platform: fullstack (Next.js 15 + Neon Postgres)
 
-**Platform:** fullstack (Next.js 15 + Neon Postgres + better-auth)
-**Date:** 2026-03-02
-**Validation order:** Database → Backend API → Frontend → Integration
+## Prerequisites
+- [ ] Node/Bun installed
+- [ ] Database accessible (Neon Postgres via DATABASE_URL)
+- [ ] Port 3000 available
+- [ ] .env.local configured
+- [ ] Playwright browser available
 
----
+## Journey 1: Health Check API
+**PASS Criteria:**
+- [ ] GET /api/healthcheck returns HTTP 200
+- [ ] Response JSON contains `status: "ok"` and `db: true`
+- [ ] Response includes `timestamp` field with valid ISO date
 
-## Layer 1: Database Connectivity
-> No remote DB configured locally — healthcheck confirms `db: false`. Skip direct DB queries. Validate DB-dependent routes return proper error handling (not 500s).
+## Journey 2: Auth Pages Render
+**PASS Criteria:**
+- [ ] /login renders with email input, password input, submit button
+- [ ] /signup renders with name input, email input, password input, submit button
+- [ ] No console errors on either page
 
-| # | Check | PASS Criteria |
-|---|-------|---------------|
-| L1.1 | Healthcheck reports DB status | Returns JSON with `db` field (true/false), no crash |
+## Journey 3: Workspace API
+**PASS Criteria:**
+- [ ] GET /api/workspace returns HTTP 200 with JSON (or auth redirect)
+- [ ] Workspace objects contain id, name, slug fields
 
-## Layer 2: Backend API (20 journeys)
+## Journey 4: Dashboard Page
+**PASS Criteria:**
+- [ ] Dashboard at /[workspace] renders (not blank)
+- [ ] Navigation sidebar visible with Sessions, Insights, Content, Automation, Settings links
+- [ ] Main content area loads
 
-### J1: Healthcheck
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 1.1 | GET | /api/healthcheck | Returns JSON `{status, db, redis, timestamp}`, HTTP 200 or 503 |
+## Journey 5: Sessions Page
+**PASS Criteria:**
+- [ ] Sessions page renders with list or empty state
+- [ ] Page shows "Sessions" heading
+- [ ] Scan button visible
 
-### J2: Auth — Session Check
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 2.1 | GET | /api/auth/get-session | HTTP 200, body `null` (unauthenticated) |
-| 2.2 | POST | /api/auth/sign-in/email | HTTP 200/4xx, valid JSON response (not 500) |
-| 2.3 | POST | /api/auth/sign-up/email | HTTP 200/4xx, valid JSON response (not 500) |
+## Journey 6: Insights Page
+**PASS Criteria:**
+- [ ] Insights page renders
+- [ ] Score bars use /10 scale (not /5)
+- [ ] Bar widths calculated as (score/10 * 100)%
 
-### J3: Sessions — Auth Guard
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 3.1 | GET | /api/sessions | 401 `{"error":"Unauthorized"}` |
-| 3.2 | POST | /api/sessions/scan | 401 `{"error":"Unauthorized"}` |
-| 3.3 | GET | /api/sessions/:id | 401 `{"error":"Unauthorized"}` |
-| 3.4 | GET | /api/sessions/:id/messages | 401 `{"error":"Unauthorized"}` |
+## Journey 7: Content Page
+**PASS Criteria:**
+- [ ] Content page renders with post list or empty state
+- [ ] Content cards show title, status, content type
 
-### J4: Workspace — Auth Guard
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 4.1 | GET | /api/workspace | 401 `{"error":"Unauthorized"}` |
-| 4.2 | POST | /api/workspace | 401 `{"error":"Unauthorized"}` |
-| 4.3 | GET | /api/workspace/:slug | 401 `{"error":"Unauthorized"}` |
-| 4.4 | PUT | /api/workspace/:slug/style | 401 `{"error":"Unauthorized"}` |
+## Journey 8: Automation Page
+**PASS Criteria:**
+- [ ] Automation page renders
+- [ ] Trigger list or create UI accessible
 
-### J5: Insights — Auth Guard
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 5.1 | GET | /api/insights | 401 `{"error":"Unauthorized"}` |
-| 5.2 | POST | /api/insights/extract | 401 `{"error":"Unauthorized"}` |
-| 5.3 | GET | /api/insights/:id | 401 `{"error":"Unauthorized"}` |
+## Journey 9: Settings Pages
+**PASS Criteria:**
+- [ ] /settings renders with workspace config form
+- [ ] /settings/api-keys renders with key management UI
+- [ ] /settings/integrations renders with dev.to section
+- [ ] /settings/style renders with tone/audience settings
 
-### J6: Content — Auth Guard
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 6.1 | GET | /api/content | 401 `{"error":"Unauthorized"}` |
-| 6.2 | POST | /api/content | 401 `{"error":"Unauthorized"}` |
-| 6.3 | GET | /api/content/:id | 401 `{"error":"Unauthorized"}` |
-| 6.4 | PUT | /api/content/:id | 401 `{"error":"Unauthorized"}` |
-| 6.5 | DELETE | /api/content/:id | 401 `{"error":"Unauthorized"}` |
+## Journey 10: API Endpoints
+**PASS Criteria:**
+- [ ] GET /api/sessions returns valid JSON
+- [ ] GET /api/insights returns valid JSON
+- [ ] GET /api/content returns valid JSON
+- [ ] GET /api/automation/triggers returns valid JSON
 
-### J7: AI Agents — Auth Guard
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 7.1 | POST | /api/agents/blog | 401 `{"error":"Unauthorized"}` |
-| 7.2 | POST | /api/agents/social | 401 `{"error":"Unauthorized"}` |
-| 7.3 | POST | /api/agents/changelog | 401 `{"error":"Unauthorized"}` |
-| 7.4 | POST | /api/agents/chat | 401 `{"error":"Unauthorized"}` |
+## Journey 11: Responsive Design
+**PASS Criteria:**
+- [ ] Login page correct at 375px, 768px, 1440px
+- [ ] Dashboard correct at all three viewports
+- [ ] No horizontal overflow at mobile
 
-### J8: Invalid Method Handling
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 8.1 | DELETE | /api/healthcheck | 405 Method Not Allowed |
-| 8.2 | PUT | /api/sessions | 405 Method Not Allowed |
-| 8.3 | PATCH | /api/insights | 405 Method Not Allowed |
-| 8.4 | GET | /api/agents/blog | 405 Method Not Allowed |
-
-### J9: 404 Handling
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 9.1 | GET | /api/nonexistent | 404 Not Found |
-
-### J10: Input Validation
-| Step | Method | Endpoint | Body | PASS Criteria |
-|------|--------|----------|------|---------------|
-| 10.1 | POST | /api/auth/sign-in/email | `{}` (empty) | 4xx, not 500 |
-| 10.2 | POST | /api/auth/sign-up/email | `{"email":"bad"}` | 4xx, not 500 |
-| 10.3 | POST | /api/content | `{}` (empty, unauthed) | 401 |
-
-### J11: Response Time (Performance)
-| Step | Method | Endpoint | PASS Criteria |
-|------|--------|----------|---------------|
-| 11.1 | GET | /api/healthcheck | < 500ms |
-| 11.2 | GET | /api/sessions (unauthed) | < 500ms |
-| 11.3 | POST | /api/agents/blog (unauthed) | < 500ms |
-
-## Layer 3: Frontend (4 journeys)
-
-### J12: Login Page Render
-| Step | Action | PASS Criteria |
-|------|--------|---------------|
-| 12.1 | Navigate to / | Redirects to /login |
-| 12.2 | Screenshot login | Shows "SessionForge" heading, email field, password field, "Sign in" button, GitHub OAuth, "Sign up" link |
-| 12.3 | Snapshot interactive | Finds email input, password input, submit button |
-
-### J13: Signup Page Render
-| Step | Action | PASS Criteria |
-|------|--------|---------------|
-| 13.1 | Navigate to /signup | Page loads, shows signup form |
-| 13.2 | Screenshot signup | Shows name, email, password fields, "Create account" button |
-
-### J14: 404 Page
-| Step | Action | PASS Criteria |
-|------|--------|---------------|
-| 14.1 | Navigate to /nonexistent | Shows 404 page or redirect |
-
-### J15: Login Form Interaction
-| Step | Action | PASS Criteria |
-|------|--------|---------------|
-| 15.1 | Fill email + password | Fields accept input |
-| 15.2 | Click Sign In | Form submits (error expected without DB, but no crash) |
-| 15.3 | Screenshot result | Shows error message or stays on login — not a blank page or 500 |
-
-## Layer 4: Integration
-
-> Limited without real DB. Validate that frontend-to-API communication works correctly.
-
-### J16: Auth Flow Integration
-| Step | Action | PASS Criteria |
-|------|--------|---------------|
-| 16.1 | Submit login form via UI | Network request hits /api/auth/sign-in/email |
-| 16.2 | Verify error handling | UI shows meaningful error, not blank screen |
-
----
-
-## Summary
-- **Platform:** fullstack
-- **Journeys:** 16
-- **Steps:** 42
-- **Estimated time:** ~3 minutes
+## Execution Order
+1. Build & start dev server
+2. Journey 1 (healthcheck API)
+3. Journey 3 + 10 (API endpoints)
+4. Journey 2 (auth pages)
+5. Journey 4-8 (feature pages)
+6. Journey 9 (settings)
+7. Journey 11 (responsive)

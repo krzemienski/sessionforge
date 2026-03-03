@@ -2,8 +2,8 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { posts, workspaces } from "@sessionforge/db";
-import { eq, desc, and } from "drizzle-orm";
+import { posts, workspaces, toneProfileEnum } from "@sessionforge/db";
+import { eq, desc, and, gte, lte, ilike } from "drizzle-orm";
 import { createPost } from "@/lib/ai/tools/post-manager";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, contentCreateSchema } from "@/lib/validation";
@@ -22,6 +22,10 @@ export async function GET(request: Request) {
     const offset = parseInt(searchParams.get("offset") ?? "0", 10);
     const contentType = searchParams.get("type");
     const status = searchParams.get("status");
+    const toneUsed = searchParams.get("toneUsed");
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
+    const search = searchParams.get("search");
 
     if (!workspaceSlug) {
       throw new AppError("workspace query param required", ERROR_CODES.VALIDATION_ERROR);
@@ -41,6 +45,18 @@ export async function GET(request: Request) {
     }
     if (status) {
       conditions.push(eq(posts.status, status as typeof posts.status.enumValues[number]));
+    }
+    if (toneUsed && toneProfileEnum.enumValues.includes(toneUsed as (typeof toneProfileEnum.enumValues)[number])) {
+      conditions.push(eq(posts.toneUsed, toneUsed as (typeof toneProfileEnum.enumValues)[number]));
+    }
+    if (dateFrom) {
+      conditions.push(gte(posts.createdAt, new Date(dateFrom)));
+    }
+    if (dateTo) {
+      conditions.push(lte(posts.createdAt, new Date(dateTo)));
+    }
+    if (search) {
+      conditions.push(ilike(posts.title, `%${search}%`));
     }
 
     const results = await db.query.posts.findMany({
