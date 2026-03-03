@@ -425,6 +425,29 @@ export const apiKeys = pgTable(
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const sessionBookmarks = pgTable(
+  "session_bookmarks",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => claudeSessions.id, { onDelete: "cascade" }),
+    messageIndex: integer("message_index").notNull(),
+    label: text("label").notNull(),
+    note: text("note"),
+    sentToInsights: boolean("sent_to_insights").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("sessionBookmarks_workspaceId_idx").on(table.workspaceId),
+    index("sessionBookmarks_sessionId_idx").on(table.sessionId),
+  ]
+);
+
 // ── Team Workspaces tables (from 023-team-workspaces-collaboration) ──
 
 export const workspaceMembers = pgTable(
@@ -647,6 +670,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   devtoPublications: many(devtoPublications),
   agentRuns: many(agentRuns),
   writingSkills: many(writingSkills),
+  sessionBookmarks: many(sessionBookmarks),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -685,6 +709,7 @@ export const claudeSessionsRelations = relations(
       references: [workspaces.id],
     }),
     insights: many(insights),
+    sessionBookmarks: many(sessionBookmarks),
   })
 );
 
@@ -838,3 +863,17 @@ export const writingSkillsRelations = relations(writingSkills, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const sessionBookmarksRelations = relations(
+  sessionBookmarks,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [sessionBookmarks.workspaceId],
+      references: [workspaces.id],
+    }),
+    session: one(claudeSessions, {
+      fields: [sessionBookmarks.sessionId],
+      references: [claudeSessions.id],
+    }),
+  })
+);

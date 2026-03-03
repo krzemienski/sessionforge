@@ -8,6 +8,12 @@
       ],
       "@sessionforge/db": [
         "../../packages/db/src/index"
+      ],
+      "drizzle-orm": [
+        "./node_modules/drizzle-orm/index.d.ts"
+      ],
+      "drizzle-orm/*": [
+        "./node_modules/drizzle-orm/*"
       ]
     },
     "plugins": [
