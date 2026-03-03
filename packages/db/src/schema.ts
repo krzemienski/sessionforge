@@ -140,6 +140,7 @@ export const workspaces = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     sessionBasePath: text("session_base_path").default("~/.claude"),
+    lastScanAt: timestamp("last_scan_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -259,6 +260,9 @@ export const posts = pgTable(
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
+    aiDraftMarkdown: text("ai_draft_markdown"),
+    editDistance: integer("edit_distance"),
+    styleProfileUsed: text("style_profile_used"),
     badgeEnabled: boolean("badge_enabled").default(false),
     platformFooterEnabled: boolean("platform_footer_enabled").default(false),
     createdBy: text("created_by").references(() => users.id, {
@@ -292,6 +296,10 @@ export const contentTriggers = pgTable(
     enabled: boolean("enabled").default(true),
     lastRunAt: timestamp("last_run_at"),
     lastRunStatus: text("last_run_status"),
+    debounceMinutes: integer("debounce_minutes").default(30),
+    watchStatus: text("watch_status"),
+    lastFileEventAt: timestamp("last_file_event_at"),
+    fileWatchSnapshot: jsonb("file_watch_snapshot").$type<Record<string, number>>(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },

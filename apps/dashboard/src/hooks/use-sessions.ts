@@ -51,14 +51,32 @@ export function useSessionMessages(id: string, params?: { limit?: number; offset
   });
 }
 
+export type ScanOptions = {
+  lookbackDays?: number;
+  fullRescan?: boolean;
+};
+
+export type ScanResult = {
+  scanned: number;
+  new: number;
+  updated: number;
+  errors: string[];
+  durationMs: number;
+  isIncremental: boolean;
+  lastScanAt: string;
+};
+
 export function useScanSessions(workspace: string) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (lookbackDays: number = 30) => {
+  return useMutation<ScanResult, Error, ScanOptions | number>({
+    mutationFn: async (options: ScanOptions | number = 30) => {
+      const opts: ScanOptions =
+        typeof options === "number" ? { lookbackDays: options } : options;
+      const { lookbackDays = 30, fullRescan = false } = opts;
       const res = await fetch("/api/sessions/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceSlug: workspace, lookbackDays }),
+        body: JSON.stringify({ workspaceSlug: workspace, lookbackDays, fullRescan }),
       });
       if (!res.ok) throw new Error("Scan failed");
       return res.json();

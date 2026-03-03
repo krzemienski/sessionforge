@@ -16,6 +16,10 @@ export interface IndexResult {
   scanned: number;
   /** Number of sessions successfully inserted or updated in the database. */
   indexed: number;
+  /** Number of newly inserted sessions. */
+  new: number;
+  /** Number of updated (existing) sessions. */
+  updated: number;
   /** Human-readable error messages for any sessions that failed to index. */
   errors: string[];
 }
@@ -40,7 +44,8 @@ export async function indexSessions(
   sessions: NormalizedSession[]
 ): Promise<IndexResult> {
   const errors: string[] = [];
-  let indexed = 0;
+  let newCount = 0;
+  let updatedCount = 0;
 
   for (const s of sessions) {
     try {
@@ -77,11 +82,11 @@ export async function indexSessions(
           .update(claudeSessions)
           .set(values)
           .where(eq(claudeSessions.id, existing[0].id));
+        updatedCount++;
       } else {
         await db.insert(claudeSessions).values(values);
+        newCount++;
       }
-
-      indexed++;
     } catch (err) {
       errors.push(
         `Failed to index session ${s.sessionId}: ${err instanceof Error ? err.message : String(err)}`
@@ -89,5 +94,11 @@ export async function indexSessions(
     }
   }
 
-  return { scanned: sessions.length, indexed, errors };
+  return {
+    scanned: sessions.length,
+    indexed: newCount + updatedCount,
+    new: newCount,
+    updated: updatedCount,
+    errors,
+  };
 }

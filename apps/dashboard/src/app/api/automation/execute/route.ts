@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { contentTriggers } from "@sessionforge/db";
+import { contentTriggers, workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { verifyQStashRequest } from "@/lib/qstash";
 import { runAutomationPipeline } from "@/lib/automation/pipeline";
+import { scanSessionFiles } from "@/lib/sessions/scanner";
+import { parseSessionFile } from "@/lib/sessions/parser";
+import { normalizeSession } from "@/lib/sessions/normalizer";
+import { indexSessions } from "@/lib/sessions/indexer";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +44,34 @@ export async function POST(request: Request) {
     .where(eq(contentTriggers.id, triggerId));
 
   try {
+    // Auto-scan step: run incremental scan before content generation pipeline
+    // to ensure sessions are fresh when automation runs
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.id, trigger.workspaceId),
+    });
+
+    if (workspace) {
+      const basePath = workspace.sessionBasePath ?? "~/.claude";
+      const scanStartTime = new Date();
+      const sinceTimestamp = workspace.lastScanAt ?? undefined;
+
+      const files = await scanSessionFiles(30, basePath, sinceTimestamp);
+
+      const normalized = await Promise.all(
+        files.map(async (meta) => {
+          const parsed = await parseSessionFile(meta.filePath);
+          return normalizeSession(meta, parsed);
+        })
+      );
+
+      await indexSessions(workspace.id, normalized);
+
+      await db
+        .update(workspaces)
+        .set({ lastScanAt: scanStartTime })
+        .where(eq(workspaces.id, workspace.id));
+    }
+
     const result = await runAutomationPipeline({
       workspaceId: trigger.workspaceId,
       contentType: trigger.contentType,
