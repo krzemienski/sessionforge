@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost } from "@/hooks/use-content";
 import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, Send, RefreshCw } from "lucide-react";
+import { ArrowLeft, Save, Send, RefreshCw, Pencil, Columns2, Eye } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
@@ -14,11 +14,14 @@ import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { SHORTCUTS } from "@/lib/keyboard-shortcuts";
 import { SourceCard } from "@/components/content/source-card";
 import { AuthenticityBadge } from "@/components/content/authenticity-badge";
+import { ContentPreview } from "@/components/preview/content-preview";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
   { ssr: false, loading: () => <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg animate-pulse" /> }
 );
+
+type ViewMode = "edit" | "split" | "preview";
 
 export default function ContentEditorPage() {
   const { workspace, postId } = useParams<{ workspace: string; postId: string }>();
@@ -34,6 +37,7 @@ export default function ContentEditorPage() {
   const [badgeEnabled, setBadgeEnabled] = useState(false);
   const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -88,6 +92,12 @@ export default function ContentEditorPage() {
   const isDevtoConnected = devtoIntegration.data?.connected && devtoIntegration.data?.enabled;
   const isAlreadyPublished = devtoPublication.data?.published === true;
 
+  const viewModeButtons: { mode: ViewMode; icon: React.ReactNode; label: string }[] = [
+    { mode: "edit", icon: <Pencil size={14} />, label: "Edit" },
+    { mode: "split", icon: <Columns2 size={14} />, label: "Split" },
+    { mode: "preview", icon: <Eye size={14} />, label: "Preview" },
+  ];
+
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
       <div className="flex items-center justify-between mb-4">
@@ -109,6 +119,26 @@ export default function ContentEditorPage() {
               {isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}
             </button>
           )}
+
+          {/* View mode toggle */}
+          <div className="flex items-center bg-sf-bg-tertiary border border-sf-border rounded-sf overflow-hidden">
+            {viewModeButtons.map(({ mode, icon, label }) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                title={label}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  viewMode === mode
+                    ? "bg-sf-accent text-sf-bg-primary"
+                    : "text-sf-text-secondary hover:text-sf-text-primary hover:bg-sf-bg-secondary"
+                }`}
+              >
+                {icon}
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+          </div>
+
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -139,33 +169,68 @@ export default function ContentEditorPage() {
       />
 
       <div className="flex-1 flex gap-4 min-h-0">
-        <div className="flex-1 flex flex-col min-h-0">
-          {initializedRef.current && (
-            <MarkdownEditor
-              initialMarkdown={post.data?.markdown || ""}
-              onMarkdownChange={handleMarkdownChange}
-              externalMarkdown={externalMd}
-            />
-          )}
-        </div>
+        {/* Edit mode: editor + AI chat sidebar + source/badge */}
+        {viewMode === "edit" && (
+          <>
+            <div className="flex-1 flex flex-col min-h-0">
+              {initializedRef.current && (
+                <MarkdownEditor
+                  initialMarkdown={post.data?.markdown || ""}
+                  onMarkdownChange={handleMarkdownChange}
+                  externalMarkdown={externalMd}
+                />
+              )}
+            </div>
+            <div className="hidden lg:flex w-[340px] flex-col gap-3">
+              <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
+                <AIChatSidebar
+                  postId={postId}
+                  workspace={workspace}
+                  onEditsApplied={handleEditsApplied}
+                />
+              </div>
+              {post.data?.insightId && <SourceCard postId={postId} />}
+              <AuthenticityBadge
+                postId={postId}
+                badgeEnabled={badgeEnabled}
+                platformFooterEnabled={platformFooterEnabled}
+                onBadgeToggle={handleBadgeToggle}
+                onFooterToggle={handleFooterToggle}
+              />
+            </div>
+          </>
+        )}
 
-        <div className="hidden lg:flex w-[340px] flex-col gap-3">
-          <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
-            <AIChatSidebar
-              postId={postId}
-              workspace={workspace}
-              onEditsApplied={handleEditsApplied}
+        {/* Split mode: editor on left, preview on right */}
+        {viewMode === "split" && (
+          <>
+            <div className="flex-1 flex flex-col min-h-0">
+              {initializedRef.current && (
+                <MarkdownEditor
+                  initialMarkdown={post.data?.markdown || ""}
+                  onMarkdownChange={handleMarkdownChange}
+                  externalMarkdown={externalMd}
+                />
+              )}
+            </div>
+            <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-y-auto">
+              <ContentPreview
+                markdown={markdown}
+                contentType={post.data?.contentType || "blog_post"}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Preview mode: full-width preview panel */}
+        {viewMode === "preview" && (
+          <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-y-auto">
+            <ContentPreview
+              markdown={markdown}
+              contentType={post.data?.contentType || "blog_post"}
             />
           </div>
-          {post.data?.insightId && <SourceCard postId={postId} />}
-          <AuthenticityBadge
-            postId={postId}
-            badgeEnabled={badgeEnabled}
-            platformFooterEnabled={platformFooterEnabled}
-            onBadgeToggle={handleBadgeToggle}
-            onFooterToggle={handleFooterToggle}
-          />
-        </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-sf-border">
