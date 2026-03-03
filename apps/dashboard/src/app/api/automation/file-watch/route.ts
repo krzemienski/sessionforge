@@ -1,0 +1,117 @@
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { contentTriggers } from "@sessionforge/db";
+import { eq } from "drizzle-orm";
+import { verifyQStashRequest } from "@/lib/qstash";
+import { runAutomationPipeline } from "@/lib/automation/pipeline";
+import {
+  getSessionFingerprint,
+  detectSessionChanges,
+  shouldFirePipeline,
+} from "@/lib/automation/file-watcher";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request) {
+  const rawBody = await request.text();
+
+  const isValid = await verifyQStashRequest(request, rawBody).catch(() => false);
+  if (!isValid) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = JSON.parse(rawBody) as { triggerId?: string };
+  const { triggerId } = body;
+
+  if (!triggerId) {
+    return NextResponse.json({ error: "triggerId is required" }, { status: 400 });
+  }
+
+  const trigger = await db.query.contentTriggers.findFirst({
+    where: eq(contentTriggers.id, triggerId),
+    with: { workspace: true },
+  });
+
+  if (!trigger) {
+    return NextResponse.json({ error: "Trigger not found" }, { status: 404 });
+  }
+
+  if (!trigger.enabled || trigger.watchStatus === "paused") {
+    return NextResponse.json({ skipped: true });
+  }
+
+  const basePath = trigger.workspace.sessionBasePath ?? "~/.claude";
+
+  try {
+    const currFingerprint = await getSessionFingerprint(basePath);
+    const prevFingerprint = (trigger.fileWatchSnapshot as Record<string, number> | null) ?? {};
+
+    const changes = detectSessionChanges(prevFingerprint, currFingerprint);
+
+    if (changes.hasChanges) {
+      await db
+        .update(contentTriggers)
+        .set({
+          lastFileEventAt: new Date(),
+          fileWatchSnapshot: currFingerprint,
+          watchStatus: "watching",
+        })
+        .where(eq(contentTriggers.id, triggerId));
+    }
+
+    const updatedLastFileEventAt = changes.hasChanges
+      ? new Date()
+      : trigger.lastFileEventAt;
+
+    const debounceMinutes = trigger.debounceMinutes ?? 30;
+
+    if (!shouldFirePipeline(updatedLastFileEventAt, debounceMinutes)) {
+      return NextResponse.json({
+        polled: true,
+        hasChanges: changes.hasChanges,
+        fired: false,
+      });
+    }
+
+    await db
+      .update(contentTriggers)
+      .set({ lastRunAt: new Date(), lastRunStatus: "running" })
+      .where(eq(contentTriggers.id, triggerId));
+
+    try {
+      const result = await runAutomationPipeline({
+        workspaceId: trigger.workspaceId,
+        contentType: trigger.contentType,
+        lookbackWindow: trigger.lookbackWindow ?? "last_7_days",
+        triggerId,
+      });
+
+      await db
+        .update(contentTriggers)
+        .set({ lastRunStatus: "success", lastRunAt: new Date(), lastFileEventAt: null })
+        .where(eq(contentTriggers.id, triggerId));
+
+      return NextResponse.json({ polled: true, hasChanges: changes.hasChanges, fired: true, ...result });
+    } catch (pipelineError) {
+      await db
+        .update(contentTriggers)
+        .set({ lastRunStatus: "failed", lastRunAt: new Date() })
+        .where(eq(contentTriggers.id, triggerId));
+
+      return NextResponse.json(
+        { error: pipelineError instanceof Error ? pipelineError.message : "Pipeline execution failed" },
+        { status: 500 }
+      );
+    }
+  } catch (error) {
+    await db
+      .update(contentTriggers)
+      .set({ watchStatus: "error" })
+      .where(eq(contentTriggers.id, triggerId));
+
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "File watch poll failed" },
+      { status: 500 }
+    );
+  }
+}

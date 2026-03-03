@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const lookbackDays: number = typeof body.lookbackDays === "number" ? body.lookbackDays : 30;
+  const fullRescan: boolean = body.fullRescan === true;
 
+  const scanStartTime = new Date();
   const start = Date.now();
 
   // Get user's workspace
@@ -34,7 +36,11 @@ export async function POST(req: NextRequest) {
   const ws = workspace[0];
   const basePath = ws.sessionBasePath ?? "~/.claude";
 
-  const files = await scanSessionFiles(lookbackDays, basePath);
+  // Incremental mode: use lastScanAt as cutoff unless fullRescan requested
+  const isIncremental = !fullRescan && ws.lastScanAt != null;
+  const sinceTimestamp = isIncremental ? (ws.lastScanAt ?? undefined) : undefined;
+
+  const files = await scanSessionFiles(lookbackDays, basePath, sinceTimestamp);
 
   const normalized = await Promise.all(
     files.map(async (meta) => {
@@ -45,10 +51,19 @@ export async function POST(req: NextRequest) {
 
   const result = await indexSessions(ws.id, normalized);
 
+  // Persist the scan start time so next incremental scan uses it as cutoff
+  await db
+    .update(workspaces)
+    .set({ lastScanAt: scanStartTime })
+    .where(eq(workspaces.id, ws.id));
+
   return NextResponse.json({
     scanned: result.scanned,
-    indexed: result.indexed,
+    new: result.new,
+    updated: result.updated,
     errors: result.errors,
     durationMs: Date.now() - start,
+    isIncremental,
+    lastScanAt: scanStartTime.toISOString(),
   });
 }
