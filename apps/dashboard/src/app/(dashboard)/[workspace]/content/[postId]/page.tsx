@@ -1,13 +1,15 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { usePost, useUpdatePost } from "@/hooks/use-content";
+import { usePost, useUpdatePost, useSeoData } from "@/hooks/use-content";
 import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { HashnodePublishModal } from "@/components/publish/hashnode-publish-modal";
+import { cn } from "@/lib/utils";
+import { computeSeoScore } from "@/lib/seo";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
@@ -24,11 +26,17 @@ const MarkdownEditor = dynamic(
 
 type ViewMode = "edit" | "split" | "preview";
 
+const SeoPanel = dynamic(
+  () => import("@/components/editor/seo-panel").then((m) => m.SeoPanel),
+  { ssr: false }
+);
+
 export default function ContentEditorPage() {
   const { workspace, postId } = useParams<{ workspace: string; postId: string }>();
   const router = useRouter();
   const post = usePost(postId);
   const update = useUpdatePost();
+  const seoData = useSeoData(postId);
   const devtoIntegration = useDevtoIntegration(workspace);
   const devtoPublication = useDevtoPublication(postId, workspace);
   const [title, setTitle] = useState("");
@@ -37,6 +45,7 @@ export default function ContentEditorPage() {
   const [externalMd, setExternalMd] = useState<string | null>(null);
   const [hashnodeModalOpen, setHashnodeModalOpen] = useState(false);
   const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo">("chat");
   const [badgeEnabled, setBadgeEnabled] = useState(false);
   const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
@@ -106,6 +115,15 @@ export default function ContentEditorPage() {
     { mode: "split", icon: <Columns2 size={14} />, label: "Split" },
     { mode: "preview", icon: <Eye size={14} />, label: "Preview" },
   ];
+
+  const seoMetadata = seoData.data?.seoMetadata ?? undefined;
+  const liveScore = seoData.data ? computeSeoScore(markdown, title, seoMetadata) : null;
+
+  function seoScoreColor(score: number): string {
+    if (score >= 70) return "text-sf-success";
+    if (score >= 40) return "text-amber-500";
+    return "text-red-500";
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
@@ -187,7 +205,7 @@ export default function ContentEditorPage() {
       />
 
       <div className="flex-1 flex gap-4 min-h-0">
-        {/* Edit mode: editor + AI chat sidebar + source/badge */}
+        {/* Edit mode: editor + tabbed sidebar (AI chat / SEO) + source/badge */}
         {viewMode === "edit" && (
           <>
             <div className="flex-1 flex flex-col min-h-0">
@@ -201,11 +219,39 @@ export default function ContentEditorPage() {
             </div>
             <div className="hidden lg:flex w-[340px] flex-col gap-3">
               <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
-                <AIChatSidebar
-                  postId={postId}
-                  workspace={workspace}
-                  onEditsApplied={handleEditsApplied}
-                />
+                {/* Sidebar tabs */}
+                <div className="flex gap-1 p-2 border-b border-sf-border">
+                  {(["chat", "seo"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setSidebarTab(tab)}
+                      className={cn(
+                        "px-3 py-1.5 text-sm rounded-sf transition-colors",
+                        sidebarTab === tab
+                          ? "bg-sf-accent-bg text-sf-accent"
+                          : "text-sf-text-secondary hover:bg-sf-bg-hover"
+                      )}
+                    >
+                      {tab === "chat" ? "AI Chat" : "SEO"}
+                    </button>
+                  ))}
+                </div>
+                {/* Sidebar content */}
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                  {sidebarTab === "chat" ? (
+                    <AIChatSidebar
+                      postId={postId}
+                      workspace={workspace}
+                      onEditsApplied={handleEditsApplied}
+                    />
+                  ) : (
+                    <SeoPanel
+                      postId={postId}
+                      markdown={markdown}
+                      title={title}
+                    />
+                  )}
+                </div>
               </div>
               {post.data?.insightId && <SourceCard postId={postId} />}
               <AuthenticityBadge
@@ -264,6 +310,11 @@ export default function ContentEditorPage() {
               <ExternalLink size={12} />
               Hashnode
             </a>
+          )}
+          {liveScore !== null && (
+            <span className={cn("text-xs font-medium", seoScoreColor(liveScore.total))}>
+              SEO: {liveScore.total}/100
+            </span>
           )}
           {(post.data?.contentType === "twitter_thread" || post.data?.contentType === "linkedin_post") && (
             <SocialCopyButton

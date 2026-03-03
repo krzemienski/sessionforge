@@ -82,6 +82,27 @@ export const agentRunStatusEnum = pgEnum("agent_run_status", [
   "failed",
 ]);
 
+// ── Types ──
+
+export interface SeoMetadata {
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  focusKeyword?: string | null;
+  additionalKeywords?: string[] | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  twitterTitle?: string | null;
+  twitterDescription?: string | null;
+  twitterCard?: string | null;
+  schemaOrg?: Record<string, unknown> | null;
+  readabilityScore?: number | null;
+  readabilityGrade?: string | null;
+  seoScore?: number | null;
+  keywordDensity?: number | null;
+  suggestedKeywords?: string[] | null;
+  generatedAt?: string | null;
+}
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -296,6 +317,7 @@ export const posts = pgTable(
     aiDraftMarkdown: text("ai_draft_markdown"),
     editDistance: integer("edit_distance"),
     styleProfileUsed: text("style_profile_used"),
+    seoMetadata: jsonb("seo_metadata").$type<SeoMetadata>(),
     badgeEnabled: boolean("badge_enabled").default(false),
     platformFooterEnabled: boolean("platform_footer_enabled").default(false),
     createdBy: text("created_by").references(() => users.id, {

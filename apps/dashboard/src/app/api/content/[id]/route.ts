@@ -8,6 +8,7 @@ import { updatePost } from "@/lib/ai/tools/post-manager";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, contentUpdateSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { withFrontmatter } from "@/lib/seo/frontmatter";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,15 @@ export async function GET(
 
     if (post.workspace.ownerId !== session.user.id) {
       throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    }
+
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get("frontmatter") === "true") {
+      return NextResponse.json({
+        ...post,
+        markdown: withFrontmatter(post.markdown ?? "", post.title, post.seoMetadata ?? {}),
+        hasFrontmatter: true,
+      });
     }
 
     return NextResponse.json(post);
