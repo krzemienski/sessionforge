@@ -33,6 +33,7 @@ export interface UpdatePostInput {
   versionType?: VersionType;
   editType?: EditType;
   createdBy?: string;
+  publishedAt?: Date;
   badgeEnabled?: boolean;
   platformFooterEnabled?: boolean;
 }
@@ -92,6 +93,13 @@ export async function updatePost(
   if (input.toneUsed !== undefined) updates.toneUsed = input.toneUsed;
   if (input.badgeEnabled !== undefined) updates.badgeEnabled = input.badgeEnabled;
   if (input.platformFooterEnabled !== undefined) updates.platformFooterEnabled = input.platformFooterEnabled;
+
+  // Set publishedAt when transitioning to 'published' status (only if not explicitly provided)
+  if (input.status === "published") {
+    updates.publishedAt = input.publishedAt ?? new Date();
+  } else if (input.publishedAt !== undefined) {
+    updates.publishedAt = input.publishedAt;
+  }
 
   if (input.markdown !== undefined) {
     updates.markdown = input.markdown;

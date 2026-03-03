@@ -78,8 +78,6 @@ export async function GET(req: Request) {
         ? Math.round(post.insight.session.durationSeconds / 60)
         : null,
     }));
-
-    // buildExportZip throws → withApiHandler catches → returns generic INTERNAL_ERROR (no leak)
     const zipBuffer = await buildExportZip(exportablePosts);
 
     const filename = `sessionforge-export-${new Date().toISOString().slice(0, 10)}.zip`;

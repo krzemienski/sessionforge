@@ -138,6 +138,19 @@ export function useWordPressConnection(workspace: string) {
   });
 }
 
+export function useContentCalendar(workspace: string, year: number, month: number) {
+  return useQuery({
+    queryKey: ["content-calendar", workspace, year, month],
+    queryFn: async () => {
+      const sp = new URLSearchParams({ workspace, year: String(year), month: String(month) });
+      const res = await fetch(`/api/content/calendar?${sp}`);
+      if (!res.ok) throw new Error("Failed to fetch calendar data");
+      return res.json();
+    },
+    enabled: !!workspace,
+  });
+}
+
 export function useWordPressPublish() {
   const qc = useQueryClient();
   return useMutation({
@@ -168,6 +181,19 @@ export function useWordPressPublish() {
       qc.invalidateQueries({ queryKey: ["post", vars.id] });
       qc.invalidateQueries({ queryKey: ["content"] });
     },
+  });
+}
+
+export function useContentStreak(workspace: string) {
+  return useQuery({
+    queryKey: ["content-streak", workspace],
+    queryFn: async () => {
+      const sp = new URLSearchParams({ workspace });
+      const res = await fetch(`/api/content/streak?${sp}`);
+      if (!res.ok) throw new Error("Failed to fetch streak data");
+      return res.json();
+    },
+    enabled: !!workspace,
   });
 }
 

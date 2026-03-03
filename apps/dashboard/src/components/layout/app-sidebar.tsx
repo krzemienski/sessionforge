@@ -7,7 +7,7 @@ import {
   LayoutDashboard,
   ScrollText,
   Lightbulb,
-  FileText,
+  CalendarDays,
   Zap,
   BarChart3,
   Settings,
@@ -28,7 +28,7 @@ const mainNav = [
   { label: "Dashboard", icon: LayoutDashboard, href: "" },
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
   { label: "Insights", icon: Lightbulb, href: "/insights" },
-  { label: "Content", icon: FileText, href: "/content" },
+  { label: "Content", icon: CalendarDays, href: "/content" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Automation", icon: Zap, href: "/automation" },
 ];

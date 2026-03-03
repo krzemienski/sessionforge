@@ -7,6 +7,8 @@ import {
   LayoutDashboard,
   ScrollText,
   FileText,
+  Lightbulb,
+  CalendarDays,
   BarChart3,
   Settings,
   Plug2,
@@ -15,6 +17,7 @@ import {
 const tabs = [
   { label: "Home", icon: LayoutDashboard, href: "" },
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
+  { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Settings", icon: Settings, href: "/settings" },
