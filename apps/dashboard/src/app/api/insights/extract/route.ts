@@ -9,6 +9,7 @@ import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, insightExtractSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { fireWebhookEvent } from "@/lib/webhooks/events";
+import { checkQuota, recordUsage } from "@/lib/billing/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,17 @@ export async function POST(req: Request) {
       throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
     }
 
+    const quota = await checkQuota(session.user.id, "insight_extraction");
+    if (!quota.allowed) {
+      return NextResponse.json(
+        {
+          error: "Monthly insight extraction quota exceeded",
+          quota: { limit: quota.limit, remaining: quota.remaining, percentUsed: quota.percentUsed },
+        },
+        { status: 402 }
+      );
+    }
+
     const result = await extractInsight({
       workspaceId: workspace.id,
       sessionId,
@@ -42,6 +54,8 @@ export async function POST(req: Request) {
         compositeScore: insight.compositeScore,
       });
     }
+
+    void recordUsage(session.user.id, workspace.id, "insight_extraction", 0.01);
 
     return NextResponse.json(result);
   })(req);

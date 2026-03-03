@@ -11,6 +11,7 @@ import { indexSessions } from "@/lib/sessions/indexer";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, sessionScanSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { checkQuota, recordUsage } from "@/lib/billing/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,15 @@ export async function POST(req: Request) {
     }
 
     const ws = workspace[0];
+
+    const quotaCheck = await checkQuota(session.user.id, "session_scan");
+    if (!quotaCheck.allowed) {
+      return NextResponse.json(
+        { error: "Quota exceeded", quotaInfo: quotaCheck, upgradeUrl: "/pricing" },
+        { status: 402 }
+      );
+    }
+
     const basePath = ws.sessionBasePath ?? "~/.claude";
 
     // Incremental mode: use lastScanAt as cutoff unless fullRescan requested
@@ -58,6 +68,15 @@ export async function POST(req: Request) {
       .update(workspaces)
       .set({ lastScanAt: scanStartTime })
       .where(eq(workspaces.id, ws.id));
+
+    // Record usage for newly indexed sessions
+    if (result.new > 0) {
+      void Promise.all(
+        Array.from({ length: result.new }, () =>
+          recordUsage(session.user.id, ws.id, "session_scan")
+        )
+      );
+    }
 
     return NextResponse.json({
       scanned: result.scanned,

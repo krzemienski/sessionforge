@@ -7,6 +7,7 @@ import { streamBlogWriter } from "@/lib/ai/agents/blog-writer";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, agentBlogSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { checkQuota, recordUsage } from "@/lib/billing/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,23 @@ export async function POST(req: Request) {
       throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
     }
 
-    return streamBlogWriter({
+    const quota = await checkQuota(session.user.id, "content_generation");
+    if (!quota.allowed) {
+      return new Response(JSON.stringify({
+        error: "Monthly content generation quota exceeded",
+        quota: { limit: quota.limit, remaining: quota.remaining, percentUsed: quota.percentUsed },
+      }), { status: 402, headers: { "Content-Type": "application/json" } });
+    }
+
+    const result = streamBlogWriter({
       workspaceId: workspace.id,
       insightId,
       tone: (tone ?? "technical") as Parameters<typeof streamBlogWriter>[0]["tone"],
       customInstructions,
     });
+
+    void recordUsage(session.user.id, workspace.id, "content_generation", 0.05);
+
+    return result;
   })(req);
 }
