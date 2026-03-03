@@ -16,6 +16,7 @@ evidence/
 .auto-claude-security.json
 .auto-claude-status
 .claude_settings.json
+.claude
 .worktrees/
 .security-key
 logs/security/

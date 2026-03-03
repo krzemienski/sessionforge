@@ -58,6 +58,8 @@ export const contentUpdateSchema = z.object({
   markdown: z.string().optional(),
   status: z.string().optional(),
   toneUsed: z.string().optional(),
+  badgeEnabled: z.boolean().optional(),
+  platformFooterEnabled: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------------------

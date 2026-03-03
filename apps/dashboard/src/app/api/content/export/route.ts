@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { posts, workspaces } from "@sessionforge/db";
 import { eq, desc, and, gte, lte } from "drizzle-orm";
-import { buildExportZip } from "@/lib/export/markdown-export";
+import { buildExportZip, type ExportablePost } from "@/lib/export/markdown-export";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 
@@ -56,10 +56,31 @@ export async function GET(req: Request) {
     const results = await db.query.posts.findMany({
       where: and(...conditions),
       orderBy: [desc(posts.createdAt)],
+      with: {
+        insight: {
+          with: {
+            session: true,
+          },
+        },
+      },
     });
 
+    const exportablePosts: ExportablePost[] = results.map((post) => ({
+      id: post.id,
+      title: post.title,
+      markdown: post.markdown,
+      contentType: post.contentType,
+      status: post.status,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+      platformFooterEnabled: post.platformFooterEnabled ?? false,
+      durationMinutes: post.insight?.session?.durationSeconds
+        ? Math.round(post.insight.session.durationSeconds / 60)
+        : null,
+    }));
+
     // buildExportZip throws → withApiHandler catches → returns generic INTERNAL_ERROR (no leak)
-    const zipBuffer = await buildExportZip(results);
+    const zipBuffer = await buildExportZip(exportablePosts);
 
     const filename = `sessionforge-export-${new Date().toISOString().slice(0, 10)}.zip`;
 
@@ -69,7 +90,7 @@ export async function GET(req: Request) {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Content-Length": String(zipBuffer.length),
-        "X-Export-Count": String(results.length),
+        "X-Export-Count": String(exportablePosts.length),
       },
     });
   })(req);

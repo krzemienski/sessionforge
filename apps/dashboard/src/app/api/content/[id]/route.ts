@@ -60,13 +60,15 @@ export async function PUT(
     }
 
     const rawBody = await request.json().catch(() => ({}));
-    const { title, markdown, status, toneUsed } = parseBody(contentUpdateSchema, rawBody);
+    const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled } = parseBody(contentUpdateSchema, rawBody);
 
     const updated = await updatePost(existing.workspaceId, id, {
       title,
       markdown,
       status: status as Parameters<typeof updatePost>[2]["status"],
       toneUsed: toneUsed as Parameters<typeof updatePost>[2]["toneUsed"],
+      badgeEnabled,
+      platformFooterEnabled,
     });
 
     return NextResponse.json(updated);
