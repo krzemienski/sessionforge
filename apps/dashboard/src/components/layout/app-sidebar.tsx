@@ -16,6 +16,7 @@ import {
   Webhook,
   Link2,
   Brain,
+  Globe,
   LogOut,
   Search,
 } from "lucide-react";
@@ -39,6 +40,7 @@ const settingsNav = [
   { label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
   { label: "Integrations", icon: Link2, href: "/settings/integrations" },
   { label: "Webhooks", icon: Webhook, href: "/settings/webhooks" },
+  { label: "WordPress", icon: Globe, href: "/settings/wordpress" },
 ];
 
 export function AppSidebar({

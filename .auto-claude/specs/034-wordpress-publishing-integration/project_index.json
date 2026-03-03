@@ -1,0 +1,126 @@
+{
+  "project_name": "SessionForge",
+  "description": "AI content generation platform that transforms Claude coding sessions into blog posts, social content, and changelogs",
+  "repository_type": "monorepo",
+
+  "tech_stack": {
+    "package_manager": "bun@1.2.4",
+    "monorepo_tool": "turbo@2",
+    "runtime": "Node.js via Bun",
+    "framework": "Next.js 15 (App Router)",
+    "language": "TypeScript",
+    "database": "PostgreSQL (Neon serverless)",
+    "orm": "Drizzle ORM (drizzle-orm/neon-http)",
+    "auth": "Better Auth",
+    "state_management": "TanStack React Query (@tanstack/react-query)",
+    "ui_library": "Tailwind CSS v4 with custom sf-* design tokens",
+    "icons": "lucide-react",
+    "editor": "Lexical (@lexical/react)",
+    "ai": "@anthropic-ai/sdk"
+  },
+
+  "monorepo_structure": {
+    "apps/dashboard": "Main Next.js web application (all UI and API routes)",
+    "packages/db": "Shared Drizzle schema package (@sessionforge/db)"
+  },
+
+  "key_directories": {
+    "apps/dashboard/src/app/api": "All API routes (Next.js route handlers)",
+    "apps/dashboard/src/app/(dashboard)": "Authenticated dashboard pages",
+    "apps/dashboard/src/components": "React components",
+    "apps/dashboard/src/hooks": "TanStack Query hooks",
+    "apps/dashboard/src/lib": "Utility libraries (auth, db, ai, export)",
+    "packages/db/src": "Drizzle schema and exports"
+  },
+
+  "database": {
+    "provider": "Neon PostgreSQL",
+    "connection": "apps/dashboard/src/lib/db.ts via @neondatabase/serverless neon() + drizzle()",
+    "schema_location": "packages/db/src/schema.ts",
+    "schema_package": "@sessionforge/db",
+    "migration_commands": {
+      "generate": "bun run db:generate (runs: cd packages/db && bunx drizzle-kit generate)",
+      "push": "bun run db:push (runs: cd packages/db && bunx drizzle-kit push)"
+    }
+  },
+
+  "auth_pattern": {
+    "library": "better-auth",
+    "config": "apps/dashboard/src/lib/auth.ts",
+    "server_check": "import { auth } from '@/lib/auth'; import { headers } from 'next/headers'; const session = await auth.api.getSession({ headers: await headers() });",
+    "session_user_id": "session.user.id"
+  },
+
+  "api_route_conventions": {
+    "dynamic_export": "Always add: export const dynamic = 'force-dynamic';",
+    "params_pattern": "Next.js 15: { params }: { params: Promise<{ slug: string }> } — must await params",
+    "auth_first": "Always check session before any DB operations",
+    "ownership_check": "Verify workspace.ownerId === session.user.id before any workspace operations",
+    "error_responses": "NextResponse.json({ error: '...' }, { status: 4xx })",
+    "import_pattern": "import { auth } from '@/lib/auth'; import { headers } from 'next/headers'; import { NextRequest, NextResponse } from 'next/server'; import { db } from '@/lib/db'; import { tableName } from '@sessionforge/db'; import { eq, and } from 'drizzle-orm';"
+  },
+
+  "client_component_conventions": {
+    "directive": "'use client'; at top",
+    "routing": "useParams<{ workspace: string; postId?: string }>() for URL params",
+    "data_fetching": "useQuery({ queryKey: ['key', param], queryFn: async () => { const res = await fetch(...); if (!res.ok) throw new Error(...); return res.json(); }, enabled: !!param })",
+    "mutations": "useMutation({ mutationFn: async (...) => { ... }, onSuccess: () => qc.invalidateQueries(...) })"
+  },
+
+  "tailwind_design_system": {
+    "note": "All UI must use these sf-* custom tokens — do NOT use default Tailwind bg-white, text-gray-*, etc.",
+    "backgrounds": ["sf-bg-primary", "sf-bg-secondary", "sf-bg-tertiary"],
+    "text": ["sf-text-primary", "sf-text-secondary", "sf-text-muted"],
+    "borders": ["sf-border", "sf-border-strong", "sf-border-focus"],
+    "accent": ["sf-accent", "sf-accent-dim"],
+    "radius": ["rounded-sf", "rounded-sf-lg"],
+    "button_primary": "bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50",
+    "button_secondary": "bg-sf-bg-secondary border border-sf-border text-sf-text-secondary px-3 py-1.5 rounded-sf text-sm font-medium hover:text-sf-text-primary hover:border-sf-border-strong transition-colors",
+    "input": "bg-sf-bg-secondary border border-sf-border text-sf-text-primary rounded-sf px-3 py-2 text-sm focus:outline-none focus:border-sf-border-focus",
+    "label": "text-xs text-sf-text-secondary font-medium uppercase tracking-wide"
+  },
+
+  "existing_utilities": {
+    "markdown_to_html": "import { markdownToHtml } from '@/lib/export'; — converts markdown string to HTML",
+    "download_markdown": "import { downloadMarkdownFile } from '@/lib/export';",
+    "toast": "import { showToast } from '@/components/ui/toast'; showToast('message', 'success' | 'error' | 'info')",
+    "cn": "import { cn } from '@/lib/utils'; — classnames merger",
+    "time_ago": "import { timeAgo } from '@/lib/utils';"
+  },
+
+  "existing_schema_tables": [
+    "users", "authSessions", "accounts", "verifications",
+    "workspaces", "styleSettings", "claudeSessions",
+    "insights", "posts", "contentTriggers", "apiKeys"
+  ],
+
+  "posts_table_existing_columns": [
+    "id", "workspaceId", "title", "content", "markdown",
+    "contentType", "status", "insightId", "sourceMetadata",
+    "toneUsed", "wordCount", "createdAt", "updatedAt"
+  ],
+
+  "settings_pages": {
+    "base": "apps/dashboard/src/app/(dashboard)/[workspace]/settings/page.tsx",
+    "style": "apps/dashboard/src/app/(dashboard)/[workspace]/settings/style/page.tsx",
+    "api_keys": "apps/dashboard/src/app/(dashboard)/[workspace]/settings/api-keys/page.tsx",
+    "wordpress_to_create": "apps/dashboard/src/app/(dashboard)/[workspace]/settings/wordpress/page.tsx"
+  },
+
+  "content_editor": {
+    "page": "apps/dashboard/src/app/(dashboard)/[workspace]/content/[postId]/page.tsx",
+    "export_dropdown": "apps/dashboard/src/components/content/export-dropdown.tsx",
+    "social_copy": "apps/dashboard/src/components/content/social-copy-button.tsx",
+    "markdown_editor": "apps/dashboard/src/components/editor/markdown-editor.tsx"
+  },
+
+  "environment_variables": {
+    "required_existing": [
+      "DATABASE_URL — Neon PostgreSQL connection string",
+      "BETTER_AUTH_SECRET — Used as master key for encrypting WordPress app passwords",
+      "BETTER_AUTH_URL — Auth callback URL",
+      "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET — OAuth (existing)"
+    ],
+    "no_new_vars_needed": "WordPress credentials are stored encrypted in the DB per workspace, not in env vars"
+  }
+}

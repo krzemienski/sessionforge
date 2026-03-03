@@ -395,6 +395,8 @@ export const posts = pgTable(
     seoMetadata: jsonb("seo_metadata").$type<SeoMetadata>(),
     badgeEnabled: boolean("badge_enabled").default(false),
     platformFooterEnabled: boolean("platform_footer_enabled").default(false),
+    wordpressPublishedUrl: text("wordpress_published_url"),
+    wordpressPostId: integer("wordpress_post_id"),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -775,6 +777,25 @@ export const automationRuns = pgTable(
   ]
 );
 
+// ── WordPress Connections table (from 034-wordpress-publishing-integration) ──
+
+export const wordpressConnections = pgTable(
+  "wordpress_connections",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    siteUrl: text("site_url").notNull(),
+    username: text("username").notNull(),
+    encryptedAppPassword: text("encrypted_app_password").notNull(),
+    isActive: boolean("is_active").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [index("wordpressConnections_workspaceId_idx").on(table.workspaceId)]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -819,6 +840,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   contentMetrics: many(contentMetrics),
   platformSettings: one(platformSettings),
   webhookEndpoints: many(webhookEndpoints),
+  wordpressConnections: many(wordpressConnections),
   members: many(workspaceMembers),
   invites: many(workspaceInvites),
   activity: many(workspaceActivity),
@@ -967,6 +989,16 @@ export const webhookEndpointsRelations = relations(
   ({ one }) => ({
     workspace: one(workspaces, {
       fields: [webhookEndpoints.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
+
+export const wordpressConnectionsRelations = relations(
+  wordpressConnections,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [wordpressConnections.workspaceId],
       references: [workspaces.id],
     }),
   })

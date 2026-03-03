@@ -126,6 +126,51 @@ export function useSaveSeo() {
   });
 }
 
+export function useWordPressConnection(workspace: string) {
+  return useQuery({
+    queryKey: ["wordpress-connection", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/workspace/${workspace}/wordpress`);
+      if (!res.ok) throw new Error("Failed to fetch WordPress connection");
+      return res.json() as Promise<{ connected: boolean; siteUrl: string | null; username: string | null } | null>;
+    },
+    enabled: !!workspace,
+  });
+}
+
+export function useWordPressPublish() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      categories,
+      tags,
+      excerpt,
+      featuredImageUrl,
+      wpStatus,
+    }: {
+      id: string;
+      categories?: string[];
+      tags?: string[];
+      excerpt?: string;
+      featuredImageUrl?: string;
+      wpStatus?: string;
+    }) => {
+      const res = await fetch(`/api/content/${id}/wordpress/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categories, tags, excerpt, featuredImageUrl, wpStatus }),
+      });
+      if (!res.ok) throw new Error("WordPress publish failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["post", vars.id] });
+      qc.invalidateQueries({ queryKey: ["content"] });
+    },
+  });
+}
+
 export function useExportContent() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportCount, setExportCount] = useState<number | null>(null);
