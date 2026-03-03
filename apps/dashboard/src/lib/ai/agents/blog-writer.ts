@@ -19,6 +19,7 @@ import { BLOG_CONVERSATIONAL_PROMPT } from "../prompts/blog/conversational";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
 import { db } from "@/lib/db";
 import { agentRuns } from "../../../../../../packages/db/src/schema";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 
 const client = new Anthropic();
 
@@ -97,11 +98,12 @@ export function streamBlogWriter(input: BlogWriterInput): Response {
       const model = getModelForAgent("blog-writer");
       const tools = getToolsForAgent("blog-writer");
       const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "blog");
-      const systemPrompt = PROMPTS[input.tone ?? "technical"] + buildSkillSystemPromptSuffix(activeSkills);
+      const styleInjectedPrompt = await injectStyleProfile(PROMPTS[input.tone ?? "technical"], input.workspaceId);
+      const systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
 
       const userMessage = input.customInstructions
-        ? `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post.\n\nAdditional instructions: ${input.customInstructions}`
-        : `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post using create_post.`;
+        ? `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post. When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
+        : `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post using create_post. When calling create_post, set aiDraftMarkdown equal to the markdown content.`;
 
       const messages: Anthropic.MessageParam[] = [
         { role: "user", content: userMessage },

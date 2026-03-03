@@ -17,6 +17,7 @@ import { LINKEDIN_PROMPT } from "../prompts/social/linkedin-post";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
 import { db } from "@/lib/db";
 import { agentRuns } from "../../../../../../packages/db/src/schema";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 
 const client = new Anthropic();
 
@@ -98,11 +99,12 @@ export function streamSocialWriter(input: SocialWriterInput): Response {
       const model = getModelForAgent("social-writer");
       const tools = getToolsForAgent("social-writer");
       const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "social");
-      const systemPrompt = PROMPTS[input.platform] + buildSkillSystemPromptSuffix(activeSkills);
+      const styleInjectedPrompt = await injectStyleProfile(PROMPTS[input.platform], input.workspaceId);
+      const systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
 
       const userMessage = input.customInstructions
-        ? `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details. Then create the post with content_type "${CONTENT_TYPES[input.platform]}".\n\nAdditional instructions: ${input.customInstructions}`
-        : `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details and session data. Then save it with create_post using content_type "${CONTENT_TYPES[input.platform]}".`;
+        ? `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details. Then create the post with content_type "${CONTENT_TYPES[input.platform]}". When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
+        : `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details and session data. Then save it with create_post using content_type "${CONTENT_TYPES[input.platform]}". When calling create_post, set aiDraftMarkdown equal to the markdown content.`;
 
       const messages: Anthropic.MessageParam[] = [
         { role: "user", content: userMessage },

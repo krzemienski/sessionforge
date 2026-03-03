@@ -15,6 +15,7 @@ import { CHANGELOG_PROMPT } from "../prompts/changelog";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
 import { db } from "@/lib/db";
 import { agentRuns } from "../../../../../../packages/db/src/schema";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 
 const client = new Anthropic();
 
@@ -82,17 +83,17 @@ export function streamChangelogWriter(input: ChangelogWriterInput): Response {
     try {
       const model = getModelForAgent("changelog-writer");
       const tools = getToolsForAgent("changelog-writer");
+      const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "changelog");
+      const styleInjectedPrompt = await injectStyleProfile(CHANGELOG_PROMPT, input.workspaceId);
+      const finalSystemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
 
       const userMessage = input.customInstructions
-        ? `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First list sessions in the timeframe, then get summaries for each, then create a changelog post.\n\nAdditional instructions: ${input.customInstructions}`
-        : `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First use list_sessions_by_timeframe, then get_session_summary for notable sessions, then create a changelog post with create_post.`;
+        ? `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First list sessions in the timeframe, then get summaries for each, then create a changelog post. When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
+        : `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First use list_sessions_by_timeframe, then get_session_summary for notable sessions, then create a changelog post with create_post. When calling create_post, set aiDraftMarkdown equal to the markdown content.`;
 
       const messages: Anthropic.MessageParam[] = [
         { role: "user", content: userMessage },
       ];
-
-      const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "changelog");
-      const finalSystemPrompt = CHANGELOG_PROMPT + buildSkillSystemPromptSuffix(activeSkills);
 
       send("status", { phase: "starting", message: "Generating changelog..." });
 

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq, and, desc } from "drizzle-orm";
 import type { contentTypeEnum, postStatusEnum, toneProfileEnum } from "@sessionforge/db";
+import { computeEditStats } from "@/lib/style/edit-distance";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
 type PostStatus = (typeof postStatusEnum.enumValues)[number];
@@ -16,6 +17,7 @@ export interface CreatePostInput {
   parentPostId?: string;
   status?: PostStatus;
   toneUsed?: ToneProfile;
+  aiDraftMarkdown?: string;
   sourceMetadata?: Record<string, unknown>;
 }
 
@@ -56,6 +58,7 @@ export async function createPost(input: CreatePostInput) {
       status: input.status ?? "draft",
       toneUsed: input.toneUsed,
       wordCount,
+      aiDraftMarkdown: input.aiDraftMarkdown,
       sourceMetadata: input.sourceMetadata as any,
     })
     .returning();
@@ -82,6 +85,18 @@ export async function updatePost(
     updates.wordCount = countWords(input.markdown);
   } else if (input.content !== undefined) {
     updates.content = input.content;
+  }
+
+  // Compute edit distance when publishing if an AI draft was saved
+  if (input.status === "published") {
+    const existing = await db.query.posts.findFirst({
+      where: and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId)),
+    });
+    if (existing?.aiDraftMarkdown) {
+      const finalMarkdown = input.markdown ?? existing.markdown;
+      const stats = computeEditStats(existing.aiDraftMarkdown, finalMarkdown);
+      updates.editDistance = Math.round(stats.percentChanged);
+    }
   }
 
   const [updated] = await db
@@ -129,6 +144,10 @@ export const postManagerTools = [
         parentPostId: { type: "string", description: "ID of the source post being repurposed" },
         status: { type: "string" },
         toneUsed: { type: "string" },
+        aiDraftMarkdown: {
+          type: "string",
+          description: "Original AI-generated markdown to preserve for style learning. Set equal to markdown when creating an AI-generated draft.",
+        },
         sourceMetadata: { type: "object" },
       },
       required: ["title", "markdown", "contentType"],

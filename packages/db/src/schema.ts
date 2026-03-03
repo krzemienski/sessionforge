@@ -82,6 +82,11 @@ export const agentRunStatusEnum = pgEnum("agent_run_status", [
   "failed",
 ]);
 
+export const styleProfileGenerationStatusEnum = pgEnum(
+  "style_profile_generation_status",
+  ["pending", "generating", "completed", "failed"]
+);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -285,6 +290,43 @@ export const insights = pgTable(
   ]
 );
 
+export const writingStyleProfiles = pgTable(
+  "writing_style_profiles",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    formality: real("formality"),
+    technicalDepth: real("technical_depth"),
+    humor: real("humor"),
+    headingStyle: jsonb("heading_style").$type<{
+      preferredLevels: string[];
+      capitalization: "title" | "sentence" | "all_caps";
+      includeEmoji: boolean;
+    }>(),
+    codeStyle: jsonb("code_style").$type<{
+      commentDensity: "minimal" | "moderate" | "heavy";
+      preferInlineComments: boolean;
+      explanationStyle: "before" | "after" | "inline";
+    }>(),
+    vocabularyPatterns: jsonb("vocabulary_patterns").$type<string[]>(),
+    sampleEdits: jsonb("sample_edits").$type<
+      { original: string; edited: string; postId: string }[]
+    >(),
+    publishedPostsAnalyzed: integer("published_posts_analyzed").default(0),
+    generationStatus: styleProfileGenerationStatusEnum(
+      "generation_status"
+    ).default("pending"),
+    lastGeneratedAt: timestamp("last_generated_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("writingStyleProfiles_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
 export const posts = pgTable(
   "posts",
   {
@@ -319,7 +361,10 @@ export const posts = pgTable(
     hashnodeUrl: text("hashnode_url"),
     aiDraftMarkdown: text("ai_draft_markdown"),
     editDistance: integer("edit_distance"),
-    styleProfileUsed: text("style_profile_used"),
+    styleProfileUsed: text("style_profile_used").references(
+      () => writingStyleProfiles.id,
+      { onDelete: "set null" }
+    ),
     seoMetadata: jsonb("seo_metadata").$type<SeoMetadata>(),
     badgeEnabled: boolean("badge_enabled").default(false),
     platformFooterEnabled: boolean("platform_footer_enabled").default(false),
@@ -589,6 +634,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   }),
   styleSettings: one(styleSettings),
   integrationSettings: one(integrationSettings),
+  writingStyleProfiles: many(writingStyleProfiles),
   claudeSessions: many(claudeSessions),
   insights: many(insights),
   posts: many(posts),
@@ -617,6 +663,17 @@ export const integrationSettingsRelations = relations(
       fields: [integrationSettings.workspaceId],
       references: [workspaces.id],
     }),
+  })
+);
+
+export const writingStyleProfilesRelations = relations(
+  writingStyleProfiles,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [writingStyleProfiles.workspaceId],
+      references: [workspaces.id],
+    }),
+    posts: many(posts),
   })
 );
 
@@ -667,6 +724,10 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   devtoPublication: one(devtoPublications, {
     fields: [posts.id],
     references: [devtoPublications.postId],
+  }),
+  writingStyleProfile: one(writingStyleProfiles, {
+    fields: [posts.styleProfileUsed],
+    references: [writingStyleProfiles.id],
   }),
 }));
 

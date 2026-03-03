@@ -10,6 +10,7 @@ import { handlePostManagerTool } from "../tools/post-manager";
 import { handleMarkdownEditorTool } from "../tools/markdown-editor";
 import { EDITOR_ASSISTANT_PROMPT } from "../prompts/editor-assistant";
 import { createSSEStream, sseResponse } from "../orchestration/streaming";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 
 const client = new Anthropic();
 
@@ -38,6 +39,7 @@ export function streamEditorChat(input: EditorChatInput): Response {
     try {
       const model = getModelForAgent("editor-chat");
       const tools = getToolsForAgent("editor-chat");
+      const systemPrompt = await injectStyleProfile(EDITOR_ASSISTANT_PROMPT, input.workspaceId);
 
       const messages: Anthropic.MessageParam[] = [
         ...(input.conversationHistory ?? []),
@@ -52,7 +54,7 @@ export function streamEditorChat(input: EditorChatInput): Response {
       let response = await client.messages.create({
         model,
         max_tokens: 4096,
-        system: EDITOR_ASSISTANT_PROMPT,
+        system: systemPrompt,
         tools: tools as Anthropic.Tool[],
         messages,
       });
@@ -103,7 +105,7 @@ export function streamEditorChat(input: EditorChatInput): Response {
         response = await client.messages.create({
           model,
           max_tokens: 4096,
-          system: EDITOR_ASSISTANT_PROMPT,
+          system: systemPrompt,
           tools: tools as Anthropic.Tool[],
           messages,
         });
