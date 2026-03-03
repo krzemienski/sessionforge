@@ -70,13 +70,15 @@ async function globJsonl(dir: string): Promise<string[]> {
  */
 export async function scanSessionFiles(
   lookbackDays = 30,
-  basePath = "~/.claude"
+  basePath = "~/.claude",
+  sinceTimestamp?: Date
 ): Promise<SessionFileMeta[]> {
   const resolvedBase = basePath.startsWith("~")
     ? path.join(os.homedir(), basePath.slice(1))
     : basePath;
 
-  const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+  const cutoff =
+    sinceTimestamp ?? new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
   const results: SessionFileMeta[] = [];
 
   // ~/.claude/projects/*/sessions/*.jsonl
