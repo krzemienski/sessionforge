@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
@@ -8,62 +8,65 @@ import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";
 import { indexSessions } from "@/lib/sessions/indexer";
+import { withApiHandler } from "@/lib/api-handler";
+import { parseBody, sessionScanSchema } from "@/lib/validation";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: Request) {
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const body = await req.json().catch(() => ({}));
-  const lookbackDays: number = typeof body.lookbackDays === "number" ? body.lookbackDays : 30;
-  const fullRescan: boolean = body.fullRescan === true;
+    const rawBody = await req.json().catch(() => ({}));
+    const { lookbackDays, fullRescan } = parseBody(sessionScanSchema, rawBody);
 
-  const scanStartTime = new Date();
-  const start = Date.now();
+    const scanStartTime = new Date();
+    const start = Date.now();
 
-  // Get user's workspace
-  const workspace = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.ownerId, session.user.id))
-    .limit(1);
+    const workspace = await db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.ownerId, session.user.id))
+      .limit(1);
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "No workspace found" }, { status: 404 });
-  }
+    if (!workspace.length) {
+      throw new AppError("No workspace found", ERROR_CODES.NOT_FOUND);
+    }
 
-  const ws = workspace[0];
-  const basePath = ws.sessionBasePath ?? "~/.claude";
+    const ws = workspace[0];
+    const basePath = ws.sessionBasePath ?? "~/.claude";
 
-  // Incremental mode: use lastScanAt as cutoff unless fullRescan requested
-  const isIncremental = !fullRescan && ws.lastScanAt != null;
-  const sinceTimestamp = isIncremental ? (ws.lastScanAt ?? undefined) : undefined;
+    // Incremental mode: use lastScanAt as cutoff unless fullRescan requested
+    const isIncremental = !fullRescan && ws.lastScanAt != null;
+    const sinceTimestamp = isIncremental ? (ws.lastScanAt ?? undefined) : undefined;
 
-  const files = await scanSessionFiles(lookbackDays, basePath, sinceTimestamp);
+    const files = await scanSessionFiles(lookbackDays, basePath, sinceTimestamp);
 
-  const normalized = await Promise.all(
-    files.map(async (meta) => {
-      const parsed = await parseSessionFile(meta.filePath);
-      return normalizeSession(meta, parsed);
-    })
-  );
+    const normalized = await Promise.all(
+      files.map(async (meta) => {
+        const parsed = await parseSessionFile(meta.filePath);
+        return normalizeSession(meta, parsed);
+      })
+    );
 
-  const result = await indexSessions(ws.id, normalized);
+    const result = await indexSessions(ws.id, normalized);
 
-  // Persist the scan start time so next incremental scan uses it as cutoff
-  await db
-    .update(workspaces)
-    .set({ lastScanAt: scanStartTime })
-    .where(eq(workspaces.id, ws.id));
+    // Persist the scan start time so next incremental scan uses it as cutoff
+    await db
+      .update(workspaces)
+      .set({ lastScanAt: scanStartTime })
+      .where(eq(workspaces.id, ws.id));
 
-  return NextResponse.json({
-    scanned: result.scanned,
-    new: result.new,
-    updated: result.updated,
-    errors: result.errors,
-    durationMs: Date.now() - start,
-    isIncremental,
-    lastScanAt: scanStartTime.toISOString(),
-  });
+    return NextResponse.json({
+      scanned: result.scanned,
+      new: result.new,
+      updated: result.updated,
+      errors: result.errors,
+      durationMs: Date.now() - start,
+      isIncremental,
+      lastScanAt: scanStartTime.toISOString(),
+    });
+  })(req);
 }

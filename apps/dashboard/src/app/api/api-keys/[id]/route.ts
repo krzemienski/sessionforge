@@ -4,32 +4,35 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { apiKeys } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
 export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await ctx.params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const existing = await db.query.apiKeys.findFirst({
+      where: eq(apiKeys.id, id),
+      with: { workspace: true },
+    });
 
-  const existing = await db.query.apiKeys.findFirst({
-    where: eq(apiKeys.id, id),
-    with: { workspace: true },
-  });
+    if (!existing) {
+      throw new AppError("API key not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (!existing) {
-    return NextResponse.json({ error: "API key not found" }, { status: 404 });
-  }
+    if (existing.workspace.ownerId !== session.user.id) {
+      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    await db.delete(apiKeys).where(eq(apiKeys.id, id));
 
-  await db.delete(apiKeys).where(eq(apiKeys.id, id));
-
-  return NextResponse.json({ deleted: true });
+    return NextResponse.json({ deleted: true });
+  })(req);
 }

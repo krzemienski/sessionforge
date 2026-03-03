@@ -9,114 +9,119 @@ import {
   updateDevtoArticle,
   DevtoApiError,
 } from "@/lib/integrations/devto";
+import { withApiHandler } from "@/lib/api-handler";
+import { parseBody, devtoPublishSchema } from "@/lib/validation";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { searchParams } = new URL(request.url);
-  const postId = searchParams.get("postId");
+    const { searchParams } = new URL(request.url);
+    const postId = searchParams.get("postId");
 
-  if (!postId) {
-    return NextResponse.json({ error: "postId query param required" }, { status: 400 });
-  }
+    if (!postId)
+      throw new AppError("postId query param required", ERROR_CODES.BAD_REQUEST);
 
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-    with: { workspace: true },
-  });
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { workspace: true },
+    });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
 
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    if (post.workspace.ownerId !== session.user.id)
+      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
 
-  const publication = await db.query.devtoPublications.findFirst({
-    where: eq(devtoPublications.postId, postId),
-  });
+    const publication = await db.query.devtoPublications.findFirst({
+      where: eq(devtoPublications.postId, postId),
+    });
 
-  if (!publication) {
-    return NextResponse.json({ published: false });
-  }
+    if (!publication) {
+      return NextResponse.json({ published: false });
+    }
 
-  return NextResponse.json({
-    published: true,
-    devtoArticleId: publication.devtoArticleId,
-    devtoUrl: publication.devtoUrl,
-    publishedAsDraft: publication.publishedAsDraft,
-    syncedAt: publication.syncedAt,
-  });
+    return NextResponse.json({
+      published: true,
+      devtoArticleId: publication.devtoArticleId,
+      devtoUrl: publication.devtoUrl,
+      publishedAsDraft: publication.publishedAsDraft,
+      syncedAt: publication.syncedAt,
+    });
+  })(request);
 }
 
 export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const body = await request.json();
-  const { postId, workspaceSlug, published, tags, canonicalUrl, series } = body;
+    const rawBody = await request.json().catch(() => ({}));
+    const { postId, workspaceSlug, published, tags, canonicalUrl, series } =
+      parseBody(devtoPublishSchema, rawBody);
 
-  if (!postId || !workspaceSlug) {
-    return NextResponse.json(
-      { error: "postId and workspaceSlug are required" },
-      { status: 400 }
-    );
-  }
-
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-    with: { workspace: true },
-  });
-
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
-
-  if (
-    post.workspace.slug !== workspaceSlug ||
-    post.workspace.ownerId !== session.user.id
-  ) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const integration = await db.query.devtoIntegrations.findFirst({
-    where: and(
-      eq(devtoIntegrations.workspaceId, post.workspaceId),
-      eq(devtoIntegrations.enabled, true)
-    ),
-  });
-
-  if (!integration) {
-    return NextResponse.json(
-      { error: "Dev.to integration not configured or disabled" },
-      { status: 400 }
-    );
-  }
-
-  const existing = await db.query.devtoPublications.findFirst({
-    where: eq(devtoPublications.postId, postId),
-  });
-
-  if (existing) {
-    return NextResponse.json(
-      { error: "Post already published to Dev.to. Use PUT to update." },
-      { status: 409 }
-    );
-  }
-
-  try {
-    const result = await publishToDevto(integration.apiKey, {
-      title: post.title,
-      body_markdown: post.markdown,
-      published: published ?? false,
-      tags: tags ?? [],
-      canonical_url: canonicalUrl,
-      series,
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { workspace: true },
     });
+
+    if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+
+    if (
+      post.workspace.slug !== workspaceSlug ||
+      post.workspace.ownerId !== session.user.id
+    ) {
+      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    }
+
+    const integration = await db.query.devtoIntegrations.findFirst({
+      where: and(
+        eq(devtoIntegrations.workspaceId, post.workspaceId),
+        eq(devtoIntegrations.enabled, true)
+      ),
+    });
+
+    if (!integration)
+      throw new AppError(
+        "Dev.to integration not configured or disabled",
+        ERROR_CODES.BAD_REQUEST
+      );
+
+    const existing = await db.query.devtoPublications.findFirst({
+      where: eq(devtoPublications.postId, postId),
+    });
+
+    if (existing)
+      throw new AppError(
+        "Post already published to Dev.to. Use PUT to update.",
+        ERROR_CODES.BAD_REQUEST,
+        409
+      );
+
+    let result: Awaited<ReturnType<typeof publishToDevto>>;
+    try {
+      result = await publishToDevto(integration.apiKey, {
+        title: post.title,
+        body_markdown: post.markdown,
+        published: published ?? false,
+        tags: tags ?? [],
+        canonical_url: canonicalUrl,
+        series,
+      });
+    } catch (err) {
+      if (err instanceof DevtoApiError) {
+        throw new AppError(
+          err.message,
+          ERROR_CODES.BAD_REQUEST,
+          err.status === 401 ? 400 : err.status,
+          { devtoCode: err.code }
+        );
+      }
+      throw err;
+    }
 
     await db.insert(devtoPublications).values({
       workspaceId: post.workspaceId,
@@ -143,82 +148,71 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
-  } catch (error) {
-    if (error instanceof DevtoApiError) {
-      return NextResponse.json(
-        { error: error.message, code: error.code },
-        { status: error.status === 401 ? 400 : error.status }
-      );
-    }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to publish to Dev.to" },
-      { status: 500 }
-    );
-  }
+  })(request);
 }
 
 export async function PUT(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const body = await request.json();
-  const { postId, workspaceSlug, published, tags, canonicalUrl, series } = body;
+    const rawBody = await request.json().catch(() => ({}));
+    const { postId, workspaceSlug, published, tags, canonicalUrl, series } =
+      parseBody(devtoPublishSchema, rawBody);
 
-  if (!postId || !workspaceSlug) {
-    return NextResponse.json(
-      { error: "postId and workspaceSlug are required" },
-      { status: 400 }
-    );
-  }
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+      with: { workspace: true },
+    });
 
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-    with: { workspace: true },
-  });
+    if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (
+      post.workspace.slug !== workspaceSlug ||
+      post.workspace.ownerId !== session.user.id
+    ) {
+      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    }
 
-  if (
-    post.workspace.slug !== workspaceSlug ||
-    post.workspace.ownerId !== session.user.id
-  ) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    const publication = await db.query.devtoPublications.findFirst({
+      where: eq(devtoPublications.postId, postId),
+      with: { integration: true },
+    });
 
-  const publication = await db.query.devtoPublications.findFirst({
-    where: eq(devtoPublications.postId, postId),
-    with: { integration: true },
-  });
+    if (!publication)
+      throw new AppError(
+        "Post not published to Dev.to yet. Use POST to publish first.",
+        ERROR_CODES.NOT_FOUND
+      );
 
-  if (!publication) {
-    return NextResponse.json(
-      { error: "Post not published to Dev.to yet. Use POST to publish first." },
-      { status: 404 }
-    );
-  }
+    if (!publication.integration.enabled)
+      throw new AppError("Dev.to integration is disabled", ERROR_CODES.BAD_REQUEST);
 
-  if (!publication.integration.enabled) {
-    return NextResponse.json(
-      { error: "Dev.to integration is disabled" },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const result = await updateDevtoArticle(
-      publication.integration.apiKey,
-      publication.devtoArticleId,
-      {
-        title: post.title,
-        body_markdown: post.markdown,
-        published: published ?? !publication.publishedAsDraft,
-        tags: tags ?? [],
-        canonical_url: canonicalUrl,
-        series,
+    let result: Awaited<ReturnType<typeof updateDevtoArticle>>;
+    try {
+      result = await updateDevtoArticle(
+        publication.integration.apiKey,
+        publication.devtoArticleId,
+        {
+          title: post.title,
+          body_markdown: post.markdown,
+          published: published ?? !publication.publishedAsDraft,
+          tags: tags ?? [],
+          canonical_url: canonicalUrl,
+          series,
+        }
+      );
+    } catch (err) {
+      if (err instanceof DevtoApiError) {
+        throw new AppError(
+          err.message,
+          ERROR_CODES.BAD_REQUEST,
+          err.status === 401 ? 400 : err.status,
+          { devtoCode: err.code }
+        );
       }
-    );
+      throw err;
+    }
 
     await db
       .update(devtoPublications)
@@ -242,16 +236,5 @@ export async function PUT(request: Request) {
       devtoUrl: result.url,
       published: result.published,
     });
-  } catch (error) {
-    if (error instanceof DevtoApiError) {
-      return NextResponse.json(
-        { error: error.message, code: error.code },
-        { status: error.status === 401 ? 400 : error.status }
-      );
-    }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update Dev.to article" },
-      { status: 500 }
-    );
-  }
+  })(request);
 }

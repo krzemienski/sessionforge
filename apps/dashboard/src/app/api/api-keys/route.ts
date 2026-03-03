@@ -5,80 +5,80 @@ import { db } from "@/lib/db";
 import { apiKeys, workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { createHash, randomBytes } from "crypto";
+import { withApiHandler } from "@/lib/api-handler";
+import { parseBody, apiKeyCreateSchema } from "@/lib/validation";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(req: Request) {
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { searchParams } = new URL(request.url);
-  const workspaceSlug = searchParams.get("workspace");
+    const { searchParams } = new URL(req.url);
+    const workspaceSlug = searchParams.get("workspace");
 
-  if (!workspaceSlug) {
-    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
-  }
+    if (!workspaceSlug) {
+      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
+    }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.slug, workspaceSlug),
+    });
 
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    if (!workspace || workspace.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  const keys = await db.query.apiKeys.findMany({
-    where: eq(apiKeys.workspaceId, workspace.id),
-    columns: {
-      id: true,
-      name: true,
-      keyPrefix: true,
-      lastUsedAt: true,
-      createdAt: true,
-    },
-  });
+    const keys = await db.query.apiKeys.findMany({
+      where: eq(apiKeys.workspaceId, workspace.id),
+      columns: {
+        id: true,
+        name: true,
+        keyPrefix: true,
+        lastUsedAt: true,
+        createdAt: true,
+      },
+    });
 
-  return NextResponse.json({ keys });
+    return NextResponse.json({ keys });
+  })(req);
 }
 
-export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: Request) {
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const body = await request.json();
-  const { workspaceSlug, name } = body;
+    const rawBody = await req.json().catch(() => ({}));
+    const { workspaceSlug, name } = parseBody(apiKeyCreateSchema, rawBody);
 
-  if (!workspaceSlug || !name) {
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.slug, workspaceSlug),
+    });
+
+    if (!workspace || workspace.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    }
+
+    const rawKey = `sf_live_${randomBytes(24).toString("hex")}`;
+    const keyHash = createHash("sha256").update(rawKey).digest("hex");
+    const keyPrefix = rawKey.slice(0, 16);
+
+    const [apiKey] = await db
+      .insert(apiKeys)
+      .values({
+        workspaceId: workspace.id,
+        name,
+        keyHash,
+        keyPrefix,
+      })
+      .returning();
+
     return NextResponse.json(
-      { error: "workspaceSlug and name are required" },
-      { status: 400 }
+      { id: apiKey.id, name: apiKey.name, key: rawKey, keyPrefix },
+      { status: 201 }
     );
-  }
-
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
-
-  const rawKey = `sf_live_${randomBytes(24).toString("hex")}`;
-  const keyHash = createHash("sha256").update(rawKey).digest("hex");
-  const keyPrefix = rawKey.slice(0, 16);
-
-  const [apiKey] = await db
-    .insert(apiKeys)
-    .values({
-      workspaceId: workspace.id,
-      name,
-      keyHash,
-      keyPrefix,
-    })
-    .returning();
-
-  return NextResponse.json(
-    { id: apiKey.id, name: apiKey.name, key: rawKey, keyPrefix },
-    { status: 201 }
-  );
+  })(req);
 }

@@ -1,45 +1,48 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions, workspaces } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await ctx.params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const workspace = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(eq(workspaces.ownerId, session.user.id))
+      .limit(1);
 
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(eq(workspaces.ownerId, session.user.id))
-    .limit(1);
+    if (!workspace.length) {
+      throw new AppError("No workspace found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "No workspace found" }, { status: 404 });
-  }
-
-  const rows = await db
-    .select()
-    .from(claudeSessions)
-    .where(
-      and(
-        eq(claudeSessions.workspaceId, workspace[0].id),
-        eq(claudeSessions.id, id)
+    const rows = await db
+      .select()
+      .from(claudeSessions)
+      .where(
+        and(
+          eq(claudeSessions.workspaceId, workspace[0].id),
+          eq(claudeSessions.id, id)
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
 
-  if (!rows.length) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  }
+    if (!rows.length) {
+      throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  return NextResponse.json(rows[0]);
+    return NextResponse.json(rows[0]);
+  })(req);
 }
