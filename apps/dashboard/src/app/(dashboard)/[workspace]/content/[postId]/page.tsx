@@ -4,9 +4,10 @@ import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost } from "@/hooks/use-content";
 import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, Send, RefreshCw, Pencil, Columns2, Eye } from "lucide-react";
+import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
+import { HashnodePublishModal } from "@/components/publish/hashnode-publish-modal";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
@@ -34,6 +35,8 @@ export default function ContentEditorPage() {
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
   const [externalMd, setExternalMd] = useState<string | null>(null);
+  const [hashnodeModalOpen, setHashnodeModalOpen] = useState(false);
+  const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
   const [badgeEnabled, setBadgeEnabled] = useState(false);
   const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
@@ -45,6 +48,7 @@ export default function ContentEditorPage() {
       setTitle(post.data.title || "");
       setMarkdown(post.data.markdown || "");
       setStatus(post.data.status || "draft");
+      setHashnodeUrl(post.data.hashnodeUrl || null);
       setBadgeEnabled(post.data.badgeEnabled ?? false);
       setPlatformFooterEnabled(post.data.platformFooterEnabled ?? false);
       initializedRef.current = true;
@@ -84,11 +88,16 @@ export default function ContentEditorPage() {
     setTimeout(() => setExternalMd(null), 100);
   }, []);
 
+  const handleHashnodeSuccess = useCallback((url: string) => {
+    setHashnodeUrl(url);
+  }, []);
+
   if (post.isLoading) {
     return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
   }
 
   const wordCount = markdown.split(/\s+/).filter(Boolean).length;
+  const isBlogPost = post.data?.contentType === "blog_post";
   const isDevtoConnected = devtoIntegration.data?.connected && devtoIntegration.data?.enabled;
   const isAlreadyPublished = devtoPublication.data?.published === true;
 
@@ -105,6 +114,15 @@ export default function ContentEditorPage() {
           <ArrowLeft size={16} /> Content
         </button>
         <div className="flex items-center gap-3">
+          {isBlogPost && (
+            <button
+              onClick={() => setHashnodeModalOpen(true)}
+              className="flex items-center gap-2 border border-sf-border text-sf-text-secondary px-4 py-2 rounded-sf font-medium text-sm hover:text-sf-text-primary hover:border-sf-border-focus transition-colors"
+            >
+              <Send size={15} />
+              Publish to Hashnode
+            </button>
+          )}
           {isDevtoConnected && (
             <button
               onClick={() => setIsDevtoModalOpen(true)}
@@ -236,6 +254,17 @@ export default function ContentEditorPage() {
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-sf-border">
         <span className="text-xs text-sf-text-muted">{wordCount} words</span>
         <div className="flex items-center gap-3">
+          {hashnodeUrl && (
+            <a
+              href={hashnodeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-sf-accent hover:underline"
+            >
+              <ExternalLink size={12} />
+              Hashnode
+            </a>
+          )}
           {(post.data?.contentType === "twitter_thread" || post.data?.contentType === "linkedin_post") && (
             <SocialCopyButton
               markdown={markdown}
@@ -245,6 +274,14 @@ export default function ContentEditorPage() {
           <span className="text-xs text-sf-text-muted capitalize">{post.data?.contentType?.replace(/_/g, " ")}</span>
         </div>
       </div>
+
+      <HashnodePublishModal
+        postId={postId}
+        workspace={workspace}
+        isOpen={hashnodeModalOpen}
+        onClose={() => setHashnodeModalOpen(false)}
+        onSuccess={handleHashnodeSuccess}
+      />
 
       <DevtoPublishModal
         postId={postId}

@@ -9,6 +9,7 @@ import {
   Lightbulb,
   FileText,
   Settings,
+  Plug2,
 } from "lucide-react";
 
 const tabs = [
@@ -17,6 +18,7 @@ const tabs = [
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
   { label: "Settings", icon: Settings, href: "/settings" },
+  { label: "Integrations", icon: Plug2, href: "/settings/integrations" },
 ];
 
 export function MobileBottomNav({ workspace }: { workspace: string }) {

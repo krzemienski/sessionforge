@@ -17,10 +17,10 @@
       "breakpoints": true
     },
     {
-      "idx": 1,
+      "idx": 2,
       "version": "7",
-      "when": 1772474264757,
-      "tag": "0001_add_onboarding_completed",
+      "when": 1772512800000,
+      "tag": "0002_hashnode_integration",
       "breakpoints": true
     }
   ]
