@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions, insights, posts, workspaces } from "@sessionforge/db";
-import { eq, ilike, or, and } from "drizzle-orm";
+import { eq, ilike, or, and } from "drizzle-orm/sql";
 
 export const dynamic = "force-dynamic";
 

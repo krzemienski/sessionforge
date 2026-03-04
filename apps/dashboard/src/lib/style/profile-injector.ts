@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { writingStyleProfiles } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 
 type WritingStyleProfile = typeof writingStyleProfiles.$inferSelect;
 

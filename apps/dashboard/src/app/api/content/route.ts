@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, workspaces, toneProfileEnum } from "@sessionforge/db";
-import { eq, desc, and, gte, lte, ilike } from "drizzle-orm";
+import { eq, desc, and, gte, lte, ilike } from "drizzle-orm/sql";
 import { createPost } from "@/lib/ai/tools/post-manager";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, contentCreateSchema } from "@/lib/validation";

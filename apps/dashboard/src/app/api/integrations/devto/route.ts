@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { devtoIntegrations, workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { verifyDevtoApiKey, DevtoApiError } from "@/lib/integrations/devto";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, devtoConnectSchema } from "@/lib/validation";

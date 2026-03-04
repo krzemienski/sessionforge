@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces, wordpressConnections } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 import { decryptAppPassword } from "@/lib/wordpress/crypto";
 import { WordPressClient } from "@/lib/wordpress/client";
 

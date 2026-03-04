@@ -2,11 +2,12 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { streamNewsletterWriter } from "@/lib/ai/agents/newsletter-writer";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, agentNewsletterSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { checkQuota, recordUsage } from "@/lib/billing/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +30,22 @@ export async function POST(request: Request) {
       throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
     }
 
-    return streamNewsletterWriter({
+    const quota = await checkQuota(session.user.id, "content_generation");
+    if (!quota.allowed) {
+      return new Response(JSON.stringify({
+        error: "Monthly content generation quota exceeded",
+        quota: { limit: quota.limit, remaining: quota.remaining, percentUsed: quota.percentUsed },
+      }), { status: 402, headers: { "Content-Type": "application/json" } });
+    }
+
+    const result = await streamNewsletterWriter({
       workspaceId: workspace.id,
       lookbackDays: lookbackDays ?? 7,
       customInstructions,
     });
+
+    void recordUsage(session.user.id, workspace.id, "content_generation", 0.05);
+
+    return result;
   })(request);
 }

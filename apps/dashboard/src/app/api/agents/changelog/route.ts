@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { streamChangelogWriter } from "@/lib/ai/agents/changelog-writer";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, agentChangelogSchema } from "@/lib/validation";
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       }), { status: 402, headers: { "Content-Type": "application/json" } });
     }
 
-    const result = streamChangelogWriter({
+    const result = await streamChangelogWriter({
       workspaceId: workspace.id,
       lookbackDays,
       projectFilter,

@@ -6,7 +6,11 @@ import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History } from "lucide-react";
 import dynamic from "next/dynamic";
+import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
+import type { Layout } from "react-resizable-panels";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
+import { InlineEditControls } from "@/components/editor/inline-edit-controls";
+import { useEditorChat } from "@/hooks/use-editor-chat";
 import { HashnodePublishModal } from "@/components/publish/hashnode-publish-modal";
 import { cn } from "@/lib/utils";
 import { computeSeoScore } from "@/lib/seo";
@@ -18,6 +22,10 @@ import { SHORTCUTS } from "@/lib/keyboard-shortcuts";
 import { SourceCard } from "@/components/content/source-card";
 import { AuthenticityBadge } from "@/components/content/authenticity-badge";
 import { ContentPreview } from "@/components/preview/content-preview";
+import { EvidenceExplorer } from "@/components/editor/evidence-explorer";
+import { SupplementaryPanel } from "@/components/editor/supplementary-panel";
+import { MediaPanel } from "@/components/editor/media-panel";
+import { RepositoryPanel } from "@/components/editor/repository-panel";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -47,6 +55,25 @@ type RepurposeFormat = (typeof REPURPOSE_OPTIONS)[number]["format"];
 
 const AUTO_SAVE_INTERVAL_MS = 2 * 60 * 1000;
 
+function loadLayout(key: string, fallback: Layout): Layout {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (stored) return JSON.parse(stored) as Layout;
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
+function saveLayout(key: string, layout: Layout) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(layout));
+  } catch {
+    // ignore
+  }
+}
+
 export default function ContentEditorPage() {
   const { workspace, postId } = useParams<{ workspace: string; postId: string }>();
   const router = useRouter();
@@ -61,7 +88,8 @@ export default function ContentEditorPage() {
   const [externalMd, setExternalMd] = useState<string | null>(null);
   const [hashnodeModalOpen, setHashnodeModalOpen] = useState(false);
   const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo">("chat");
+  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository">("chat");
+  const [highlightedCitation, setHighlightedCitation] = useState<string | null>(null);
   const [repurposing, setRepurposing] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -159,8 +187,15 @@ export default function ContentEditorPage() {
     lastSavedMarkdownRef.current = newMd;
   }, [postId, update]);
 
+  const editorChat = useEditorChat({ postId, workspace, onEditsApplied: handleEditsApplied });
+
   const handleHashnodeSuccess = useCallback((url: string) => {
     setHashnodeUrl(url);
+  }, []);
+
+  const handleCitationClick = useCallback((type: string, label: string) => {
+    setSidebarTab("evidence");
+    setHighlightedCitation(`${type}:${label}`);
   }, []);
 
   async function handleRepurpose(format: RepurposeFormat, label: string) {
@@ -398,11 +433,22 @@ export default function ContentEditorPage() {
         placeholder="Post title..."
       />
 
-      <div className="flex-1 flex gap-4 min-h-0">
-        {/* Edit mode: editor + tabbed sidebar (AI chat / SEO) + source/badge */}
+      <InlineEditControls
+        currentWordCount={wordCount}
+        isStreaming={editorChat.isStreaming}
+        onSendMessage={editorChat.sendMessage}
+      />
+
+      <div className="flex-1 flex min-h-0">
+        {/* Edit mode: resizable editor + tabbed sidebar */}
         {viewMode === "edit" && (
-          <>
-            <div className="flex-1 flex flex-col min-h-0">
+          <PanelGroup
+            orientation="horizontal"
+            defaultLayout={loadLayout("editor-edit-layout", { "edit-editor": 60, "edit-sidebar": 40 })}
+            onLayoutChanged={(layout) => saveLayout("editor-edit-layout", layout)}
+            className="flex-1"
+          >
+            <Panel id="edit-editor" defaultSize={60} minSize={30} className="flex flex-col min-h-0">
               {initializedRef.current && (
                 <MarkdownEditor
                   initialMarkdown={post.data?.markdown || ""}
@@ -410,39 +456,61 @@ export default function ContentEditorPage() {
                   externalMarkdown={externalMd}
                 />
               )}
-            </div>
-            <div className="hidden lg:flex w-[340px] flex-col gap-3">
+            </Panel>
+            <PanelResizeHandle className="w-1 bg-sf-border hover:bg-sf-accent cursor-col-resize transition-colors mx-1" />
+            <Panel id="edit-sidebar" defaultSize={40} minSize={20} className="hidden lg:flex flex-col gap-3 min-h-0 overflow-y-auto">
               <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
                 {/* Sidebar tabs */}
                 <div className="flex gap-1 p-2 border-b border-sf-border">
-                  {(["chat", "seo"] as const).map((tab) => (
+                  {(["chat", "seo", "evidence", "supplementary", "media", "repository"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setSidebarTab(tab)}
                       className={cn(
-                        "px-3 py-1.5 text-sm rounded-sf transition-colors",
+                        "px-2 py-1.5 text-xs rounded-sf transition-colors",
                         sidebarTab === tab
                           ? "bg-sf-accent-bg text-sf-accent"
                           : "text-sf-text-secondary hover:bg-sf-bg-hover"
                       )}
                     >
-                      {tab === "chat" ? "AI Chat" : "SEO"}
+                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : "More"}
                     </button>
                   ))}
                 </div>
                 {/* Sidebar content */}
                 <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                  {sidebarTab === "chat" ? (
-                    <AIChatSidebar
-                      postId={postId}
-                      workspace={workspace}
-                      onEditsApplied={handleEditsApplied}
-                    />
-                  ) : (
+                  {sidebarTab === "chat" && (
+                    <AIChatSidebar chat={editorChat} />
+                  )}
+                  {sidebarTab === "seo" && (
                     <SeoPanel
                       postId={postId}
                       markdown={markdown}
                       title={title}
+                    />
+                  )}
+                  {sidebarTab === "evidence" && (
+                    <EvidenceExplorer
+                      postId={postId}
+                      highlightedCitation={highlightedCitation}
+                    />
+                  )}
+                  {sidebarTab === "supplementary" && (
+                    <SupplementaryPanel
+                      postId={postId}
+                      workspace={workspace}
+                    />
+                  )}
+                  {sidebarTab === "media" && (
+                    <MediaPanel
+                      postId={postId}
+                      workspace={workspace}
+                    />
+                  )}
+                  {sidebarTab === "repository" && (
+                    <RepositoryPanel
+                      postId={postId}
+                      workspace={workspace}
                     />
                   )}
                 </div>
@@ -455,14 +523,19 @@ export default function ContentEditorPage() {
                 onBadgeToggle={handleBadgeToggle}
                 onFooterToggle={handleFooterToggle}
               />
-            </div>
-          </>
+            </Panel>
+          </PanelGroup>
         )}
 
-        {/* Split mode: editor on left, preview on right */}
+        {/* Split mode: resizable editor + preview */}
         {viewMode === "split" && (
-          <>
-            <div className="flex-1 flex flex-col min-h-0">
+          <PanelGroup
+            orientation="horizontal"
+            defaultLayout={loadLayout("editor-split-layout", { "split-editor": 50, "split-preview": 50 })}
+            onLayoutChanged={(layout) => saveLayout("editor-split-layout", layout)}
+            className="flex-1"
+          >
+            <Panel id="split-editor" defaultSize={50} minSize={30} className="flex flex-col min-h-0">
               {initializedRef.current && (
                 <MarkdownEditor
                   initialMarkdown={post.data?.markdown || ""}
@@ -470,14 +543,16 @@ export default function ContentEditorPage() {
                   externalMarkdown={externalMd}
                 />
               )}
-            </div>
-            <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-y-auto">
+            </Panel>
+            <PanelResizeHandle className="w-1 bg-sf-border hover:bg-sf-accent cursor-col-resize transition-colors mx-1" />
+            <Panel id="split-preview" defaultSize={50} minSize={30} className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-y-auto">
               <ContentPreview
                 markdown={markdown}
                 contentType={post.data?.contentType || "blog_post"}
+                onCitationClick={handleCitationClick}
               />
-            </div>
-          </>
+            </Panel>
+          </PanelGroup>
         )}
 
         {/* Preview mode: full-width preview panel */}
@@ -486,6 +561,7 @@ export default function ContentEditorPage() {
             <ContentPreview
               markdown={markdown}
               contentType={post.data?.contentType || "blog_post"}
+              onCitationClick={handleCitationClick}
             />
           </div>
         )}

@@ -6,7 +6,7 @@ import {
   insights,
   workspaces,
 } from "@sessionforge/db";
-import { and, eq, gte, isNull } from "drizzle-orm";
+import { and, eq, gte, isNull } from "drizzle-orm/sql";
 import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";

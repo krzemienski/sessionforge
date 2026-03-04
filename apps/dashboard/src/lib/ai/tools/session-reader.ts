@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { claudeSessions } from "@sessionforge/db";
-import { eq, desc, gte, and } from "drizzle-orm";
+import { eq, desc, gte, and } from "drizzle-orm/sql";
 
 export interface SessionMessage {
   role: "user" | "assistant";

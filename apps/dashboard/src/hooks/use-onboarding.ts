@@ -113,7 +113,7 @@ export function useOnboardingScan() {
                 currentFile: "",
                 result: {
                   scanned: data.scanned,
-                  indexed: data.indexed,
+                  indexed: (data.new ?? 0) + (data.updated ?? 0),
                   errors: data.errors,
                   durationMs: data.durationMs,
                 },

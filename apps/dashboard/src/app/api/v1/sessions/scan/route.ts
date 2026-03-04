@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
 import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";

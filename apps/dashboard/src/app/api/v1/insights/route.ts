@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { insights } from "@sessionforge/db";
-import { eq, desc, and, gte, sql } from "drizzle-orm";
+import { eq, desc, and, gte, sql } from "drizzle-orm/sql";
 import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";

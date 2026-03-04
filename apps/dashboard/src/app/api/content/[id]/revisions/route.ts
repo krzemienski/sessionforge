@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, postRevisions } from "@sessionforge/db";
-import { eq, count } from "drizzle-orm";
+import { eq, count } from "drizzle-orm/sql";
 import { listRevisions } from "@/lib/revisions/manager";
 
 export const dynamic = "force-dynamic";

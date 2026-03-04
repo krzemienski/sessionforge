@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { apiKeys, workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { createHash, randomBytes } from "crypto";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, apiKeyCreateSchema } from "@/lib/validation";

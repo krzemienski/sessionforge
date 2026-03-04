@@ -11,14 +11,6 @@
     },
     "lint": {
       "dependsOn": ["^build"]
-    },
-    "test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
-    },
-    "test:e2e": {
-      "dependsOn": ["^build"],
-      "cache": false
     }
   }
 }

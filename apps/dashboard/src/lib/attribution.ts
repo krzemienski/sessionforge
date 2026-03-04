@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import type { insightCategoryEnum } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 
 type InsightCategory = (typeof insightCategoryEnum.enumValues)[number];
 

@@ -2,9 +2,9 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { redis } from "@/lib/redis";
+import { getRedis } from "@/lib/redis";
 import { workspaces, platformSettings, contentMetrics } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +90,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const start = Date.now();
+  const redis = await getRedis();
 
   const workspace = await db
     .select()
@@ -120,13 +121,13 @@ export async function POST(req: NextRequest) {
   if (settings.devtoApiKey) {
     const cacheKey = `devto:${ws.id}`;
     try {
-      const cached = await redis.get<DevtoArticle[]>(cacheKey);
+      const cached = redis ? await redis.get<DevtoArticle[]>(cacheKey) : null;
 
       if (cached) {
         results.devto.cached = true;
       } else {
         const articles = await fetchDevtoArticles(settings.devtoApiKey);
-        await redis.set(cacheKey, articles, { ex: REDIS_TTL_SECONDS });
+        if (redis) await redis.set(cacheKey, articles, { ex: REDIS_TTL_SECONDS });
 
         const rows = articles.map((article) => ({
           workspaceId: ws.id,
@@ -155,13 +156,13 @@ export async function POST(req: NextRequest) {
   if (settings.hashnodeApiKey) {
     const cacheKey = `hashnode:${ws.id}`;
     try {
-      const cached = await redis.get<HashnodePost[]>(cacheKey);
+      const cached = redis ? await redis.get<HashnodePost[]>(cacheKey) : null;
 
       if (cached) {
         results.hashnode.cached = true;
       } else {
         const posts = await fetchHashnodePosts(settings.hashnodeApiKey);
-        await redis.set(cacheKey, posts, { ex: REDIS_TTL_SECONDS });
+        if (redis) await redis.set(cacheKey, posts, { ex: REDIS_TTL_SECONDS });
 
         const rows = posts.map((post) => ({
           workspaceId: ws.id,

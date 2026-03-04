@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { webhookEndpoints } from "@sessionforge/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm/sql";
 import { deliverWebhook } from "./deliver";
 
 export const WEBHOOK_EVENTS = [
@@ -28,7 +28,7 @@ export async function fireWebhookEvent(
 
     const matching = endpoints.filter((ep) => ep.events?.includes(event));
 
-    Promise.allSettled(
+    await Promise.allSettled(
       matching.map((ep) => deliverWebhook(ep, event, payload))
     );
   } catch {

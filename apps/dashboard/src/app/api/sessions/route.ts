@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions, workspaces } from "@sessionforge/db";
-import { eq, desc, asc, gte, lte, and, sql, isNotNull, isNull } from "drizzle-orm";
+import { eq, desc, asc, gte, lte, and, sql, isNotNull, isNull } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 
@@ -30,11 +30,18 @@ export async function GET(req: Request) {
     const dateTo = searchParams.get("dateTo");
     const hasSummaryParam = searchParams.get("hasSummary");
 
-    const workspace = await db
-      .select({ id: workspaces.id })
-      .from(workspaces)
-      .where(eq(workspaces.ownerId, session.user.id))
-      .limit(1);
+    const workspaceSlug = searchParams.get("workspace");
+    const workspace = workspaceSlug
+      ? await db
+          .select({ id: workspaces.id })
+          .from(workspaces)
+          .where(and(eq(workspaces.slug, workspaceSlug), eq(workspaces.ownerId, session.user.id)))
+          .limit(1)
+      : await db
+          .select({ id: workspaces.id })
+          .from(workspaces)
+          .where(eq(workspaces.ownerId, session.user.id))
+          .limit(1);
 
     if (!workspace.length) {
       throw new AppError("No workspace found", ERROR_CODES.NOT_FOUND);

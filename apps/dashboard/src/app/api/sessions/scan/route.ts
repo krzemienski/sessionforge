@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";
@@ -21,16 +21,22 @@ export async function POST(req: Request) {
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
     const rawBody = await req.json().catch(() => ({}));
-    const { lookbackDays, fullRescan } = parseBody(sessionScanSchema, rawBody);
+    const { workspaceSlug, lookbackDays, fullRescan } = parseBody(sessionScanSchema, rawBody);
 
     const scanStartTime = new Date();
     const start = Date.now();
 
-    const workspace = await db
-      .select()
-      .from(workspaces)
-      .where(eq(workspaces.ownerId, session.user.id))
-      .limit(1);
+    const workspace = workspaceSlug
+      ? await db
+          .select()
+          .from(workspaces)
+          .where(eq(workspaces.slug, workspaceSlug))
+          .limit(1)
+      : await db
+          .select()
+          .from(workspaces)
+          .where(eq(workspaces.ownerId, session.user.id))
+          .limit(1);
 
     if (!workspace.length) {
       throw new AppError("No workspace found", ERROR_CODES.NOT_FOUND);

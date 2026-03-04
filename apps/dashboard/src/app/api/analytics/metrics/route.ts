@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentMetrics, workspaces, posts } from "@sessionforge/db";
-import { eq, and, gte, desc, sum, count, sql } from "drizzle-orm";
+import { eq, and, gte, desc, sum, count, sql } from "drizzle-orm/sql";
 
 export const dynamic = "force-dynamic";
 

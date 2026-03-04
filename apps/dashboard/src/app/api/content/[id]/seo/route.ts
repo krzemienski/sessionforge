@@ -3,13 +3,13 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import {
   computeSeoScore,
   computeReadabilityScore,
-  generateSeoMetadata,
   type SeoMetadata,
 } from "@/lib/seo";
+import { generateSeoMetadata } from "@/lib/seo/generator";
 
 export const dynamic = "force-dynamic";
 

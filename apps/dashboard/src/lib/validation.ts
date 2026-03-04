@@ -76,7 +76,7 @@ export const apiKeyCreateSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const insightExtractSchema = z.object({
-  sessionId: z.string().min(1, "sessionId is required"),
+  sessionIds: z.array(z.string().min(1)).min(1, "at least one sessionId is required"),
   workspaceSlug: z.string().min(1, "workspaceSlug is required"),
 });
 
@@ -85,6 +85,7 @@ export const insightExtractSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const sessionScanSchema = z.object({
+  workspaceSlug: z.string().min(1).optional(),
   lookbackDays: z.number().int().positive().optional().default(30),
   fullRescan: z.boolean().optional().default(false),
 });

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { automationRuns, contentTriggers, workspaces } from "@sessionforge/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, triggerExecuteSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";

@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 
-export type FormatKey = "blog" | "twitter" | "linkedin";
+export type FormatKey = "blog" | "twitter" | "linkedin" | "newsletter" | "changelog";
 export type FormatStatus = "idle" | "generating" | "complete" | "error";
 
 export type FormatStatuses = Record<FormatKey, FormatStatus>;
@@ -12,6 +12,8 @@ const INITIAL_STATUSES: FormatStatuses = {
   blog: "idle",
   twitter: "idle",
   linkedin: "idle",
+  newsletter: "idle",
+  changelog: "idle",
 };
 
 function buildRequest(
@@ -26,6 +28,26 @@ function buildRequest(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceSlug, insightId, tone: "technical" }),
+      },
+    ];
+  }
+  if (format === "newsletter") {
+    return [
+      "/api/agents/newsletter",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceSlug, lookbackDays: 7 }),
+      },
+    ];
+  }
+  if (format === "changelog") {
+    return [
+      "/api/agents/changelog",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceSlug, lookbackDays: 7 }),
       },
     ];
   }

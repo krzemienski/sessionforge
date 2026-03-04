@@ -3,8 +3,8 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
-import { eq, desc, and } from "drizzle-orm";
-import { agentRuns } from "../../../../../../../packages/db/src/schema";
+import { eq, desc, and } from "drizzle-orm/sql";
+import { agentRuns } from "@sessionforge/db";
 
 export const dynamic = "force-dynamic";
 

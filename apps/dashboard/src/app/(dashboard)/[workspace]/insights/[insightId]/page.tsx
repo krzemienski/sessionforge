@@ -21,6 +21,8 @@ const FORMAT_OPTIONS: { key: FormatKey; label: string }[] = [
   { key: "blog", label: "Blog Post" },
   { key: "twitter", label: "Twitter Thread" },
   { key: "linkedin", label: "LinkedIn Post" },
+  { key: "newsletter", label: "Newsletter" },
+  { key: "changelog", label: "Changelog" },
 ];
 
 const STATUS_BADGE: Record<FormatStatus, string> = {
@@ -44,7 +46,7 @@ export default function InsightDetailPage() {
   const ins = insight.data;
 
   const [selectedFormats, setSelectedFormats] = useState<Set<FormatKey>>(
-    new Set<FormatKey>(["blog", "twitter", "linkedin"])
+    new Set<FormatKey>(["blog", "twitter", "linkedin", "newsletter", "changelog"])
   );
 
   const { statuses, postIds, generateFormats } = useGenerateFormats(workspace, insightId);

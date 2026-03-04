@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm/sql";
 import type { contentTypeEnum, postStatusEnum, toneProfileEnum, editTypeEnum, versionTypeEnum } from "@sessionforge/db";
 import { computeEditStats } from "@/lib/style/edit-distance";
 import { createRevision } from "@/lib/revisions/manager";

@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { stripe, STRIPE_PRICE_IDS } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { subscriptions } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import type { PlanTier } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";

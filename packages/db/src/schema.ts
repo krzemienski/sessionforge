@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations } from "drizzle-orm/relations";
 
 // ── Enums (PRD §4.1) ──
 
@@ -820,6 +820,16 @@ export const wordpressConnections = pgTable(
   (table) => [index("wordpressConnections_workspaceId_idx").on(table.workspaceId)]
 );
 
+// ── Post Conversations (chat persistence) ──
+
+export const postConversations = pgTable("post_conversations", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  postId: text("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  messages: jsonb("messages").$type<{ role: string; content: string; toolActions?: string[] }[]>().default([]),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // ── Billing tables (from 035-free-tier-usage-metering-dashboard) ──
 
 export const subscriptions = pgTable(
@@ -888,6 +898,33 @@ export const usageMonthlySummary = pgTable(
   ]
 );
 
+// ── Content Assets (Phase 5 – Diagrams & Media) ──
+
+export const contentAssetTypeEnum = pgEnum("content_asset_type", [
+  "diagram",
+  "hero_image",
+  "section_image",
+  "evidence_diagram",
+  "timeline_viz",
+]);
+
+export const contentAssets = pgTable("content_assets", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  postId: text("post_id")
+    .notNull()
+    .references(() => posts.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  assetType: contentAssetTypeEnum("asset_type").notNull(),
+  content: text("content").notNull(), // Mermaid markup or image URL
+  altText: text("alt_text"),
+  caption: text("caption"),
+  placement: jsonb("placement").$type<{ section?: string; position?: string }>().default({}),
+  metadata: jsonb("metadata").$type<{ generatedAt?: string; model?: string; diagramType?: string }>().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -946,6 +983,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   sessionBookmarks: many(sessionBookmarks),
   automationRuns: many(automationRuns),
   usageEvents: many(usageEvents),
+  postConversations: many(postConversations),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1032,6 +1070,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   }),
   automationRuns: many(automationRuns),
   revisions: many(postRevisions),
+  conversations: many(postConversations),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -1250,3 +1289,65 @@ export const automationRunsRelations = relations(
     }),
   })
 );
+
+export const postConversationsRelations = relations(postConversations, ({ one }) => ({
+  post: one(posts, {
+    fields: [postConversations.postId],
+    references: [posts.id],
+  }),
+  workspace: one(workspaces, {
+    fields: [postConversations.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+// ── Supplementary Content (Phase 6) ──
+
+export const supplementaryTypeEnum = pgEnum("supplementary_type", [
+  "twitter_thread",
+  "linkedin_post",
+  "newsletter_excerpt",
+  "executive_summary",
+  "pull_quotes",
+  "slide_outline",
+  "evidence_highlights",
+]);
+
+export const supplementaryContent = pgTable("supplementary_content", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  postId: text("post_id")
+    .notNull()
+    .references(() => posts.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  contentType: supplementaryTypeEnum("content_type").notNull(),
+  content: text("content").notNull(),
+  metadata: jsonb("metadata")
+    .$type<{ charCount?: number; platform?: string; format?: string }>()
+    .default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const supplementaryContentRelations = relations(supplementaryContent, ({ one }) => ({
+  post: one(posts, {
+    fields: [supplementaryContent.postId],
+    references: [posts.id],
+  }),
+  workspace: one(workspaces, {
+    fields: [supplementaryContent.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+export const contentAssetsRelations = relations(contentAssets, ({ one }) => ({
+  post: one(posts, {
+    fields: [contentAssets.postId],
+    references: [posts.id],
+  }),
+  workspace: one(workspaces, {
+    fields: [contentAssets.workspaceId],
+    references: [workspaces.id],
+  }),
+}));

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { workspaces, posts } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { streamEditorChat } from "@/lib/ai/agents/editor-chat";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, agentChatSchema } from "@/lib/validation";
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
     const rawBody = await req.json().catch(() => ({}));
-    const { workspaceSlug, postId, message, conversationHistory } = parseBody(agentChatSchema, rawBody);
+    const { workspaceSlug, postId, message } = parseBody(agentChatSchema, rawBody);
 
     const workspace = await db.query.workspaces.findFirst({
       where: eq(workspaces.slug, workspaceSlug),
@@ -35,11 +35,10 @@ export async function POST(req: Request) {
       throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
     }
 
-    return streamEditorChat({
+    return await streamEditorChat({
       workspaceId: workspace.id,
       postId,
       userMessage: message,
-      conversationHistory: conversationHistory as Parameters<typeof streamEditorChat>[0]["conversationHistory"],
     });
   })(req);
 }

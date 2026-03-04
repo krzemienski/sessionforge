@@ -1,8 +1,14 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
-import type { SeoMetadata } from "./scoring";
+/**
+ * SEO metadata generator using the Agent SDK.
+ * Analyzes blog post content and generates optimized metadata (no tools needed).
+ */
 
-const client = new Anthropic();
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
+
+delete process.env.CLAUDECODE;
+
+import type { SeoMetadata } from "./scoring";
 
 interface InsightData {
   title: string;
@@ -13,7 +19,7 @@ interface InsightData {
 function buildPrompt(
   markdown: string,
   title: string,
-  insightData?: InsightData
+  insightData?: InsightData,
 ): string {
   const insightSection = insightData
     ? `\nInsight context:
@@ -56,23 +62,30 @@ Respond ONLY with a valid JSON object — no markdown, no explanation, no code f
 export async function generateSeoMetadata(
   markdown: string,
   title: string,
-  insightData?: InsightData
+  insightData?: InsightData,
 ): Promise<SeoMetadata> {
   const model = getHaikuModel();
   const prompt = buildPrompt(markdown, title, insightData);
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
-  });
+  // Use Agent SDK query() with no tools for pure text generation
+  let responseText: string | null = null;
+  for await (const message of query({
+    prompt,
+    options: {
+      model,
+      maxTurns: 1,
+    },
+  })) {
+    if ("result" in message) {
+      responseText = message.result;
+    }
+  }
 
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
+  if (!responseText) {
     throw new Error("No text response from SEO metadata generation");
   }
 
-  const rawText = textBlock.text.trim();
+  const rawText = responseText.trim();
 
   let parsed: Record<string, unknown>;
   try {

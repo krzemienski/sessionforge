@@ -1,7 +1,7 @@
 import { diffLines, type Change } from "diff";
 import { db } from "@/lib/db";
 import { postRevisions } from "@sessionforge/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm/sql";
 import type { editTypeEnum, versionTypeEnum } from "@sessionforge/db";
 
 type EditType = (typeof editTypeEnum.enumValues)[number];

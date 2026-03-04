@@ -1,87 +1,53 @@
 # E2E Validation Analysis
 
-## Platform: fullstack (Next.js 15 + API Routes + Neon Postgres)
-## Startup: `bun run dev` (port 3000)
+## Platform: Web (Next.js 15 Fullstack)
+## Startup: `bunx --bun next dev -p 3000` (from apps/dashboard/)
 ## URL/Port: http://localhost:3000
-## Auth: better-auth (GitHub OAuth + email/password)
 
-## Database Schema (16 tables)
-users, auth_sessions, accounts, verifications, workspaces, style_settings, claude_sessions, insights, posts, content_triggers, api_keys, workspace_members, workspace_invites, workspace_activity, devto_integrations, devto_publications
+## User Journeys Identified
 
-## API Endpoints (31 routes)
+1. **Auth: Login** — Visit /login, fill email/password, submit, redirect to workspace
+2. **Dashboard Home** — View stats cards, agent pipeline, content velocity chart
+3. **Sessions List** — View sessions, filter by project, trigger scan
+4. **Insights List** — View scored insights with /75 composite and /10 dimension bars
+5. **Insight Detail** — 7-dimension breakdown, code snippets, generate actions
+6. **Content List** — View posts with status badges, word counts
+7. **Settings: General** — Edit name/slug/scan paths, save
+8. **Settings: Scan Config** — Lookback window, project filter
+9. **Settings: RSS Feeds** — View/copy RSS and Atom URLs
+10. **Settings: Danger Zone** — Delete workspace with confirmation
+11. **Responsive Layout** — Sidebar collapses to bottom bar on mobile
+
+## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /api/healthcheck | Health check (DB + Redis) |
-| GET | /api/workspace | List workspaces |
-| POST | /api/workspace | Create workspace |
-| GET | /api/workspace/[slug] | Get workspace by slug |
-| PUT | /api/workspace/[slug]/style | Update style settings |
-| GET | /api/sessions | List sessions |
-| GET | /api/sessions/[id] | Get session detail |
-| GET | /api/sessions/[id]/messages | Get session messages |
-| POST | /api/sessions/scan | Scan for sessions |
-| GET | /api/insights | List insights |
-| GET | /api/insights/[id] | Get insight detail |
+| GET | /api/healthcheck | Health status (db, redis) |
+| GET | /api/workspace/[slug] | Get workspace details |
+| PUT | /api/workspace/[slug] | Update workspace settings |
+| DELETE | /api/workspace/[slug] | Delete workspace |
+| GET | /api/sessions/projects | Discover projects |
 | POST | /api/insights/extract | Extract insights (SSE) |
-| GET | /api/content | List posts |
-| POST | /api/content | Create post |
-| GET | /api/content/[id] | Get post |
-| PUT | /api/content/[id] | Update post |
-| DELETE | /api/content/[id] | Delete post |
-| GET | /api/content/[id]/attribution | Get attribution |
-| GET | /api/content/export | Export content |
-| GET/POST | /api/api-keys | List/Create API keys |
-| DELETE | /api/api-keys/[id] | Delete API key |
-| GET/POST | /api/automation/triggers | List/Create triggers |
-| GET/PUT/DELETE | /api/automation/triggers/[id] | CRUD trigger |
-| POST | /api/automation/execute | Execute automation |
-| POST | /api/automation/file-watch | File watch trigger |
-| POST | /api/agents/blog | Generate blog |
-| POST | /api/agents/changelog | Generate changelog |
-| POST | /api/agents/chat | Chat agent |
-| POST | /api/agents/newsletter | Generate newsletter |
-| POST | /api/agents/social | Generate social |
-| GET | /api/badge/[postId] | Badge SVG |
-| GET | /api/feed/[...slug] | RSS feed |
-| GET/POST/DELETE | /api/integrations/devto | Dev.to integration |
-| GET/POST/PUT | /api/integrations/devto/publish | Dev.to publishing |
-| ALL | /api/auth/[...all] | Better-auth handlers |
+| POST | /api/agents/blog | Generate blog post (SSE) |
+| GET | /api/feed/[slug].xml | RSS 2.0 feed |
+| GET | /api/feed/[slug].atom | Atom feed |
 
-## Frontend Pages (14 routes)
+## Database: Neon PostgreSQL
+Key tables: users, workspaces, insights, posts, claude_sessions
+Workspace columns: default_lookback_days, scan_project_filter, last_scan_at
+Insight scores: 7 dimensions (/10 each), composite_score (max 75)
 
-| Route | Page | Key Elements |
-|-------|------|--------------|
-| /login | Auth login | Email/password form, GitHub OAuth |
-| /signup | Auth signup | Registration form |
-| /[workspace] | Dashboard | Stats badges, recent activity |
-| /[workspace]/sessions | Sessions list | Session cards, scan button |
-| /[workspace]/sessions/[id] | Session detail | Messages, metadata |
-| /[workspace]/insights | Insights list | Score bars /10, categories |
-| /[workspace]/insights/[id] | Insight detail | Dimension scores /10 |
-| /[workspace]/content | Content list | Post cards, status filters |
-| /[workspace]/content/[id] | Content detail | Editor, preview |
-| /[workspace]/automation | Automation | Trigger list, create form |
-| /[workspace]/settings | Settings | Workspace config |
-| /[workspace]/settings/api-keys | API Keys | Key management |
-| /[workspace]/settings/integrations | Integrations | Dev.to config |
-| /[workspace]/settings/style | Style | Tone, audience settings |
+## Risk Areas
+- SSE agents require ANTHROPIC_API_KEY
+- Redis returns false (graceful degradation)
+- Scanner reads filesystem paths
 
-## User Journeys
-
-1. **Health Check** — GET /api/healthcheck returns {status, db, redis, timestamp}
-2. **Auth Pages** — Login/signup pages render with forms
-3. **Dashboard Overview** — Main page loads with workspace stats
-4. **Session Management** — List/view sessions, scan for new ones
-5. **Insight Extraction** — View insights, scores displayed as /10
-6. **Content Pipeline** — Create/edit/delete posts, preview markdown
-7. **Automation** — Configure triggers (scheduled, file-watch)
-8. **Settings** — Workspace config, API keys, integrations, style
-9. **Responsive Design** — All pages at mobile/tablet/desktop viewports
-
-## Recommended Validation Order
-1. Database connectivity (healthcheck)
-2. API layer (key endpoints via curl)
-3. Frontend pages (browser automation)
-4. Integration (frontend actions → API → DB consistency)
-5. Responsive testing
+## Validation Order
+1. Healthcheck API
+2. Auth login flow
+3. Dashboard home
+4. Sessions page
+5. Insights page
+6. Content page
+7. Settings (all sections)
+8. Responsive testing (375px, 768px, 1440px)

@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useSessions, useScanSessions, ScanResult } from "@/hooks/use-sessions";
+import { useSessions, useScanSessions, useStreamingScan, ScanResult, ScanProgressEvent } from "@/hooks/use-sessions";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { timeAgo, formatDuration, cn } from "@/lib/utils";
 import { useState } from "react";
@@ -47,7 +47,8 @@ export default function SessionsPage() {
   });
 
   const scan = useScanSessions(workspace);
-  const sessionList = sessions.data?.sessions ?? [];
+  const streamingScan = useStreamingScan(workspace);
+  const sessionList = sessions.data?.data ?? [];
 
   const workspaceData = useQuery({
     queryKey: ["workspace", workspace],
@@ -62,11 +63,20 @@ export default function SessionsPage() {
   const lastScanAt = lastScanResult?.lastScanAt ?? workspaceData.data?.lastScanAt;
 
   const handleScan = (fullRescan = false) => {
-    scan.mutate(
-      { lookbackDays: 30, fullRescan },
-      { onSuccess: (result) => setLastScanResult(result) }
-    );
+    if (fullRescan) {
+      // Full rescan uses the non-streaming endpoint (re-indexes everything)
+      scan.mutate(
+        { lookbackDays: 30, fullRescan },
+        { onSuccess: (result) => setLastScanResult(result) }
+      );
+    } else {
+      // Incremental scan uses streaming for real-time progress
+      streamingScan.startScan({ lookbackDays: 30 });
+    }
   };
+
+  const isBusy = scan.isPending || streamingScan.isScanning;
+  const streamProgress = streamingScan.progress;
 
   const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
 
@@ -101,7 +111,7 @@ export default function SessionsPage() {
           </button>
           <button
             onClick={() => handleScan(true)}
-            disabled={scan.isPending}
+            disabled={isBusy}
             className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary px-3 py-2 rounded-sf text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
           >
             <RotateCcw size={14} />
@@ -109,14 +119,66 @@ export default function SessionsPage() {
           </button>
           <button
             onClick={() => handleScan(false)}
-            disabled={scan.isPending}
+            disabled={isBusy}
             className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
           >
             <Zap size={16} />
-            {scan.isPending ? "Scanning..." : "Scan Now"}
+            {isBusy ? "Scanning..." : "Scan Now"}
           </button>
         </div>
       </div>
+
+      {streamingScan.isScanning && streamProgress && (
+        <div className="bg-sf-bg-secondary border border-sf-accent/30 rounded-sf px-4 py-3 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-sf-accent">
+              {streamProgress.type === "start" && `Scanning ${streamProgress.total} files...`}
+              {streamProgress.type === "progress" && `Scanning file ${streamProgress.current} of ${streamProgress.total}`}
+            </span>
+            <button onClick={streamingScan.cancel} className="text-xs text-sf-text-muted hover:text-sf-text-secondary">Cancel</button>
+          </div>
+          {streamProgress.type === "progress" && (
+            <>
+              <div className="w-full bg-sf-bg-tertiary rounded-full h-1.5 mb-2">
+                <div
+                  className="bg-sf-accent h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${(streamProgress.current / streamProgress.total) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-sf-text-muted truncate">
+                {streamProgress.projectPath}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {streamProgress?.type === "complete" && !streamingScan.isScanning && (
+        <div className="bg-sf-bg-secondary border border-sf-border rounded-sf px-4 py-2 mb-4 flex items-center gap-4 text-xs">
+          <span className="text-sf-accent font-medium">Scan complete</span>
+          <span className="text-sf-text-secondary">
+            <span className="text-sf-text-primary font-medium">{streamProgress.scanned}</span> scanned
+          </span>
+          <span className="text-sf-text-secondary">
+            <span className="text-sf-text-primary font-medium">{streamProgress.new}</span> new
+          </span>
+          <span className="text-sf-text-secondary">
+            <span className="text-sf-text-primary font-medium">{streamProgress.updated}</span> updated
+          </span>
+          {streamProgress.errors.length > 0 && (
+            <span className="text-red-400">{streamProgress.errors.length} errors</span>
+          )}
+          <span className="text-sf-text-muted ml-auto">
+            {(streamProgress.durationMs / 1000).toFixed(1)}s
+          </span>
+        </div>
+      )}
+
+      {streamProgress?.type === "error" && !streamingScan.isScanning && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-sf px-4 py-2 mb-4 text-xs text-red-400">
+          Scan error: {streamProgress.message}
+        </div>
+      )}
 
       {lastScanResult && (
         <div className="bg-sf-bg-secondary border border-sf-border rounded-sf px-4 py-2 mb-4 flex items-center gap-4 text-xs">
@@ -283,11 +345,11 @@ export default function SessionsPage() {
             <div className="flex items-center justify-center gap-3">
               <button
                 onClick={() => handleScan(false)}
-                disabled={scan.isPending}
+                disabled={isBusy}
                 className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
               >
                 <Zap size={16} />
-                {scan.isPending ? "Scanning..." : "Scan Now"}
+                {isBusy ? "Scanning..." : "Scan Now"}
               </button>
               <Link
                 href="/onboarding"

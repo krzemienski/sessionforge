@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { Components } from "react-markdown";
+import { CitationLink, CITATION_REGEX } from "./citation-link";
 
 // Minimal hast node shape needed to inspect pre > code language
 type HastNode = {
@@ -88,9 +89,57 @@ function MermaidDiagram({ chart }: MermaidDiagramProps) {
   );
 }
 
+// --- Citation rendering helper ---
+
+function renderWithCitations(
+  children: React.ReactNode,
+  onCitationClick?: (type: string, label: string) => void
+): React.ReactNode {
+  if (typeof children === "string") {
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    const regex = new RegExp(CITATION_REGEX.source, "g");
+    let match;
+
+    while ((match = regex.exec(children)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(children.slice(lastIndex, match.index));
+      }
+      const type = match[1].toLowerCase() as "session" | "source" | "repo" | "brief";
+      const label = match[2]?.trim() || match[1];
+      parts.push(
+        <CitationLink
+          key={`${match.index}-${type}`}
+          type={type}
+          label={label}
+          onClick={() => onCitationClick?.(type, label)}
+        />
+      );
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < children.length) {
+      parts.push(children.slice(lastIndex));
+    }
+
+    return parts.length > 0 ? <>{parts}</> : children;
+  }
+
+  if (Array.isArray(children)) {
+    return children.map((child, i) => (
+      <React.Fragment key={i}>{renderWithCitations(child, onCitationClick)}</React.Fragment>
+    ));
+  }
+
+  return children;
+}
+
 // --- Markdown component map ---
 
-const markdownComponents: Components = {
+function createMarkdownComponents(
+  onCitationClick?: (type: string, label: string) => void
+): Components {
+  return {
   h1: ({ children }) => (
     <h1 className="mb-4 mt-6 font-display text-2xl font-bold text-sf-text-primary first:mt-0">
       {children}
@@ -112,7 +161,9 @@ const markdownComponents: Components = {
     </h4>
   ),
   p: ({ children }) => (
-    <p className="mb-3 text-sm leading-7 text-sf-text-primary">{children}</p>
+    <p className="mb-3 text-sm leading-7 text-sf-text-primary">
+      {renderWithCitations(children, onCitationClick)}
+    </p>
   ),
   strong: ({ children }) => (
     <strong className="font-bold text-sf-text-primary">{children}</strong>
@@ -228,22 +279,26 @@ const markdownComponents: Components = {
       className="my-4 max-w-full rounded-sf border border-sf-border"
     />
   ),
-};
+  };
+}
 
 // --- BlogPostPreview ---
 
 export interface BlogPostPreviewProps {
   markdown: string;
+  onCitationClick?: (type: string, label: string) => void;
 }
 
-export function BlogPostPreview({ markdown }: BlogPostPreviewProps) {
+export function BlogPostPreview({ markdown, onCitationClick }: BlogPostPreviewProps) {
+  const components = createMarkdownComponents(onCitationClick);
+
   return (
     <div className="h-full overflow-y-auto">
       <article className="mx-auto max-w-2xl p-6">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-          components={markdownComponents}
+          components={components}
         >
           {markdown}
         </ReactMarkdown>

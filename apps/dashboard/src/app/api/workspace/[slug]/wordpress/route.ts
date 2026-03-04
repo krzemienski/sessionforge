@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces, wordpressConnections } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 import { encryptAppPassword } from "@/lib/wordpress/crypto";
 
 export const dynamic = "force-dynamic";

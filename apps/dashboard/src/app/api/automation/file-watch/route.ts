@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { automationRuns, contentTriggers } from "@sessionforge/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm/sql";
 import { verifyQStashRequest } from "@/lib/qstash";
 import { executePipeline } from "@/lib/automation/pipeline";
 import {

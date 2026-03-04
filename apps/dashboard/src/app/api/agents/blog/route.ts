@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { streamBlogWriter } from "@/lib/ai/agents/blog-writer";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, agentBlogSchema } from "@/lib/validation";
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       }), { status: 402, headers: { "Content-Type": "application/json" } });
     }
 
-    const result = streamBlogWriter({
+    const result = await streamBlogWriter({
       workspaceId: workspace.id,
       insightId,
       tone: (tone ?? "technical") as Parameters<typeof streamBlogWriter>[0]["tone"],

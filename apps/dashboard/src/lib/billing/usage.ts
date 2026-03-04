@@ -14,7 +14,7 @@ import {
   usageMonthlySummary,
   subscriptions,
 } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 import { PLAN_LIMITS } from "./plans";
 import type { PlanTier } from "./plans";
 

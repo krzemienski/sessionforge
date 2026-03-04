@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { webhookEndpoints } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";

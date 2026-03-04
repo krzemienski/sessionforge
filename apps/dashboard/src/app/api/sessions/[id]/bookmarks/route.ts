@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions, sessionBookmarks, workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 
 export const dynamic = "force-dynamic";
 
@@ -11,26 +11,27 @@ async function resolveSession(
   userId: string,
   sessionId: string
 ): Promise<{ workspaceId: string } | null> {
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(eq(workspaces.ownerId, userId))
-    .limit(1);
-
-  if (!workspace.length) return null;
-
+  // Look up session first, then verify ownership via workspace
   const rows = await db
     .select({ id: claudeSessions.id, workspaceId: claudeSessions.workspaceId })
     .from(claudeSessions)
+    .where(eq(claudeSessions.id, sessionId))
+    .limit(1);
+
+  if (!rows.length) return null;
+
+  const ownerCheck = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
     .where(
       and(
-        eq(claudeSessions.workspaceId, workspace[0].id),
-        eq(claudeSessions.id, sessionId)
+        eq(workspaces.id, rows[0].workspaceId),
+        eq(workspaces.ownerId, userId)
       )
     )
     .limit(1);
 
-  if (!rows.length) return null;
+  if (!ownerCheck.length) return null;
 
   return { workspaceId: rows[0].workspaceId };
 }

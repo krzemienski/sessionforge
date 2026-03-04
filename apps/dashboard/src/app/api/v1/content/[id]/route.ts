@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
 import { updatePost } from "@/lib/ai/tools/post-manager";
 import { fireWebhookEvent } from "@/lib/webhooks/events";

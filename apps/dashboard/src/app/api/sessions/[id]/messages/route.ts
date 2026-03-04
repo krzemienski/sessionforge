@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions, workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
 import readline from "readline";
@@ -75,28 +75,29 @@ export async function GET(
     const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
     const offset = Math.max(parseInt(searchParams.get("offset") ?? "0"), 0);
 
-    const workspace = await db
-      .select({ id: workspaces.id })
-      .from(workspaces)
-      .where(eq(workspaces.ownerId, session.user.id))
+    // Look up session first, then verify ownership
+    const rows = await db
+      .select({ filePath: claudeSessions.filePath, workspaceId: claudeSessions.workspaceId })
+      .from(claudeSessions)
+      .where(eq(claudeSessions.id, id))
       .limit(1);
 
-    if (!workspace.length) {
-      throw new AppError("No workspace found", ERROR_CODES.NOT_FOUND);
+    if (!rows.length) {
+      throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
     }
 
-    const rows = await db
-      .select({ filePath: claudeSessions.filePath })
-      .from(claudeSessions)
+    const ownerCheck = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
       .where(
         and(
-          eq(claudeSessions.workspaceId, workspace[0].id),
-          eq(claudeSessions.id, id)
+          eq(workspaces.id, rows[0].workspaceId),
+          eq(workspaces.ownerId, session.user.id)
         )
       )
       .limit(1);
 
-    if (!rows.length) {
+    if (!ownerCheck.length) {
       throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
     }
 

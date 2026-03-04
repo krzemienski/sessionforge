@@ -1,15 +1,22 @@
-import Anthropic from "@anthropic-ai/sdk";
+/**
+ * Style learner agent that analyzes published posts and their AI drafts
+ * to build a writing style profile. Uses the Agent SDK for text generation
+ * (no tools needed — pure analysis).
+ */
+
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+delete process.env.CLAUDECODE;
+
 import { db } from "@/lib/db";
 import { posts, writingStyleProfiles } from "@sessionforge/db";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm/sql";
 import { STYLE_LEARNER_PROMPT } from "../prompts/style-learner";
 import { getOpusModel } from "../orchestration/model-selector";
 
-const client = new Anthropic();
+export type WritingStyleProfile = typeof writingStyleProfiles.$inferSelect;
 
 const MIN_POSTS_REQUIRED = 5;
-
-export type WritingStyleProfile = typeof writingStyleProfiles.$inferSelect;
 
 interface StyleLearnerResponse {
   formalityScore: number;
@@ -29,7 +36,7 @@ interface StyleLearnerResponse {
 }
 
 export async function analyzeWritingStyle(
-  workspaceId: string
+  workspaceId: string,
 ): Promise<WritingStyleProfile | null> {
   // 1. Fetch all published posts with an AI draft saved
   const qualifyingPosts = await db
@@ -39,8 +46,8 @@ export async function analyzeWritingStyle(
       and(
         eq(posts.workspaceId, workspaceId),
         eq(posts.status, "published"),
-        isNotNull(posts.aiDraftMarkdown)
-      )
+        isNotNull(posts.aiDraftMarkdown),
+      ),
     );
 
   // 2. Require at least 5 posts to generate a meaningful profile
@@ -67,23 +74,29 @@ export async function analyzeWritingStyle(
 
   const userMessage = `Analyze the following ${qualifyingPosts.length} published posts and their original AI-generated drafts to build a writing style profile.\n\n${postsContent}`;
 
-  // 4. Call Claude with STYLE_LEARNER_PROMPT (non-streaming, no tools)
-  const response = await client.messages.create({
-    model: getOpusModel(),
-    max_tokens: 4096,
-    system: STYLE_LEARNER_PROMPT,
-    messages: [{ role: "user", content: userMessage }],
-  });
+  // 4. Call Claude via Agent SDK (non-streaming, no tools)
+  let responseText: string | null = null;
+  for await (const message of query({
+    prompt: userMessage,
+    options: {
+      systemPrompt: STYLE_LEARNER_PROMPT,
+      model: getOpusModel(),
+      maxTurns: 1,
+    },
+  })) {
+    if ("result" in message) {
+      responseText = message.result;
+    }
+  }
 
-  // 5. Extract and parse the JSON response
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
+  if (!responseText) {
     return null;
   }
 
+  // 5. Parse the JSON response
   let styleData: StyleLearnerResponse;
   try {
-    styleData = JSON.parse(textBlock.text) as StyleLearnerResponse;
+    styleData = JSON.parse(responseText) as StyleLearnerResponse;
   } catch {
     return null;
   }

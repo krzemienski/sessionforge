@@ -1,24 +1,26 @@
-import Anthropic from "@anthropic-ai/sdk";
+/**
+ * Public API route for content generation via the Agent SDK.
+ * Authenticates via API key, runs an agent to generate content,
+ * then fires webhook events on completion.
+ */
+
 import { NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { posts } from "@sessionforge/db";
+import { desc, eq } from "drizzle-orm/sql";
 import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
-import { getModelForAgent } from "@/lib/ai/orchestration/model-selector";
-import { getToolsForAgent } from "@/lib/ai/orchestration/tool-registry";
-import { handleSessionReaderTool } from "@/lib/ai/tools/session-reader";
-import { handleInsightTool } from "@/lib/ai/tools/insight-tools";
-import { handlePostManagerTool } from "@/lib/ai/tools/post-manager";
-import { handleSkillLoaderTool } from "@/lib/ai/tools/skill-loader";
 import { BLOG_TECHNICAL_PROMPT } from "@/lib/ai/prompts/blog/technical";
 import { BLOG_TUTORIAL_PROMPT } from "@/lib/ai/prompts/blog/tutorial";
 import { BLOG_CONVERSATIONAL_PROMPT } from "@/lib/ai/prompts/blog/conversational";
 import { TWITTER_THREAD_PROMPT } from "@/lib/ai/prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "@/lib/ai/prompts/social/linkedin-post";
 import { CHANGELOG_PROMPT } from "@/lib/ai/prompts/changelog";
+import { createAgentMcpServer } from "@/lib/ai/mcp-server-factory";
+import { runAgent } from "@/lib/ai/agent-runner";
 import { fireWebhookEvent } from "@/lib/webhooks/events";
 import type { AgentType } from "@/lib/ai/orchestration/tool-registry";
 
 export const dynamic = "force-dynamic";
-
-type CreatedPost = { id: string; title: string; contentType: string };
 
 const BLOG_TONE_PROMPTS: Record<string, string> = {
   technical: BLOG_TECHNICAL_PROMPT,
@@ -48,43 +50,6 @@ const CONTENT_TYPE_CONFIG: Record<
   },
 };
 
-const client = new Anthropic();
-
-async function dispatchTool(
-  workspaceId: string,
-  toolName: string,
-  toolInput: Record<string, unknown>
-): Promise<unknown> {
-  if (
-    toolName.startsWith("get_session") ||
-    toolName === "list_sessions_by_timeframe"
-  ) {
-    return handleSessionReaderTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName.startsWith("get_insight") ||
-    toolName === "get_top_insights" ||
-    toolName === "create_insight"
-  ) {
-    return handleInsightTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName === "create_post" ||
-    toolName === "update_post" ||
-    toolName === "get_post" ||
-    toolName === "get_markdown"
-  ) {
-    return handlePostManagerTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName === "list_available_skills" ||
-    toolName === "get_skill_by_name"
-  ) {
-    return handleSkillLoaderTool(toolName, toolInput);
-  }
-  throw new Error(`Unknown tool: ${toolName}`);
-}
-
 export async function POST(req: NextRequest) {
   const auth = await authenticateApiKey(req);
   if (!auth) return apiError("Unauthorized", 401);
@@ -106,106 +71,72 @@ export async function POST(req: NextRequest) {
   if (!config) {
     return apiError(
       `Invalid contentType. Must be one of: ${Object.keys(CONTENT_TYPE_CONFIG).join(", ")}`,
-      400
+      400,
     );
   }
 
   const wsId = auth.workspace.id;
-  const model = getModelForAgent(config.agentType);
-  const tools = getToolsForAgent(config.agentType);
   const systemPrompt = config.getSystemPrompt(tone);
 
   const userMessage = `Write a ${contentType.replace("_", " ")} about insight "${insightId}". First fetch the insight details and related session data. Then create the post using create_post.`;
 
-  const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: userMessage },
-  ];
-
-  let createdPost: CreatedPost | null = null;
+  const mcpServer = createAgentMcpServer(config.agentType, wsId);
 
   try {
-    let response = await client.messages.create({
-      model,
-      max_tokens: 8192,
-      system: systemPrompt,
-      tools: tools as Anthropic.Tool[],
-      messages,
-    });
-
-    while (response.stop_reason === "tool_use") {
-      const toolUseBlocks = response.content.filter(
-        (b): b is Anthropic.ContentBlock & { type: "tool_use" } =>
-          b.type === "tool_use"
-      );
-
-      const toolResults: Anthropic.MessageParam = {
-        role: "user",
-        content: await Promise.all(
-          toolUseBlocks.map(async (toolUse) => {
-            try {
-              const result = await dispatchTool(
-                wsId,
-                toolUse.name,
-                toolUse.input as Record<string, unknown>
-              );
-
-              if (toolUse.name === "create_post" && result && typeof result === "object") {
-                const post = result as CreatedPost;
-                if (!createdPost) createdPost = post;
-              }
-
-              return {
-                type: "tool_result" as const,
-                tool_use_id: toolUse.id,
-                content: JSON.stringify(result),
-              };
-            } catch (error) {
-              return {
-                type: "tool_result" as const,
-                tool_use_id: toolUse.id,
-                content: `Error: ${error instanceof Error ? error.message : String(error)}`,
-                is_error: true,
-              };
-            }
-          })
-        ),
-      };
-
-      messages.push({ role: "assistant", content: response.content });
-      messages.push(toolResults);
-
-      response = await client.messages.create({
-        model,
-        max_tokens: 8192,
-        system: systemPrompt,
-        tools: tools as Anthropic.Tool[],
-        messages,
-      });
-    }
+    await runAgent(
+      {
+        agentType: config.agentType,
+        workspaceId: wsId,
+        systemPrompt,
+        userMessage,
+        mcpServer,
+        trackRun: false,
+      },
+    );
   } catch (error) {
     return apiError(
       error instanceof Error ? error.message : "Content generation failed",
-      500
+      500,
     );
   }
 
-  const finalPost = createdPost as CreatedPost | null;
-  if (!finalPost) {
+  // Query the DB for the most recently created post
+  let createdPost: { id: string; title: string; contentType: string } | null = null;
+  try {
+    const [latest] = await db
+      .select({
+        id: posts.id,
+        title: posts.title,
+        contentType: posts.contentType,
+      })
+      .from(posts)
+      .where(eq(posts.workspaceId, wsId))
+      .orderBy(desc(posts.createdAt))
+      .limit(1);
+
+    if (latest) {
+      createdPost = latest;
+    }
+  } catch {
+    // DB query failure
+  }
+
+  if (!createdPost) {
     return apiError("Content generation completed but no post was created", 500);
   }
 
   void fireWebhookEvent(wsId, "content.generated", {
-    postId: finalPost.id,
-    title: finalPost.title,
-    contentType: finalPost.contentType,
+    postId: createdPost.id,
+    title: createdPost.title,
+    contentType: createdPost.contentType,
   });
 
   return apiResponse(
     {
-      postId: finalPost.id,
-      title: finalPost.title,
-      contentType: finalPost.contentType,
+      postId: createdPost.id,
+      title: createdPost.title,
+      contentType: createdPost.contentType,
     },
-    {}
+    {},
   );
 }

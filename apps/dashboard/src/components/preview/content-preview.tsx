@@ -16,9 +16,10 @@ export type ContentType =
 export interface ContentPreviewProps {
   markdown: string;
   contentType: ContentType | string;
+  onCitationClick?: (type: string, label: string) => void;
 }
 
-export function ContentPreview({ markdown, contentType }: ContentPreviewProps) {
+export function ContentPreview({ markdown, contentType, onCitationClick }: ContentPreviewProps) {
   if (contentType === "twitter_thread") {
     return <TwitterThreadPreview markdown={markdown} />;
   }
@@ -28,5 +29,5 @@ export function ContentPreview({ markdown, contentType }: ContentPreviewProps) {
   }
 
   // blog_post, devto_post, changelog, newsletter, custom — all use rich markdown rendering
-  return <BlogPostPreview markdown={markdown} />;
+  return <BlogPostPreview markdown={markdown} onCitationClick={onCitationClick} />;
 }

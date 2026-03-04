@@ -1,4 +1,4 @@
 export * from "./readability";
 export * from "./scoring";
-export * from "./generator";
+// generator.ts uses Agent SDK (Node-only) — import directly where needed, not via barrel
 export * from "./frontmatter";

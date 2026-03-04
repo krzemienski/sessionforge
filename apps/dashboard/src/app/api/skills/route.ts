@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { writingSkills, workspaces } from "@sessionforge/db";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm/sql";
 
 export const dynamic = "force-dynamic";
 

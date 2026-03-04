@@ -4,7 +4,7 @@ import { existsSync } from "fs";
 import os from "os";
 import { db } from "@/lib/db";
 import { writingSkills } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 
 export interface SkillInfo {
   name: string;

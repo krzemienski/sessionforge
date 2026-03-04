@@ -1,84 +1,141 @@
 # E2E Validation Plan
-Generated: 2026-03-02T23:15
-Platform: fullstack (Next.js 15 + Neon Postgres)
+Generated: 2026-03-03
+Platform: Web (Next.js 15 Fullstack)
 
 ## Prerequisites
-- [ ] Node/Bun installed
-- [ ] Database accessible (Neon Postgres via DATABASE_URL)
-- [ ] Port 3000 available
-- [ ] .env.local configured
-- [ ] Playwright browser available
+- [x] Dev server running: `curl http://localhost:3000/api/healthcheck`
+- [x] Database connected: healthcheck returns `db: true`
+- [x] Playwright MCP browser available
 
-## Journey 1: Health Check API
+## Journey 1: API Healthcheck
 **PASS Criteria:**
 - [ ] GET /api/healthcheck returns HTTP 200
-- [ ] Response JSON contains `status: "ok"` and `db: true`
-- [ ] Response includes `timestamp` field with valid ISO date
+- [ ] Response contains `"status":"ok"` and `"db":true`
 
-## Journey 2: Auth Pages Render
-**PASS Criteria:**
-- [ ] /login renders with email input, password input, submit button
-- [ ] /signup renders with name input, email input, password input, submit button
-- [ ] No console errors on either page
+**Steps:**
+1. curl GET /api/healthcheck
+   Evidence: `e2e-evidence/web/01-healthcheck.json`
 
-## Journey 3: Workspace API
-**PASS Criteria:**
-- [ ] GET /api/workspace returns HTTP 200 with JSON (or auth redirect)
-- [ ] Workspace objects contain id, name, slug fields
+---
 
-## Journey 4: Dashboard Page
+## Journey 2: Auth Login Flow
 **PASS Criteria:**
-- [ ] Dashboard at /[workspace] renders (not blank)
-- [ ] Navigation sidebar visible with Sessions, Insights, Content, Automation, Settings links
-- [ ] Main content area loads
+- [ ] /login page renders with email/password fields and "Sign in" button
+- [ ] After login, redirects to /[workspace] dashboard
+- [ ] Dashboard shows user name in sidebar
 
-## Journey 5: Sessions Page
-**PASS Criteria:**
-- [ ] Sessions page renders with list or empty state
-- [ ] Page shows "Sessions" heading
-- [ ] Scan button visible
+**Steps:**
+1. Navigate to /login, screenshot
+   Evidence: `e2e-evidence/web/02-login-page.png`
+2. Fill credentials, submit
+3. Screenshot dashboard after redirect
+   Evidence: `e2e-evidence/web/02-post-login-dashboard.png`
 
-## Journey 6: Insights Page
+---
+
+## Journey 3: Dashboard Home
 **PASS Criteria:**
-- [ ] Insights page renders
+- [ ] Page shows "Settings" heading or stats cards
+- [ ] Sidebar navigation has all 6+ links
+- [ ] No console errors
+
+**Steps:**
+1. Navigate to /my-workspace, screenshot at 1440px
+   Evidence: `e2e-evidence/web/03-dashboard-1440.png`
+
+---
+
+## Journey 4: Sessions Page
+**PASS Criteria:**
+- [ ] Page renders with "Sessions" heading
+- [ ] "Scan Now" button visible
+- [ ] Filter input visible
+- [ ] Empty state or session list displayed
+
+**Steps:**
+1. Navigate to /my-workspace/sessions, screenshot
+   Evidence: `e2e-evidence/web/04-sessions-1440.png`
+
+---
+
+## Journey 5: Insights Page
+**PASS Criteria:**
+- [ ] Page renders with "Insights" heading
 - [ ] Score bars use /10 scale (not /5)
-- [ ] Bar widths calculated as (score/10 * 100)%
+- [ ] Composite scores use /75 scale
 
-## Journey 7: Content Page
+**Steps:**
+1. Navigate to /my-workspace/insights, screenshot
+   Evidence: `e2e-evidence/web/05-insights-1440.png`
+
+---
+
+## Journey 6: Content Page
 **PASS Criteria:**
-- [ ] Content page renders with post list or empty state
-- [ ] Content cards show title, status, content type
+- [ ] Page renders with "Content" heading
+- [ ] Empty state or post list displayed
 
-## Journey 8: Automation Page
+**Steps:**
+1. Navigate to /my-workspace/content, screenshot
+   Evidence: `e2e-evidence/web/06-content-1440.png`
+
+---
+
+## Journey 7: Settings Page (All Sections)
 **PASS Criteria:**
-- [ ] Automation page renders
-- [ ] Trigger list or create UI accessible
+- [ ] General: Workspace Name and Slug fields populated
+- [ ] Scan Config: Lookback Window dropdown with 6 options
+- [ ] RSS Feeds: RSS 2.0 and Atom URLs displayed with Copy buttons
+- [ ] Danger Zone: Delete button with red styling
 
-## Journey 9: Settings Pages
+**Steps:**
+1. Navigate to /my-workspace/settings, full-page screenshot
+   Evidence: `e2e-evidence/web/07-settings-1440.png`
+
+---
+
+## Journey 8: Settings Save (Interactive)
 **PASS Criteria:**
-- [ ] /settings renders with workspace config form
-- [ ] /settings/api-keys renders with key management UI
-- [ ] /settings/integrations renders with dev.to section
-- [ ] /settings/style renders with tone/audience settings
+- [ ] Changing lookback window and clicking Save shows "Settings saved." confirmation
+- [ ] Workspace name change persists after page reload
 
-## Journey 10: API Endpoints
+**Steps:**
+1. Change lookback to "Last 90 days", click Save
+2. Screenshot success message
+   Evidence: `e2e-evidence/web/08-settings-saved.png`
+
+---
+
+## Journey 9: Responsive - Mobile (375px)
 **PASS Criteria:**
-- [ ] GET /api/sessions returns valid JSON
-- [ ] GET /api/insights returns valid JSON
-- [ ] GET /api/content returns valid JSON
-- [ ] GET /api/automation/triggers returns valid JSON
+- [ ] Sidebar hidden, bottom navigation bar visible with 5 icons
+- [ ] Content fills full width, no horizontal overflow
+- [ ] Settings sections stack vertically
 
-## Journey 11: Responsive Design
+**Steps:**
+1. Resize to 375x812, screenshot dashboard
+   Evidence: `e2e-evidence/web/09-mobile-dashboard.png`
+2. Screenshot settings
+   Evidence: `e2e-evidence/web/09-mobile-settings.png`
+
+---
+
+## Journey 10: Responsive - Tablet (768px)
 **PASS Criteria:**
-- [ ] Login page correct at 375px, 768px, 1440px
-- [ ] Dashboard correct at all three viewports
-- [ ] No horizontal overflow at mobile
+- [ ] Layout adapts (sidebar may collapse or remain)
+- [ ] Content readable, no overflow
 
-## Execution Order
-1. Build & start dev server
-2. Journey 1 (healthcheck API)
-3. Journey 3 + 10 (API endpoints)
-4. Journey 2 (auth pages)
-5. Journey 4-8 (feature pages)
-6. Journey 9 (settings)
-7. Journey 11 (responsive)
+**Steps:**
+1. Resize to 768x1024, screenshot dashboard
+   Evidence: `e2e-evidence/web/10-tablet-dashboard.png`
+
+---
+
+## Journey 11: Responsive - Desktop (1440px)
+**PASS Criteria:**
+- [ ] Sidebar visible with full labels
+- [ ] Content area properly spaced
+
+**Steps:**
+1. Resize to 1440x900, screenshot dashboard
+   Evidence: `e2e-evidence/web/11-desktop-dashboard.png`
