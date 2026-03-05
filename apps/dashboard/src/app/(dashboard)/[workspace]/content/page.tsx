@@ -2,13 +2,20 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useContent, useContentStreak, useExportContent } from "@/hooks/use-content";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, CalendarDays, LayoutGrid, List, Download, X, Loader2 } from "lucide-react";
+import { FileText, CalendarDays, LayoutGrid, List, Download, X, Loader2, Archive, Trash2, Globe } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { CalendarView } from "@/components/content/calendar-view";
 import { PipelineView } from "@/components/content/pipeline-view";
 import { ExportDropdown } from "@/components/content/export-dropdown";
+import { MultiSelectToolbar } from "@/components/batch/multi-select-toolbar";
+import { JobProgressModal } from "@/components/batch/job-progress-modal";
+import {
+  useArchivePostsBatch,
+  useDeletePostsBatch,
+  usePublishPostsBatch,
+} from "@/hooks/use-batch-operations";
 
 const STATUS_COLORS: Record<string, string> = {
   idea: "text-sf-text-muted bg-sf-bg-tertiary",
@@ -83,6 +90,18 @@ export default function ContentPage() {
   const [exportDateTo, setExportDateTo] = useState("");
   const { exportContent, isExporting, exportCount } = useExportContent();
 
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+
+  // Batch job state
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobModalOpen, setJobModalOpen] = useState(false);
+
+  const archivePostsBatch = useArchivePostsBatch(workspace as string);
+  const deletePostsBatch = useDeletePostsBatch(workspace as string);
+  const publishPostsBatch = usePublishPostsBatch(workspace as string);
+
   const handleExport = async () => {
     await exportContent(workspace as string, {
       type: exportType || undefined,
@@ -92,6 +111,77 @@ export default function ContentPage() {
     });
     setShowExport(false);
   };
+
+
+  const handleCheckboxClick = useCallback(
+    (e: React.MouseEvent, postId: string, index: number) => {
+      e.stopPropagation();
+
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+
+        if (e.shiftKey && lastSelectedIndex !== null) {
+          const start = Math.min(lastSelectedIndex, index);
+          const end = Math.max(lastSelectedIndex, index);
+          const rangeIds: string[] = contentList.slice(start, end + 1).map((p: any) => p.id);
+
+          const anchorId = contentList[lastSelectedIndex]?.id;
+          if (anchorId && prev.has(anchorId)) {
+            rangeIds.forEach((id: string) => next.add(id));
+          } else {
+            rangeIds.forEach((id: string) => next.delete(id));
+          }
+        } else {
+          if (next.has(postId)) {
+            next.delete(postId);
+          } else {
+            next.add(postId);
+          }
+          setLastSelectedIndex(index);
+        }
+
+        return next;
+      });
+    },
+    [lastSelectedIndex, contentList]
+  );
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(contentList.map((p: any) => p.id)));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+    setLastSelectedIndex(null);
+  };
+
+  const handleArchive = async () => {
+    const ids = Array.from(selectedIds);
+    const result = await archivePostsBatch.mutateAsync(ids);
+    setActiveJobId(result.jobId);
+    setJobModalOpen(true);
+    handleClearSelection();
+  };
+
+  const handleDelete = async () => {
+    const ids = Array.from(selectedIds);
+    const result = await deletePostsBatch.mutateAsync(ids);
+    setActiveJobId(result.jobId);
+    setJobModalOpen(true);
+    handleClearSelection();
+  };
+
+  const handlePublish = async () => {
+    const ids = Array.from(selectedIds);
+    const result = await publishPostsBatch.mutateAsync(ids);
+    setActiveJobId(result.jobId);
+    setJobModalOpen(true);
+    handleClearSelection();
+  };
+
+  const isBatchPending =
+    archivePostsBatch.isPending || deletePostsBatch.isPending || publishPostsBatch.isPending;
+
 
   return (
     <div>
@@ -254,34 +344,83 @@ export default function ContentPage() {
             </div>
           )}
 
-          <div className="space-y-3">
-            {contentList.map((post: any) => (
-              <div
-                key={post.id}
-                onClick={() => router.push(`/${workspace}/content/${post.id}`)}
-                className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors"
+          {selectedIds.size > 0 && (
+            <div className="mb-4">
+              <MultiSelectToolbar
+                selectedCount={selectedIds.size}
+                totalCount={contentList.length}
+                onSelectAll={handleSelectAll}
+                onClearSelection={handleClearSelection}
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status] || "")}>
-                    {post.status}
-                  </span>
-                  <span className="px-2 py-0.5 bg-sf-bg-tertiary rounded-sf-full text-xs text-sf-text-secondary">
-                    {TYPE_LABELS[post.contentType] || post.contentType}
-                  </span>
-                  <div className="ml-auto flex items-center gap-2">
-                    <span className="text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
-                    <ExportDropdown markdown={post.markdown || ""} title={post.title || ""} />
-                  </div>
-                </div>
-                <h3 className="font-semibold text-sf-text-primary mb-1">{post.title}</h3>
-                <p className="text-sm text-sf-text-secondary line-clamp-2">
-                  {post.markdown?.slice(0, 150)}...
-                </p>
-                {post.wordCount && (
-                  <p className="text-xs text-sf-text-muted mt-2">{post.wordCount} words</p>
-                )}
+                <button
+                  onClick={handlePublish}
+                  disabled={isBatchPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sf-success/10 text-sf-success text-sm font-medium rounded-sf hover:bg-sf-success/20 transition-colors disabled:opacity-50"
+                >
+                  <Globe size={14} />
+                  {publishPostsBatch.isPending ? "Starting..." : "Publish"}
+                </button>
+                <button
+                  onClick={handleArchive}
+                  disabled={isBatchPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-tertiary text-sf-text-secondary text-sm font-medium rounded-sf hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+                >
+                  <Archive size={14} />
+                  {archivePostsBatch.isPending ? "Starting..." : "Archive"}
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isBatchPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sf-error/10 text-sf-error text-sm font-medium rounded-sf hover:bg-sf-error/20 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  {deletePostsBatch.isPending ? "Starting..." : "Delete"}
+                </button>
+              </MultiSelectToolbar>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {contentList.map((post: any, index: number) => {
+              const isSelected = selectedIds.has(post.id);
+              return (
+                <div
+                  key={post.id}
+                  onClick={() => router.push(`/${workspace}/content/${post.id}`)}
+                  className={cn(
+                    "bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors",
+                    isSelected && "ring-1 ring-sf-accent bg-sf-accent-bg/30"
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onClick={(e) => handleCheckboxClick(e, post.id, index)}
+                      onChange={() => {}}
+                      className="w-4 h-4 accent-sf-accent flex-shrink-0"
+                    />
+                    <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status] || "")}>
+                      {post.status}
+                    </span>
+                    <span className="px-2 py-0.5 bg-sf-bg-tertiary rounded-sf-full text-xs text-sf-text-secondary">
+                      {TYPE_LABELS[post.contentType] || post.contentType}
+                    </span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
+                      <ExportDropdown markdown={post.markdown || ""} title={post.title || ""} />
+                    </div>
               </div>
-            ))}
+              <h3 className="font-semibold text-sf-text-primary mb-1">{post.title}</h3>
+              <p className="text-sm text-sf-text-secondary line-clamp-2">
+                {post.markdown?.slice(0, 150)}...
+              </p>
+              {post.wordCount && (
+                <p className="text-xs text-sf-text-muted mt-2">{post.wordCount} words</p>
+              )}
+            </div>
+              );
+            })}
 
             {contentList.length === 0 && !content.isLoading && (
               <div className="text-center py-12">
@@ -296,6 +435,17 @@ export default function ContentPage() {
       {/* Loading state while determining default view */}
       {activeTab === null && (
         <div className="text-center py-12 text-sm text-sf-text-muted">Loading...</div>
+      )}
+
+      {activeJobId && (
+        <JobProgressModal
+          jobId={activeJobId}
+          isOpen={jobModalOpen}
+          onClose={() => {
+            setJobModalOpen(false);
+            setActiveJobId(null);
+          }}
+        />
       )}
     </div>
   );

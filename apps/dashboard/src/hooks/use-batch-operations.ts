@@ -93,3 +93,23 @@ export function useDeletePostsBatch(workspace: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["posts"] }),
   });
 }
+
+export function usePublishPostsBatch(workspace: string) {
+  const qc = useQueryClient();
+  return useMutation<BatchJobResult, Error, string[]>({
+    mutationFn: async (postIds: string[]) => {
+      const res = await fetch("/api/posts/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "publish",
+          postIds,
+          workspaceSlug: workspace,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to start batch publish posts");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["posts"] }),
+  });
+}
