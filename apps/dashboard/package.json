@@ -7,7 +7,13 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude 'tests/e2e/**'",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -43,6 +49,6 @@
     "postcss": "^8",
     "tailwindcss": "^4",
     "typescript": "^5.7",
-    "vitest": "^2.0.0"
+    "vitest": "^4.0.0"
   }
 }
