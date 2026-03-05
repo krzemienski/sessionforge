@@ -6,13 +6,15 @@
  */
 
 import type { BuiltInTemplate } from "@/types/templates";
+import { howIBuiltXTemplate } from "./how-i-built-x";
+import { debuggingStoryTemplate } from "./debugging-story";
 
 /**
  * All built-in templates available in SessionForge
  *
  * Templates will be added here as they are created:
- * - How I Built X
- * - Debugging Story
+ * - How I Built X ✓
+ * - Debugging Story ✓
  * - Tool Comparison
  * - Architecture Decision
  * - TIL (Today I Learned)
@@ -21,11 +23,9 @@ import type { BuiltInTemplate } from "@/types/templates";
  * - Tutorial
  */
 export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
-  // Templates will be imported and added here in subsequent subtasks
-  // Example:
-  // howIBuiltXTemplate,
-  // debuggingStoryTemplate,
-  // etc.
+  howIBuiltXTemplate,
+  debuggingStoryTemplate,
+  // Additional templates will be added here in subsequent subtasks
 ];
 
 /**
