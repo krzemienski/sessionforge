@@ -8,6 +8,7 @@ import { CHANGELOG_PROMPT } from "../prompts/changelog";
 import { injectStyleProfile } from "@/lib/style/profile-injector";
 import { createAgentMcpServer } from "../mcp-server-factory";
 import { runAgentStreaming } from "../agent-runner";
+import { getTemplateBySlug } from "@/lib/templates";
 
 /** Input parameters for the changelog writer agent. */
 interface ChangelogWriterInput {
@@ -19,13 +20,24 @@ interface ChangelogWriterInput {
   projectFilter?: string;
   /** Optional extra instructions appended to the agent prompt. */
   customInstructions?: string;
+  /** Optional template slug to use as scaffolding for the changelog post. */
+  templateId?: string;
 }
 
 
 export async function streamChangelogWriter(input: ChangelogWriterInput): Promise<Response> {
   const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "changelog");
   const styleInjectedPrompt = await injectStyleProfile(CHANGELOG_PROMPT, input.workspaceId);
-  const systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
+  let systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
+
+  // Fetch and apply template if provided
+  if (input.templateId) {
+    const template = getTemplateBySlug(input.templateId);
+    if (template) {
+      const templateInstructions = buildTemplateInstructions(template);
+      systemPrompt = `${systemPrompt}\n\n${templateInstructions}`;
+    }
+  }
 
   const userMessage = input.customInstructions
     ? `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First list sessions in the timeframe, then get summaries for each, then create a changelog post. When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
@@ -46,4 +58,47 @@ export async function streamChangelogWriter(input: ChangelogWriterInput): Promis
       projectFilter: input.projectFilter,
     },
   );
+}
+
+/**
+ * Builds template-specific instructions from a template definition.
+ * Converts template structure and tone guidance into prompt instructions
+ * that guide the AI in following the template format.
+ */
+function buildTemplateInstructions(template: ReturnType<typeof getTemplateBySlug>): string {
+  if (!template) return "";
+
+  const instructions: string[] = [];
+
+  instructions.push(`## Content Template: ${template.name}`);
+  instructions.push(`\n${template.description}\n`);
+
+  if (template.structure?.sections && template.structure.sections.length > 0) {
+    instructions.push("### Required Structure");
+    instructions.push("\nYour changelog post MUST follow this structure:\n");
+
+    template.structure.sections.forEach((section, index) => {
+      const requiredLabel = section.required ? "(REQUIRED)" : "(OPTIONAL)";
+      instructions.push(`${index + 1}. **${section.heading}** ${requiredLabel}`);
+      instructions.push(`   ${section.description}`);
+      instructions.push("");
+    });
+  }
+
+  if (template.toneGuidance) {
+    instructions.push("### Tone and Style Guidance");
+    instructions.push(`\n${template.toneGuidance}\n`);
+  }
+
+  if (template.exampleContent) {
+    instructions.push("### Example Format");
+    instructions.push("\nHere's an example of how this template should look:\n");
+    instructions.push("```markdown");
+    instructions.push(template.exampleContent.substring(0, 500) + "...");
+    instructions.push("```\n");
+  }
+
+  instructions.push("**Important:** Use the template structure as scaffolding, but fill it with content based on the actual session data you fetch. The template provides the format and guidance, not the content itself.");
+
+  return instructions.join("\n");
 }

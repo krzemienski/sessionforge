@@ -9,6 +9,7 @@ import { LINKEDIN_PROMPT } from "../prompts/social/linkedin-post";
 import { injectStyleProfile } from "@/lib/style/profile-injector";
 import { createAgentMcpServer } from "../mcp-server-factory";
 import { runAgentStreaming } from "../agent-runner";
+import { getTemplateBySlug } from "@/lib/templates";
 
 /** Supported social media platforms for post generation. */
 type SocialPlatform = "twitter" | "linkedin";
@@ -33,13 +34,24 @@ interface SocialWriterInput {
   platform: SocialPlatform;
   /** Optional freeform guidance appended to the agent's user message. */
   customInstructions?: string;
+  /** Optional template slug to use as scaffolding for the social post. */
+  templateId?: string;
 }
 
 
 export async function streamSocialWriter(input: SocialWriterInput): Promise<Response> {
   const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "social");
   const styleInjectedPrompt = await injectStyleProfile(PROMPTS[input.platform], input.workspaceId);
-  const systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
+  let systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
+
+  // Fetch and apply template if provided
+  if (input.templateId) {
+    const template = getTemplateBySlug(input.templateId);
+    if (template) {
+      const templateInstructions = buildTemplateInstructions(template);
+      systemPrompt = `${systemPrompt}\n\n${templateInstructions}`;
+    }
+  }
 
   const userMessage = input.customInstructions
     ? `Create a ${input.platform} post about insight "${input.insightId}". First fetch insight details. Then create the post with content_type "${CONTENT_TYPES[input.platform]}". When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
@@ -60,4 +72,47 @@ export async function streamSocialWriter(input: SocialWriterInput): Promise<Resp
       platform: input.platform,
     },
   );
+}
+
+/**
+ * Builds template-specific instructions from a template definition.
+ * Converts template structure and tone guidance into prompt instructions
+ * that guide the AI in following the template format.
+ */
+function buildTemplateInstructions(template: ReturnType<typeof getTemplateBySlug>): string {
+  if (!template) return "";
+
+  const instructions: string[] = [];
+
+  instructions.push(`## Content Template: ${template.name}`);
+  instructions.push(`\n${template.description}\n`);
+
+  if (template.structure?.sections && template.structure.sections.length > 0) {
+    instructions.push("### Required Structure");
+    instructions.push("\nYour social post MUST follow this structure:\n");
+
+    template.structure.sections.forEach((section, index) => {
+      const requiredLabel = section.required ? "(REQUIRED)" : "(OPTIONAL)";
+      instructions.push(`${index + 1}. **${section.heading}** ${requiredLabel}`);
+      instructions.push(`   ${section.description}`);
+      instructions.push("");
+    });
+  }
+
+  if (template.toneGuidance) {
+    instructions.push("### Tone and Style Guidance");
+    instructions.push(`\n${template.toneGuidance}\n`);
+  }
+
+  if (template.exampleContent) {
+    instructions.push("### Example Format");
+    instructions.push("\nHere's an example of how this template should look:\n");
+    instructions.push("```markdown");
+    instructions.push(template.exampleContent.substring(0, 500) + "...");
+    instructions.push("```\n");
+  }
+
+  instructions.push("**Important:** Use the template structure as scaffolding, but fill it with content based on the actual insight data you fetch. The template provides the format and guidance, not the content itself.");
+
+  return instructions.join("\n");
 }

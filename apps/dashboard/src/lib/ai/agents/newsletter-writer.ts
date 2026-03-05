@@ -7,6 +7,7 @@
 import { NEWSLETTER_PROMPT } from "../prompts/newsletter";
 import { createAgentMcpServer } from "../mcp-server-factory";
 import { runAgentStreaming } from "../agent-runner";
+import { getTemplateBySlug } from "@/lib/templates";
 
 /** Input parameters for the newsletter writer agent. */
 interface NewsletterWriterInput {
@@ -16,6 +17,8 @@ interface NewsletterWriterInput {
   lookbackDays: number;
   /** Optional extra instructions appended to the agent prompt. */
   customInstructions?: string;
+  /** Optional template slug to use as scaffolding for the newsletter post. */
+  templateId?: string;
 }
 
 /**
@@ -29,16 +32,68 @@ export function streamNewsletterWriter(input: NewsletterWriterInput): Response {
     ? `Generate a newsletter email digest for the last ${input.lookbackDays} day${input.lookbackDays === 1 ? "" : "s"}. First use list_sessions_by_timeframe to find sessions in the window, then use get_top_insights to surface the most interesting technical moments, then create a newsletter post with create_post using contentType "newsletter".\n\nAdditional instructions: ${input.customInstructions}`
     : `Generate a newsletter email digest for the last ${input.lookbackDays} day${input.lookbackDays === 1 ? "" : "s"}. First use list_sessions_by_timeframe to find sessions in the window, then use get_top_insights to surface the most interesting technical moments, then create a newsletter post with create_post using contentType "newsletter".`;
 
+  let systemPrompt = NEWSLETTER_PROMPT;
+  if (input.templateId) {
+    const template = getTemplateBySlug(input.templateId);
+    if (template) {
+      const templateInstructions = buildTemplateInstructions(template);
+      systemPrompt = `${systemPrompt}\n\n${templateInstructions}`;
+    }
+  }
+
   const mcpServer = createAgentMcpServer("newsletter-writer", input.workspaceId);
 
   return runAgentStreaming(
     {
       agentType: "newsletter-writer",
       workspaceId: input.workspaceId,
-      systemPrompt: NEWSLETTER_PROMPT,
+      systemPrompt,
       userMessage,
       mcpServer,
       trackRun: false,
     },
   );
+}
+
+/**
+ * Builds template-specific instructions from a template definition.
+ * Converts template structure and tone guidance into prompt instructions
+ * that guide the AI in following the template format.
+ */
+function buildTemplateInstructions(template: ReturnType<typeof getTemplateBySlug>): string {
+  if (!template) return "";
+
+  const instructions: string[] = [];
+
+  instructions.push(`## Content Template: ${template.name}`);
+  instructions.push(`\n${template.description}\n`);
+
+  if (template.structure?.sections && template.structure.sections.length > 0) {
+    instructions.push("### Required Structure");
+    instructions.push("\nYour newsletter post MUST follow this structure:\n");
+
+    template.structure.sections.forEach((section, index) => {
+      const requiredLabel = section.required ? "(REQUIRED)" : "(OPTIONAL)";
+      instructions.push(`${index + 1}. **${section.heading}** ${requiredLabel}`);
+      instructions.push(`   ${section.description}`);
+      instructions.push("");
+    });
+  }
+
+  if (template.toneGuidance) {
+    instructions.push("### Tone and Style Guidance");
+    instructions.push(`\n${template.toneGuidance}\n`);
+  }
+
+  if (template.exampleContent) {
+    instructions.push("### Example Format");
+    instructions.push("\nHere's an example of how this template should look:\n");
+    instructions.push("```markdown");
+    instructions.push(template.exampleContent.substring(0, 500) + "...");
+    instructions.push("```\n");
+  }
+
+  instructions.push("**Important:** Use the template structure as scaffolding, but fill it with content based on the actual session data you fetch. The template provides the format and guidance, not the content itself.");
+
+  return instructions.join("\n");
 }
