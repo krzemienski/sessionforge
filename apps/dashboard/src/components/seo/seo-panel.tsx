@@ -21,6 +21,7 @@ interface SeoData {
 
 interface SeoPanelProps {
   postId: string;
+  refreshKey?: number;
 }
 
 function SkeletonLine({ className }: { className?: string }) {
@@ -329,7 +330,7 @@ const TABS: { id: SeoTab; label: string; icon: React.ComponentType<{ size?: numb
   { id: "geo", label: "GEO", icon: Zap },
 ];
 
-export function SeoPanel({ postId }: SeoPanelProps) {
+export function SeoPanel({ postId, refreshKey }: SeoPanelProps) {
   const [activeTab, setActiveTab] = useState<SeoTab>("overview");
   const [data, setData] = useState<SeoData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -355,7 +356,7 @@ export function SeoPanel({ postId }: SeoPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [postId]);
+  }, [postId, refreshKey]);
 
   if (loading) {
     return (

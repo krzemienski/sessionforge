@@ -105,6 +105,7 @@ export default function ContentEditorPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [seoRefreshKey, setSeoRefreshKey] = useState(0);
   const initializedRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const lastSavedMarkdownRef = useRef("");
@@ -163,7 +164,26 @@ export default function ContentEditorPage() {
   }
 
   const handleSave = useCallback(() => {
-    update.mutate({ id: postId, title, markdown, status, versionType: "major", editType: "user_edit" });
+    update.mutate(
+      { id: postId, title, markdown, status, versionType: "major", editType: "user_edit" },
+      {
+        onSuccess: () => {
+          fetch(`/api/content/${postId}/seo/analyze`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ regenerate: true }),
+          })
+            .then((res) => {
+              if (res.ok) {
+                setSeoRefreshKey((k) => k + 1);
+              }
+            })
+            .catch(() => {
+              // analysis is best-effort; do not surface fetch errors to the user
+            });
+        },
+      }
+    );
     lastSavedMarkdownRef.current = markdown;
   }, [update, postId, title, markdown, status]);
 
@@ -523,6 +543,7 @@ export default function ContentEditorPage() {
                       postId={postId}
                       markdown={markdown}
                       title={title}
+                      refreshKey={seoRefreshKey}
                     />
                   )}
                   {sidebarTab === "evidence" && (
