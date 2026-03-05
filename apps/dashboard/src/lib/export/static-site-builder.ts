@@ -9,6 +9,8 @@ import {
 } from "./theme-manager";
 import { slugifyTitle, getExportDirectory } from "./markdown-export";
 import type { ExportablePost } from "./markdown-export";
+import { generateSitemap } from "./sitemap-generator";
+import { generateRssFeed } from "./rss-generator";
 
 export interface StaticSiteOptions {
   themeId: ThemeId;
@@ -117,17 +119,20 @@ async function renderPostPage(
     COLLECTION_DESCRIPTION: "",
   });
 
-  // Inject CSS and JS inline so pages are fully self-contained
-  let rendered = applyTemplateVariables(html, variables);
-  rendered = rendered.replace(
-    '<link rel="stylesheet" href="styles.css">',
+  // Inject CSS and JS inline BEFORE template variable substitution so pages
+  // are fully self-contained. The templates reference assets via
+  // {{BASE_URL}}/styles.css — regex matching handles all variants.
+  let rawHtml = html;
+  rawHtml = rawHtml.replace(
+    /<link[^>]+href="[^"]*styles\.css"[^>]*>/g,
     `<style>${css}</style>`
   );
-  rendered = rendered.replace(
-    '<script src="script.js"></script>',
+  rawHtml = rawHtml.replace(
+    /<script[^>]+src="[^"]*script\.js"[^>]*><\/script>/g,
     `<script>${js}</script>`
   );
 
+  const rendered = applyTemplateVariables(rawHtml, variables);
   return rendered;
 }
 
@@ -164,16 +169,18 @@ async function renderIndexPage(
     POST_CONTENT: "",
   });
 
-  let rendered = applyTemplateVariables(html, variables);
-  rendered = rendered.replace(
-    '<link rel="stylesheet" href="styles.css">',
+  // Inline CSS and JS before template variable substitution
+  let rawHtml = html;
+  rawHtml = rawHtml.replace(
+    /<link[^>]+href="[^"]*styles\.css"[^>]*>/g,
     `<style>${css}</style>`
   );
-  rendered = rendered.replace(
-    '<script src="script.js"></script>',
+  rawHtml = rawHtml.replace(
+    /<script[^>]+src="[^"]*script\.js"[^>]*><\/script>/g,
     `<script>${js}</script>`
   );
 
+  const rendered = applyTemplateVariables(rawHtml, variables);
   return rendered;
 }
 
@@ -247,6 +254,21 @@ export async function buildStaticSiteZip(
     options
   );
   zip.file("index.html", indexHtml);
+
+  // sitemap.xml — helps search engines crawl the exported site
+  const sitemapXml = generateSitemap(posts, {
+    baseUrl: baseUrl || "https://example.com",
+    includeIndex: true,
+  });
+  zip.file("sitemap.xml", sitemapXml);
+
+  // rss.xml — standard RSS 2.0 feed for the collection
+  const rssFeedXml = generateRssFeed(posts, {
+    baseUrl: baseUrl || "https://example.com",
+    title: options.collectionName ?? config.siteTitle,
+    description: options.collectionDescription ?? config.siteDescription,
+  });
+  zip.file("rss.xml", rssFeedXml);
 
   // CNAME for custom domain support
   if (options.customDomain) {
