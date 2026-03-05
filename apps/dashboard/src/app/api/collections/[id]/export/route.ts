@@ -42,6 +42,8 @@ export async function GET(
   const themeId: ThemeId = VALID_THEMES.includes(themeParam as ThemeId)
     ? (themeParam as ThemeId)
     : "technical-blog";
+  const customDomainParam = searchParams.get("customDomain") ?? undefined;
+  const customDomain = customDomainParam || collection.customDomain || undefined;
 
   const collectionPostRows = await db.query.collectionPosts.findMany({
     where: eq(collectionPosts.collectionId, id),
@@ -83,7 +85,7 @@ export async function GET(
       themeId,
       collectionName: collection.name,
       collectionDescription: collection.description ?? undefined,
-      customDomain: collection.customDomain ?? undefined,
+      customDomain,
     });
 
     const { contentType, filename } = staticSiteDownloadHeaders(collection.name);

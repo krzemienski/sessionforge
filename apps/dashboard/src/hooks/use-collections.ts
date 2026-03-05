@@ -113,11 +113,12 @@ export function useExportCollection() {
   const [isExporting, setIsExporting] = useState(false);
 
   const exportCollection = useCallback(
-    async (id: string, collectionName: string, theme?: string) => {
+    async (id: string, collectionName: string, theme?: string, customDomain?: string) => {
       setIsExporting(true);
       try {
         const sp = new URLSearchParams();
         if (theme) sp.set("theme", theme);
+        if (customDomain) sp.set("customDomain", customDomain);
         const res = await fetch(`/api/collections/${id}/export?${sp}`);
         if (!res.ok) throw new Error("Export failed");
         const blob = await res.blob();

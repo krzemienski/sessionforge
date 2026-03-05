@@ -46,7 +46,7 @@ export function StaticSiteExportModal({
   async function handleExport() {
     setErrorMessage(null);
     try {
-      await exportCollection(collectionId, collectionName, selectedTheme);
+      await exportCollection(collectionId, collectionName, selectedTheme, customDomain || undefined);
       setIsSuccess(true);
     } catch (err) {
       setErrorMessage(

@@ -8,8 +8,8 @@ import {
   ScrollText,
   FileText,
   Lightbulb,
-  CalendarDays,
   BarChart3,
+  FolderOpen,
   Settings,
   Plug2,
 } from "lucide-react";
@@ -20,6 +20,7 @@ const tabs = [
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
+  { label: "Collections", icon: FolderOpen, href: "/collections" },
   { label: "Settings", icon: Settings, href: "/settings" },
   { label: "Integrations", icon: Plug2, href: "/settings/integrations" },
 ];
