@@ -320,6 +320,70 @@ export default function IntegrationsPage() {
 
   const isMediumConnected = mediumIntegration.data?.connected === true;
 
+  // ── Twitter integration queries and mutations ──
+  const twitterIntegration = useQuery({
+    queryKey: ["twitter-integration", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/integrations/twitter?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed to load Twitter integration status");
+      return res.json();
+    },
+  });
+
+  const twitterDisconnect = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/integrations/twitter?workspace=${workspace}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to disconnect");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["twitter-integration", workspace] });
+    },
+  });
+
+  const isTwitterConnected = twitterIntegration.data?.connected === true;
+
+  const connectTwitter = () => {
+    window.location.href = `/api/integrations/twitter/oauth?workspace=${workspace}`;
+  };
+
+  // ── LinkedIn integration queries and mutations ──
+  const linkedinIntegration = useQuery({
+    queryKey: ["linkedin-integration", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/integrations/linkedin?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed to load LinkedIn integration status");
+      return res.json();
+    },
+  });
+
+  const linkedinDisconnect = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/integrations/linkedin?workspace=${workspace}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to disconnect");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["linkedin-integration", workspace] });
+    },
+  });
+
+  const isLinkedinConnected = linkedinIntegration.data?.connected === true;
+
+  const connectLinkedin = () => {
+    window.location.href = `/api/integrations/linkedin/oauth?workspace=${workspace}`;
+  };
+
   if (integrations.isLoading) {
     return (
       <div className="animate-pulse space-y-4">
@@ -987,6 +1051,168 @@ export default function IntegrationsPage() {
                 >
                   <Github size={14} />
                   Connect GitHub
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Twitter Integration ── */}
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 mt-6">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-sf bg-sf-bg-tertiary border border-sf-border flex items-center justify-center flex-shrink-0">
+            <span className="text-lg font-bold text-sf-text-primary">𝕏</span>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-base font-semibold text-sf-text-primary">Twitter</h2>
+              {isTwitterConnected ? (
+                <span className="inline-flex items-center gap-1 text-xs text-sf-success bg-sf-success/10 border border-sf-success/20 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 size={11} />
+                  Connected
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs text-sf-text-muted bg-sf-bg-tertiary border border-sf-border px-2 py-0.5 rounded-full">
+                  Not connected
+                </span>
+              )}
+            </div>
+
+            <p className="text-sm text-sf-text-secondary mb-4">
+              Connect your Twitter account to track engagement analytics and publish threads.
+            </p>
+
+            {twitterIntegration.isLoading && (
+              <div className="animate-pulse h-8 bg-sf-bg-tertiary rounded w-1/3" />
+            )}
+
+            {!twitterIntegration.isLoading && isTwitterConnected && (
+              <div className="space-y-3">
+                <div className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-4 py-3 text-sm space-y-1">
+                  <p className="text-sf-text-primary">
+                    <span className="text-sf-text-muted">Account: </span>
+                    <span className="font-medium font-code">@{twitterIntegration.data.username}</span>
+                  </p>
+                  {twitterIntegration.data.connectedAt && (
+                    <p className="text-xs text-sf-text-muted">
+                      Connected {timeAgo(twitterIntegration.data.connectedAt)}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => twitterDisconnect.mutate()}
+                  disabled={twitterDisconnect.isPending}
+                  className="flex items-center gap-2 text-sf-danger border border-sf-danger/30 bg-sf-danger/5 hover:bg-sf-danger/10 px-4 py-2 rounded-sf text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Link2Off size={14} />
+                  {twitterDisconnect.isPending ? "Disconnecting..." : "Disconnect Twitter"}
+                </button>
+
+                {twitterDisconnect.isError && (
+                  <p className="text-sm text-sf-danger flex items-center gap-1">
+                    <AlertCircle size={13} />
+                    {(twitterDisconnect.error as Error).message}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!twitterIntegration.isLoading && !isTwitterConnected && (
+              <div className="space-y-3">
+                <p className="text-sm text-sf-text-secondary">
+                  Connect your Twitter account via OAuth to enable engagement tracking and thread publishing.
+                </p>
+
+                <button
+                  onClick={connectTwitter}
+                  className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                >
+                  <Link2 size={14} />
+                  Connect Twitter
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── LinkedIn Integration ── */}
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 mt-6">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-sf bg-sf-bg-tertiary border border-sf-border flex items-center justify-center flex-shrink-0">
+            <span className="text-lg font-bold text-sf-text-primary">in</span>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-base font-semibold text-sf-text-primary">LinkedIn</h2>
+              {isLinkedinConnected ? (
+                <span className="inline-flex items-center gap-1 text-xs text-sf-success bg-sf-success/10 border border-sf-success/20 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 size={11} />
+                  Connected
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs text-sf-text-muted bg-sf-bg-tertiary border border-sf-border px-2 py-0.5 rounded-full">
+                  Not connected
+                </span>
+              )}
+            </div>
+
+            <p className="text-sm text-sf-text-secondary mb-4">
+              Connect your LinkedIn account to track engagement analytics and publish posts.
+            </p>
+
+            {linkedinIntegration.isLoading && (
+              <div className="animate-pulse h-8 bg-sf-bg-tertiary rounded w-1/3" />
+            )}
+
+            {!linkedinIntegration.isLoading && isLinkedinConnected && (
+              <div className="space-y-3">
+                <div className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-4 py-3 text-sm space-y-1">
+                  <p className="text-sf-text-primary">
+                    <span className="text-sf-text-muted">Account: </span>
+                    <span className="font-medium font-code">{linkedinIntegration.data.username}</span>
+                  </p>
+                  {linkedinIntegration.data.connectedAt && (
+                    <p className="text-xs text-sf-text-muted">
+                      Connected {timeAgo(linkedinIntegration.data.connectedAt)}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => linkedinDisconnect.mutate()}
+                  disabled={linkedinDisconnect.isPending}
+                  className="flex items-center gap-2 text-sf-danger border border-sf-danger/30 bg-sf-danger/5 hover:bg-sf-danger/10 px-4 py-2 rounded-sf text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <Link2Off size={14} />
+                  {linkedinDisconnect.isPending ? "Disconnecting..." : "Disconnect LinkedIn"}
+                </button>
+
+                {linkedinDisconnect.isError && (
+                  <p className="text-sm text-sf-danger flex items-center gap-1">
+                    <AlertCircle size={13} />
+                    {(linkedinDisconnect.error as Error).message}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!linkedinIntegration.isLoading && !isLinkedinConnected && (
+              <div className="space-y-3">
+                <p className="text-sm text-sf-text-secondary">
+                  Connect your LinkedIn account via OAuth to enable engagement tracking and post publishing.
+                </p>
+
+                <button
+                  onClick={connectLinkedin}
+                  className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                >
+                  <Link2 size={14} />
+                  Connect LinkedIn
                 </button>
               </div>
             )}
