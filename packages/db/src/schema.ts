@@ -136,6 +136,21 @@ export const usageEventTypeEnum = pgEnum("usage_event_type", [
   "content_generation",
 ]);
 
+export const batchJobTypeEnum = pgEnum("batch_job_type", [
+  "extract_insights",
+  "generate_content",
+  "batch_archive",
+  "batch_delete",
+]);
+
+export const batchJobStatusEnum = pgEnum("batch_job_status", [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -156,8 +171,6 @@ export interface SeoMetadata {
   suggestedKeywords?: string[] | null;
   generatedAt?: string | null;
 }
-
-
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -925,6 +938,38 @@ export const contentAssets = pgTable("content_assets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+
+// ── Batch Jobs table (from 004-batch-operations-for-sessions-insights) ──
+
+export const batchJobs = pgTable(
+  "batch_jobs",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    type: batchJobTypeEnum("type").notNull(),
+    status: batchJobStatusEnum("status").notNull().default("pending"),
+    totalItems: integer("total_items").notNull().default(0),
+    processedItems: integer("processed_items").notNull().default(0),
+    successCount: integer("success_count").notNull().default(0),
+    errorCount: integer("error_count").notNull().default(0),
+    metadata: jsonb("metadata"),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [
+    index("batchJobs_workspaceId_idx").on(table.workspaceId),
+    index("batchJobs_status_idx").on(table.status),
+    index("batchJobs_createdBy_idx").on(table.createdBy),
+  ]
+);
+
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -984,6 +1029,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   automationRuns: many(automationRuns),
   usageEvents: many(usageEvents),
   postConversations: many(postConversations),
+  batchJobs: many(batchJobs),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1349,5 +1395,16 @@ export const contentAssetsRelations = relations(contentAssets, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [contentAssets.workspaceId],
     references: [workspaces.id],
+  }),
+}));
+
+export const batchJobsRelations = relations(batchJobs, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [batchJobs.workspaceId],
+    references: [workspaces.id],
+  }),
+  createdByUser: one(users, {
+    fields: [batchJobs.createdBy],
+    references: [users.id],
   }),
 }));
