@@ -14,6 +14,8 @@ import {
   KeyRound,
   Link2,
   LogOut,
+  CalendarClock,
+  Calendar,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -23,6 +25,8 @@ const mainNav = [
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
+  { label: "Schedule", icon: CalendarClock, href: "/schedule" },
+  { label: "Calendar", icon: Calendar, href: "/calendar" },
   { label: "Automation", icon: Zap, href: "/automation" },
 ];
 
