@@ -21,7 +21,6 @@ import { handleMarkdownEditorTool } from "./tools/markdown-editor";
 import { handleSkillLoaderTool } from "./tools/skill-loader";
 import { handleEvidenceTool } from "./tools/evidence-tools";
 import { handleIngestionTool } from "./tools/ingestion-tools";
-import { handleGitHubContextTool } from "./tools/github-context";
 
 import type { AgentType } from "./orchestration/tool-registry";
 
@@ -45,7 +44,6 @@ const TOOL_GROUP_HANDLERS: Record<string, ToolHandler> = {
   markdown: handleMarkdownEditorTool,
   evidence: handleEvidenceTool,
   ingestion: handleIngestionTool,
-  github: handleGitHubContextTool,
 };
 
 const SKILL_HANDLER: SkillToolHandler = handleSkillLoaderTool;
@@ -80,20 +78,15 @@ const TOOL_NAME_TO_GROUP: Record<string, string> = {
   get_external_source: "ingestion",
   get_repo_analysis: "ingestion",
   get_content_brief: "ingestion",
-  // github context tools
-  get_github_commits_for_session: "github",
-  get_pull_request_by_id: "github",
-  get_recent_commits: "github",
-  search_github_issues: "github",
 };
 
 // ── Agent type → tool groups (mirrors AGENT_TOOL_SETS from tool-registry) ──
 
 const AGENT_TOOL_GROUPS: Record<AgentType, string[]> = {
   "insight-extractor": ["session", "insight"],
-  "blog-writer": ["session", "insight", "post", "skill", "github"],
+  "blog-writer": ["session", "insight", "post", "skill"],
   "social-writer": ["session", "insight", "post"],
-  "changelog-writer": ["session", "post", "github"],
+  "changelog-writer": ["session", "post"],
   "editor-chat": ["post", "markdown"],
   "repurpose-writer": ["post"],
   "newsletter-writer": ["session", "insight", "post"],
@@ -269,37 +262,6 @@ const TOOL_SCHEMAS: Record<string, { description: string; schema: z.AnyZodObject
   get_content_brief: {
     description: "Get the structured content brief extracted from the user's text input.",
     schema: z.object({}),
-  },
-  // ── GitHub context tools ──
-  get_github_commits_for_session: {
-    description: "Retrieve GitHub commits associated with a Claude session by matching the session's project path to connected repositories. Returns commits made during or shortly after the session timeframe.",
-    schema: z.object({
-      sessionId: z.string().describe("The session ID to fetch GitHub commits for"),
-      limit: z.number().optional().describe("Maximum number of commits to return (default: 50)"),
-    }),
-  },
-  get_pull_request_by_id: {
-    description: "Get detailed information about a specific GitHub pull request by repository name and PR number.",
-    schema: z.object({
-      repositoryName: z.string().describe("Repository name (can be partial match, e.g., 'sessionforge' or 'owner/sessionforge')"),
-      prNumber: z.number().describe("Pull request number"),
-    }),
-  },
-  get_recent_commits: {
-    description: "Get recent GitHub commits from connected repositories within a lookback window, optionally filtered by repository name.",
-    schema: z.object({
-      lookbackDays: z.number().describe("Number of days to look back for commits"),
-      repositoryFilter: z.string().optional().describe("Optional repository name filter (partial match)"),
-      limit: z.number().optional().describe("Maximum number of commits to return (default: 50)"),
-    }),
-  },
-  search_github_issues: {
-    description: "Search GitHub issues across connected repositories by title or body content. Optionally filter by issue state (open, closed, or all).",
-    schema: z.object({
-      searchTerm: z.string().describe("Search term to match against issue titles and bodies"),
-      state: z.enum(["open", "closed", "all"]).optional().describe("Filter by issue state (default: all)"),
-      limit: z.number().optional().describe("Maximum number of issues to return (default: 20)"),
-    }),
   },
 };
 

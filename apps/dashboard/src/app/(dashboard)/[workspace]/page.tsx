@@ -1,12 +1,12 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { useSessions, useScanSessions } from "@/hooks/use-sessions";
 import { useInsights } from "@/hooks/use-insights";
 import { useContent } from "@/hooks/use-content";
-import { useGitHubActivity } from "@/hooks/use-github";
 import { timeAgo } from "@/lib/utils";
-import { Zap, ScrollText, Lightbulb, FileText, Clock, Github, GitCommit, GitPullRequest } from "lucide-react";
+import { Zap, ScrollText, Lightbulb, FileText, Clock } from "lucide-react";
 
 function StatCard({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string | number; sub?: string }) {
   return (
@@ -26,13 +26,11 @@ export default function DashboardHome() {
   const sessions = useSessions(workspace, { limit: 100 });
   const insights = useInsights(workspace, { limit: 100 });
   const content = useContent(workspace, { limit: 100 });
-  const githubActivity = useGitHubActivity(workspace, { limit: 10 });
   const scan = useScanSessions(workspace);
 
   const sessionList = sessions.data?.sessions ?? [];
   const insightList = insights.data?.insights ?? [];
   const contentList = content.data?.posts ?? [];
-  const activity = githubActivity.data?.activity ?? [];
   const drafts = contentList.filter((p: any) => p.status === "draft");
   const lastScan = sessionList[0]?.scannedAt;
 
@@ -62,14 +60,22 @@ export default function DashboardHome() {
           <ScrollText size={48} className="mx-auto text-sf-text-muted mb-4" />
           <h2 className="text-lg font-semibold text-sf-text-primary mb-2">No sessions found</h2>
           <p className="text-sf-text-secondary mb-6">Scan your Claude Code sessions to get started</p>
-          <button
-            onClick={() => scan.mutate(30)}
-            disabled={scan.isPending}
-            className="bg-sf-accent text-sf-bg-primary px-6 py-2.5 rounded-sf font-medium hover:bg-sf-accent-dim transition-colors"
-          >
-            <Zap size={16} className="inline mr-2" />
-            Scan Sessions
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => scan.mutate(30)}
+              disabled={scan.isPending}
+              className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+            >
+              <Zap size={16} />
+              {scan.isPending ? "Scanning..." : "Scan Sessions"}
+            </button>
+            <Link
+              href="/onboarding"
+              className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
+            >
+              View setup guide →
+            </Link>
+          </div>
         </div>
       )}
 
@@ -78,62 +84,6 @@ export default function DashboardHome() {
           <p className="text-sf-accent text-sm">
             Scan complete: {scan.data?.scanned ?? 0} files scanned, {(scan.data?.new ?? 0) + (scan.data?.updated ?? 0)} sessions indexed
           </p>
-        </div>
-      )}
-
-      {activity.length > 0 && (
-        <div className="mt-8">
-          <div className="flex items-center gap-2 mb-4">
-            <Github size={20} className="text-sf-text-secondary" />
-            <h2 className="text-lg font-semibold text-sf-text-primary">Recent GitHub Activity</h2>
-          </div>
-          <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg divide-y divide-sf-border">
-            {activity.map((item: any) => (
-              <div key={item.id} className="p-4 hover:bg-sf-bg-tertiary transition-colors">
-                <div className="flex items-start gap-3">
-                  <div className="mt-1">
-                    {item.type === "commit" ? (
-                      <GitCommit size={16} className="text-sf-text-muted" />
-                    ) : (
-                      <GitPullRequest size={16} className="text-sf-text-muted" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <a
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sf-text-primary hover:text-sf-accent font-medium text-sm truncate"
-                      >
-                        {item.type === "commit" ? item.message : item.title}
-                      </a>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-sf-text-muted">
-                      <span>{item.authorName}</span>
-                      <span>•</span>
-                      <a
-                        href={item.repoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-sf-accent"
-                      >
-                        {item.repoName}
-                      </a>
-                      <span>•</span>
-                      <span>{timeAgo(item.date)}</span>
-                      {item.type === "pull_request" && (
-                        <>
-                          <span>•</span>
-                          <span className="capitalize">{item.state}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>

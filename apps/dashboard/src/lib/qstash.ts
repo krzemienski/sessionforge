@@ -52,8 +52,40 @@ export async function createFileWatchSchedule(
   return scheduleId;
 }
 
+export async function createPublishSchedule(
+  postId: string,
+  scheduledFor: Date
+): Promise<string> {
+  const destination = `${process.env.NEXT_PUBLIC_APP_URL}/api/schedule/publish`;
+
+  // Calculate delay in seconds from now
+  const delaySeconds = Math.floor((scheduledFor.getTime() - Date.now()) / 1000);
+
+  if (delaySeconds <= 0) {
+    throw new Error("Scheduled time must be in the future");
+  }
+
+  // Use publishJSON for one-time delayed jobs (not schedules)
+  const { messageId } = await client.publishJSON({
+    url: destination,
+    body: { postId },
+    delay: delaySeconds,
+  });
+
+  return messageId;
+}
+
 export async function deleteTriggerSchedule(scheduleId: string): Promise<void> {
   await client.schedules.delete(scheduleId);
+}
+
+export async function cancelPublishMessage(messageId: string): Promise<void> {
+  try {
+    await client.messages.delete(messageId);
+  } catch (error) {
+    // Message might have already been delivered or doesn't exist
+    // This is not a critical error - the webhook handler will check the database
+  }
 }
 
 export async function verifyQStashRequest(

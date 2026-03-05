@@ -27,6 +27,7 @@ export const postStatusEnum = pgEnum("post_status", [
   "draft",
   "published",
   "archived",
+  "scheduled",
 ]);
 
 export const contentTypeEnum = pgEnum("content_type", [
@@ -453,6 +454,9 @@ export const posts = pgTable(
       onDelete: "set null",
     }),
     publishedAt: timestamp("published_at"),
+    scheduledFor: timestamp("scheduled_for"),
+    timezone: text("timezone"),
+    qstashScheduleId: text("qstash_schedule_id"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },

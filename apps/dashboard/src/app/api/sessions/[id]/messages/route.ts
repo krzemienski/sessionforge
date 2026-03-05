@@ -1,17 +1,30 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions, workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
 import readline from "readline";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-async function readRawMessages(filePath: string): Promise<unknown[]> {
+interface PagedMessages {
+  messages: unknown[];
+  hasMore: boolean;
+}
+
+async function readPagedMessages(
+  filePath: string,
+  offset: number,
+  limit: number
+): Promise<PagedMessages> {
   const messages: unknown[] = [];
+  let validLinesSeen = 0;
+
   return new Promise((resolve) => {
     const stream = createReadStream(filePath, { encoding: "utf8" });
     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -19,60 +32,84 @@ async function readRawMessages(filePath: string): Promise<unknown[]> {
     rl.on("line", (line) => {
       const trimmed = line.trim();
       if (!trimmed) return;
+
+      let parsed: unknown;
       try {
-        messages.push(JSON.parse(trimmed));
+        parsed = JSON.parse(trimmed);
       } catch {
         // skip malformed
+        return;
       }
+
+      if (validLinesSeen < offset) {
+        validLinesSeen++;
+        return;
+      }
+
+      if (messages.length < limit) {
+        messages.push(parsed);
+      } else {
+        // We have one extra — signals hasMore; stop processing
+        rl.close();
+        stream.destroy();
+      }
+
+      validLinesSeen++;
     });
 
-    rl.on("close", () => resolve(messages));
-    rl.on("error", () => resolve(messages));
+    rl.on("close", () => resolve({ messages, hasMore: validLinesSeen > offset + limit }));
+    rl.on("error", () => resolve({ messages, hasMore: false }));
   });
 }
 
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await ctx.params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { searchParams } = new URL(req.url);
+    const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
+    const offset = Math.max(parseInt(searchParams.get("offset") ?? "0"), 0);
 
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(eq(workspaces.ownerId, session.user.id))
-    .limit(1);
+    // Look up session first, then verify ownership
+    const rows = await db
+      .select({ filePath: claudeSessions.filePath, workspaceId: claudeSessions.workspaceId })
+      .from(claudeSessions)
+      .where(eq(claudeSessions.id, id))
+      .limit(1);
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "No workspace found" }, { status: 404 });
-  }
+    if (!rows.length) {
+      throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  const rows = await db
-    .select({ filePath: claudeSessions.filePath })
-    .from(claudeSessions)
-    .where(
-      and(
-        eq(claudeSessions.workspaceId, workspace[0].id),
-        eq(claudeSessions.id, id)
+    const ownerCheck = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(
+        and(
+          eq(workspaces.id, rows[0].workspaceId),
+          eq(workspaces.ownerId, session.user.id)
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
 
-  if (!rows.length) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  }
+    if (!ownerCheck.length) {
+      throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  const filePath = rows[0].filePath;
+    const filePath = rows[0].filePath;
 
-  try {
-    await fs.access(filePath);
-  } catch {
-    return NextResponse.json({ error: "Session file not accessible" }, { status: 404 });
-  }
+    try {
+      await fs.access(filePath);
+    } catch {
+      throw new AppError("Session file not accessible", ERROR_CODES.NOT_FOUND);
+    }
 
-  const messages = await readRawMessages(filePath);
-  return NextResponse.json({ data: messages, count: messages.length });
+    const { messages, hasMore } = await readPagedMessages(filePath, offset, limit);
+    return NextResponse.json({ messages, offset, limit, hasMore });
+  })(req);
 }

@@ -1,7 +1,7 @@
 CREATE TYPE "public"."content_type" AS ENUM('blog_post', 'twitter_thread', 'linkedin_post', 'devto_post', 'changelog', 'newsletter', 'custom');--> statement-breakpoint
 CREATE TYPE "public"."insight_category" AS ENUM('novel_problem_solving', 'tool_pattern_discovery', 'before_after_transformation', 'failure_recovery', 'architecture_decision', 'performance_optimization');--> statement-breakpoint
 CREATE TYPE "public"."lookback_window" AS ENUM('current_day', 'yesterday', 'last_7_days', 'last_14_days', 'last_30_days', 'custom');--> statement-breakpoint
-CREATE TYPE "public"."post_status" AS ENUM('draft', 'published', 'archived');--> statement-breakpoint
+CREATE TYPE "public"."post_status" AS ENUM('draft', 'scheduled', 'published', 'archived');--> statement-breakpoint
 CREATE TYPE "public"."template_type" AS ENUM('built_in', 'custom', 'workspace_default');--> statement-breakpoint
 CREATE TYPE "public"."tone_profile" AS ENUM('technical', 'tutorial', 'conversational', 'professional', 'casual');--> statement-breakpoint
 CREATE TYPE "public"."trigger_type" AS ENUM('manual', 'scheduled', 'file_watch');--> statement-breakpoint
