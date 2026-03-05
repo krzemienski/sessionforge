@@ -35,20 +35,26 @@ export function MobileBottomNav({ workspace }: { workspace: string }) {
   }
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-sf-bg-secondary border-t border-sf-border flex items-center justify-around z-50">
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-sf-bg-secondary border-t border-sf-border flex items-center justify-around z-50"
+      role="navigation"
+      aria-label="Mobile navigation"
+    >
       {tabs.map((tab) => (
         <Link
           key={tab.href}
           href={`/${workspace}${tab.href}`}
+          aria-label={tab.label}
+          aria-current={isActive(tab.href) ? "page" : undefined}
           className={cn(
-            "flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors",
+            "flex flex-col items-center justify-center gap-1 w-full h-full min-h-[44px] transition-all active:scale-95",
             isActive(tab.href)
-              ? "text-sf-accent border-t-2 border-sf-accent"
-              : "text-sf-text-muted"
+              ? "text-sf-accent bg-sf-accent/10 border-t-2 border-sf-accent"
+              : "text-sf-text-muted hover:text-sf-text hover:bg-sf-bg-tertiary/50 active:bg-sf-bg-tertiary"
           )}
         >
-          <tab.icon size={20} />
-          <span className="text-[10px]">{tab.label}</span>
+          <tab.icon size={22} strokeWidth={isActive(tab.href) ? 2.5 : 2} />
+          <span className="text-[10px] font-medium">{tab.label}</span>
         </Link>
       ))}
     </nav>

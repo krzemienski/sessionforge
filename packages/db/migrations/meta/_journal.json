@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1772474686496,
-      "tag": "0000_brave_blink",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1772476429318,
-      "tag": "0001_slippery_dreadnoughts",
+      "when": 1772674233752,
+      "tag": "0000_demonic_cassandra_nova",
       "breakpoints": true
     },
     {
@@ -26,8 +19,15 @@
     {
       "idx": 3,
       "version": "7",
+      "when": 1772685567678,
+      "tag": "0003_ghost_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
       "when": 1772685432976,
-      "tag": "0003_eminent_moondragon",
+      "tag": "0004_eminent_moondragon",
       "breakpoints": true
     }
   ]

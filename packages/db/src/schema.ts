@@ -136,6 +136,12 @@ export const usageEventTypeEnum = pgEnum("usage_event_type", [
   "content_generation",
 ]);
 
+export const templateTypeEnum = pgEnum("template_type", [
+  "built_in",
+  "custom",
+  "workspace_default",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -833,6 +839,53 @@ export const devtoPublications = pgTable(
   ]
 );
 
+// ── Ghost CMS Integration tables (from 016-ghost-cms-publishing-integration) ──
+
+export const ghostIntegrations = pgTable(
+  "ghost_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ghostUrl: text("ghost_url").notNull(),
+    adminApiKey: text("admin_api_key").notNull(),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("ghostIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const ghostPublications = pgTable(
+  "ghost_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => ghostIntegrations.id, { onDelete: "cascade" }),
+    ghostPostId: text("ghost_post_id").notNull(),
+    ghostUrl: text("ghost_url"),
+    publishedAsDraft: boolean("published_as_draft").default(false),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("ghostPublications_workspaceId_idx").on(table.workspaceId),
+    index("ghostPublications_postId_idx").on(table.postId),
+    uniqueIndex("ghostPublications_postId_uidx").on(table.postId),
+  ]
+);
+
 // ── Agent Runs (from 004-error-recovery) ──
 
 export const agentRuns = pgTable(
@@ -1034,6 +1087,45 @@ export const contentAssets = pgTable("content_assets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ── Content Templates (from 007-content-templates-library) ──
+
+export const contentTemplates = pgTable(
+  "content_templates",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    templateType: templateTypeEnum("template_type").notNull(),
+    contentType: contentTypeEnum("content_type").notNull(),
+    description: text("description"),
+    structure: jsonb("structure").$type<{
+      sections: {
+        heading: string;
+        description: string;
+        required: boolean;
+      }[];
+    }>(),
+    toneGuidance: text("tone_guidance"),
+    exampleContent: text("example_content"),
+    isActive: boolean("is_active").default(true),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    usageCount: integer("usage_count").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("contentTemplates_workspaceId_idx").on(table.workspaceId),
+    index("contentTemplates_templateType_idx").on(table.templateType),
+    uniqueIndex("contentTemplates_slug_uidx").on(table.slug),
+  ]
+);
+
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1049,6 +1141,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   subscriptions: many(subscriptions),
   usageEvents: many(usageEvents),
   usageMonthlySummary: many(usageMonthlySummary),
+  contentTemplates: many(contentTemplates),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -1087,6 +1180,8 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   activity: many(workspaceActivity),
   devtoIntegrations: many(devtoIntegrations),
   devtoPublications: many(devtoPublications),
+  ghostIntegrations: many(ghostIntegrations),
+  ghostPublications: many(ghostPublications),
   agentRuns: many(agentRuns),
   writingSkills: many(writingSkills),
   sessionBookmarks: many(sessionBookmarks),
@@ -1095,6 +1190,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   postConversations: many(postConversations),
   collections: many(collections),
   series: many(series),
+  contentTemplates: many(contentTemplates),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1514,3 +1610,46 @@ export const seriesPostsRelations = relations(seriesPosts, ({ one }) => ({
     references: [posts.id],
   }),
 }));
+
+export const ghostIntegrationsRelations = relations(
+  ghostIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [ghostIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    publications: many(ghostPublications),
+  })
+);
+
+export const ghostPublicationsRelations = relations(
+  ghostPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [ghostPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [ghostPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(ghostIntegrations, {
+      fields: [ghostPublications.integrationId],
+      references: [ghostIntegrations.id],
+    }),
+  })
+);
+
+export const contentTemplatesRelations = relations(
+  contentTemplates,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [contentTemplates.workspaceId],
+      references: [workspaces.id],
+    }),
+    creator: one(users, {
+      fields: [contentTemplates.createdBy],
+      references: [users.id],
+    }),
+  })
+);

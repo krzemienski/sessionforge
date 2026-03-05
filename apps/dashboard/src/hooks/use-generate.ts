@@ -19,7 +19,8 @@ const INITIAL_STATUSES: FormatStatuses = {
 function buildRequest(
   workspaceSlug: string,
   insightId: string,
-  format: FormatKey
+  format: FormatKey,
+  templateId?: string
 ): [string, RequestInit] {
   if (format === "blog") {
     return [
@@ -27,7 +28,7 @@ function buildRequest(
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceSlug, insightId, tone: "technical" }),
+        body: JSON.stringify({ workspaceSlug, insightId, tone: "technical", ...(templateId && { templateId }) }),
       },
     ];
   }
@@ -148,7 +149,7 @@ async function consumeSSEStream(
   }
 }
 
-export function useGenerateFormats(workspaceSlug: string, insightId: string) {
+export function useGenerateFormats(workspaceSlug: string, insightId: string, templateId?: string) {
   const [statuses, setStatuses] = useState<FormatStatuses>({ ...INITIAL_STATUSES });
   const [postIds, setPostIds] = useState<GeneratedPostIds>({});
 
@@ -174,7 +175,7 @@ export function useGenerateFormats(workspaceSlug: string, insightId: string) {
 
       await Promise.all(
         selectedFormats.map(async (format) => {
-          const [url, init] = buildRequest(workspaceSlug, insightId, format);
+          const [url, init] = buildRequest(workspaceSlug, insightId, format, templateId);
 
           let res: Response;
           try {
@@ -203,7 +204,7 @@ export function useGenerateFormats(workspaceSlug: string, insightId: string) {
         })
       );
     },
-    [workspaceSlug, insightId]
+    [workspaceSlug, insightId, templateId]
   );
 
   return { statuses, postIds, generateFormats };

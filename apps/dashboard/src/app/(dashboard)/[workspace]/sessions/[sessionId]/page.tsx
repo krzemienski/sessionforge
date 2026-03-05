@@ -30,10 +30,7 @@ export default function SessionDetailPage() {
 
   return (
     <div>
-      <button
-        onClick={() => router.push(`/${workspace}/sessions`)}
-        className="flex items-center gap-1 text-sf-text-secondary hover:text-sf-text-primary text-sm mb-4"
-      >
+      <button onClick={() => router.push(`/${workspace}/sessions`)} className="flex items-center justify-center gap-1 text-sf-text-secondary hover:text-sf-text-primary text-sm mb-4 min-h-[44px] min-w-[44px]">
         <ArrowLeft size={16} /> Sessions
       </button>
 
@@ -45,11 +42,11 @@ export default function SessionDetailPage() {
           {s.durationSeconds ? ` · Duration: ${formatDuration(s.durationSeconds)}` : ""}
           {s.costUsd ? ` · Cost: $${s.costUsd.toFixed(2)}` : ""}
         </p>
-        <div className="flex items-center gap-3 mt-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-3">
           <button
             onClick={() => extract.mutate([s.id])}
             disabled={extract.isPending}
-            className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+            className="flex items-center justify-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50 min-h-[44px] w-full sm:w-auto"
           >
             <Lightbulb size={16} />
             {extract.isPending ? "Extracting..." : "Extract Insights"}
@@ -57,7 +54,7 @@ export default function SessionDetailPage() {
           {extract.isPending && (
             <button
               onClick={extract.cancel}
-              className="text-xs text-sf-text-muted hover:text-sf-text-secondary"
+              className="text-xs text-sf-text-muted hover:text-sf-text-secondary min-h-[44px]"
             >
               Cancel
             </button>
