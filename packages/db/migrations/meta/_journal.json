@@ -29,6 +29,13 @@
       "when": 1772685496014,
       "tag": "0003_dizzy_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772685583704,
+      "tag": "0004_nifty_mimic",
+      "breakpoints": true
     }
   ]
 }

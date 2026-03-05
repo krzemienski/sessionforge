@@ -68,6 +68,11 @@ export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
   "viewer",
 ]);
 
+export const socialPlatformEnum = pgEnum("social_platform", [
+  "twitter",
+  "linkedin",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -546,6 +551,39 @@ export const linkedinPublications = pgTable(
   ]
 );
 
+export const socialAnalytics = pgTable(
+  "social_analytics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    platform: socialPlatformEnum("platform").notNull(),
+    impressions: integer("impressions").default(0),
+    likes: integer("likes").default(0),
+    shares: integer("shares").default(0),
+    comments: integer("comments").default(0),
+    clicks: integer("clicks").default(0),
+    rawMetrics: jsonb("raw_metrics"),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("socialAnalytics_workspaceId_idx").on(table.workspaceId),
+    index("socialAnalytics_postId_idx").on(table.postId),
+    index("socialAnalytics_platform_idx").on(table.platform),
+    index("socialAnalytics_syncedAt_idx").on(table.syncedAt),
+    uniqueIndex("socialAnalytics_postId_platform_uidx").on(
+      table.postId,
+      table.platform
+    ),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -594,6 +632,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   linkedinIntegrations: many(linkedinIntegrations),
   twitterPublications: many(twitterPublications),
   linkedinPublications: many(linkedinPublications),
+  socialAnalytics: many(socialAnalytics),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -651,6 +690,7 @@ export const postsRelations = relations(posts, ({ one }) => ({
     fields: [posts.id],
     references: [linkedinPublications.postId],
   }),
+  socialAnalytics: many(socialAnalytics),
 }));
 
 export const contentTriggersRelations = relations(
@@ -801,6 +841,20 @@ export const linkedinPublicationsRelations = relations(
     integration: one(linkedinIntegrations, {
       fields: [linkedinPublications.integrationId],
       references: [linkedinIntegrations.id],
+    }),
+  })
+);
+
+export const socialAnalyticsRelations = relations(
+  socialAnalytics,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [socialAnalytics.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [socialAnalytics.postId],
+      references: [posts.id],
     }),
   })
 );
