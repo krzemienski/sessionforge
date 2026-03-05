@@ -787,6 +787,7 @@ export const mediumIntegrations = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     apiKey: text("api_key").notNull(),
+    mediumUserId: text("medium_user_id"),
     username: text("username"),
     mediumUserId: text("medium_user_id"),
     enabled: boolean("enabled").default(true),

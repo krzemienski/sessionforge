@@ -103,6 +103,7 @@ export async function GET(request: Request) {
       .values({
         workspaceId: workspace.id,
         apiKey: tokenResponse.access_token,
+        mediumUserId: mediumUser.id,
         username: mediumUser.username,
         enabled: true,
       })
@@ -110,6 +111,7 @@ export async function GET(request: Request) {
         target: mediumIntegrations.workspaceId,
         set: {
           apiKey: tokenResponse.access_token,
+          mediumUserId: mediumUser.id,
           username: mediumUser.username,
           enabled: true,
           updatedAt: new Date(),

@@ -127,8 +127,13 @@ export async function POST(request: Request) {
         articleInput
       );
     } else {
-      // Use username as userId for user posts
-      const userId = integration.username ?? "";
+      const userId = integration.mediumUserId;
+      if (!userId) {
+        return NextResponse.json(
+          { error: "Medium user ID not found. Please reconnect your Medium account." },
+          { status: 400 }
+        );
+      }
       result = await publishToMedium(integration.apiKey, userId, articleInput);
     }
 

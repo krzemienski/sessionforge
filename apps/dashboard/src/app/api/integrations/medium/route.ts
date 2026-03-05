@@ -79,6 +79,7 @@ export async function POST(request: Request) {
       .values({
         workspaceId: workspace.id,
         apiKey,
+        mediumUserId: user.id,
         username: user.username,
         enabled: true,
       })
@@ -86,6 +87,7 @@ export async function POST(request: Request) {
         target: mediumIntegrations.workspaceId,
         set: {
           apiKey,
+          mediumUserId: user.id,
           username: user.username,
           enabled: true,
           updatedAt: new Date(),
