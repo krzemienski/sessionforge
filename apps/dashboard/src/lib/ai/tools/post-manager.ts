@@ -31,6 +31,9 @@ export interface UpdatePostInput {
   toneUsed?: ToneProfile;
   badgeEnabled?: boolean;
   platformFooterEnabled?: boolean;
+  versionType?: string;
+  editType?: string;
+  createdBy?: string;
 }
 
 function markdownToHtml(markdown: string): string {

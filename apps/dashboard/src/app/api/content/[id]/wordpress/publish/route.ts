@@ -123,7 +123,7 @@ export async function POST(
     .update(posts)
     .set({
       wordpressPublishedUrl: wpPost.link,
-      wordpressPostId: wpPost.id,
+      wordpressPostId: String(wpPost.id),
     })
     .where(eq(posts.id, id));
 

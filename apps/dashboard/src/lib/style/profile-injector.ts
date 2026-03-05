@@ -30,97 +30,39 @@ function formatProfileAsText(profile: WritingStyleProfile): string | null {
 
   const lines: string[] = [];
 
-  // ── Tone & depth ──────────────────────────────────────────────────────────
-  const formalityLabel = scoreToLabel(
-    profile.formality,
-    "informal and conversational",
-    "balanced (neither stiff nor overly casual)",
-    "formal and precise"
-  );
-  const depthLabel = scoreToLabel(
-    profile.technicalDepth,
-    "high-level and accessible",
-    "moderately technical",
-    "deeply technical with implementation details"
-  );
-  const humorLabel = scoreToLabel(
-    profile.humor,
-    "serious and straightforward",
-    "occasionally light-hearted",
-    "frequently witty and humorous"
-  );
+  // ── Tone attributes ────────────────────────────────────────────────────────
+  if (profile.toneAttributes) {
+    const attrs = profile.toneAttributes;
+    if (attrs.formality != null) {
+      lines.push(`Tone: ${scoreToLabel(attrs.formality, "informal and conversational", "balanced (neither stiff nor overly casual)", "formal and precise")}.`);
+    }
+    if (attrs.technicalDepth != null) {
+      lines.push(`Technical depth: ${scoreToLabel(attrs.technicalDepth, "high-level and accessible", "moderately technical", "deeply technical with implementation details")}.`);
+    }
+    if (attrs.humor != null) {
+      lines.push(`Humor: ${scoreToLabel(attrs.humor, "serious and straightforward", "occasionally light-hearted", "frequently witty and humorous")}.`);
+    }
+  }
 
-  lines.push(`Tone: ${formalityLabel}.`);
-  lines.push(`Technical depth: ${depthLabel}.`);
-  lines.push(`Humor: ${humorLabel}.`);
-
-  // ── Heading conventions ───────────────────────────────────────────────────
-  if (profile.headingStyle) {
-    const { capitalization, includeEmoji, preferredLevels } =
-      profile.headingStyle;
-
-    const capLabel =
-      capitalization === "title"
-        ? "Title Case"
-        : capitalization === "all_caps"
-          ? "ALL CAPS"
-          : "Sentence case";
-
-    const levelsLabel =
-      preferredLevels && preferredLevels.length > 0
-        ? preferredLevels.join(", ")
-        : "h2, h3";
-
-    const emojiNote = includeEmoji
-      ? " Emoji in headings are welcome."
-      : " Avoid emoji in headings.";
-
+  // ── Voice characteristics ──────────────────────────────────────────────────
+  if (profile.voiceCharacteristics && profile.voiceCharacteristics.length > 0) {
     lines.push(
-      `Headings: use ${capLabel}, preferred levels ${levelsLabel}.${emojiNote}`
+      `Voice characteristics:\n${profile.voiceCharacteristics.map((c) => `- ${c}`).join("\n")}`
     );
   }
 
-  // ── Code explanation style ────────────────────────────────────────────────
-  if (profile.codeStyle) {
-    const { commentDensity, preferInlineComments, explanationStyle } =
-      profile.codeStyle;
-
-    const explanationNote =
-      explanationStyle === "before"
-        ? "Explain code blocks before showing them."
-        : explanationStyle === "after"
-          ? "Explain code blocks after showing them."
-          : "Prefer inline code comments over separate paragraphs.";
-
-    lines.push(
-      `Code style: ${commentDensity} comments, ${preferInlineComments ? "inline" : "block"} comment style. ${explanationNote}`
-    );
+  // ── Vocabulary & sentence structure ────────────────────────────────────────
+  if (profile.vocabularyLevel) {
+    lines.push(`Vocabulary level: ${profile.vocabularyLevel}.`);
+  }
+  if (profile.sentenceStructure) {
+    lines.push(`Sentence structure: ${profile.sentenceStructure}.`);
   }
 
-  // ── Vocabulary & sentence patterns ────────────────────────────────────────
-  if (profile.vocabularyPatterns && profile.vocabularyPatterns.length > 0) {
-    lines.push(
-      `Writing patterns to adopt:\n${profile.vocabularyPatterns.map((p) => `- ${p}`).join("\n")}`
-    );
-  }
-
-  // ── Representative edits ─────────────────────────────────────────────────
-  if (profile.sampleEdits && profile.sampleEdits.length > 0) {
-    const samples = profile.sampleEdits.slice(0, 3);
-    const editLines = samples
-      .map(
-        (e, i) =>
-          `Example ${i + 1}:\n  Before: ${e.original}\n  After:  ${e.edited}`
-      )
-      .join("\n");
-    lines.push(`Sample style edits (reference only, do not reproduce):\n${editLines}`);
-  }
-
-  // ── Footer ────────────────────────────────────────────────────────────────
-  if (profile.publishedPostsAnalyzed && profile.publishedPostsAnalyzed > 0) {
-    lines.push(
-      `(Profile derived from ${profile.publishedPostsAnalyzed} published posts.)`
-    );
+  // ── Example excerpts ──────────────────────────────────────────────────────
+  if (profile.exampleExcerpts && profile.exampleExcerpts.length > 0) {
+    const samples = profile.exampleExcerpts.slice(0, 3);
+    lines.push(`Style examples (reference only):\n${samples.map((e, i) => `${i + 1}. ${e}`).join("\n")}`);
   }
 
   return lines.join("\n\n");

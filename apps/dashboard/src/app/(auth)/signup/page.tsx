@@ -3,6 +3,7 @@
 import { signUp } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -97,9 +98,9 @@ export default function SignupPage() {
 
       <p className="text-center text-sf-text-muted text-sm mt-4">
         Already have an account?{" "}
-        <a href="/login" className="text-sf-accent hover:underline">
+        <Link href="/login" className="text-sf-accent hover:underline">
           Sign in
-        </a>
+        </Link>
       </p>
     </div>
   );

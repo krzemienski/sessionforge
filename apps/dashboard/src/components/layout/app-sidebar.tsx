@@ -40,9 +40,11 @@ const settingsNav = [
 export function AppSidebar({
   workspace,
   userName,
+  onOpenSearch,
 }: {
   workspace: string;
   userName: string;
+  onOpenSearch?: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();

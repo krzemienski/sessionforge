@@ -18,7 +18,10 @@ export type AgentType =
   | "social-writer"
   | "changelog-writer"
   | "editor-chat"
-  | "newsletter-writer";
+  | "newsletter-writer"
+  | "evidence-writer"
+  | "repurpose-writer"
+  | "supplementary-writer";
 
 /** Shape of an Anthropic tool definition passed to `client.messages.create`. */
 type AnthropicTool = {
@@ -59,6 +62,9 @@ const AGENT_TOOL_SETS: Record<AgentType, (keyof typeof ALL_TOOLS)[]> = {
   "changelog-writer": ["session", "post", "github"],
   "editor-chat": ["post", "markdown"],
   "newsletter-writer": ["session", "insight", "post"],
+  "evidence-writer": ["session", "insight", "post"],
+  "repurpose-writer": ["post"],
+  "supplementary-writer": ["post"],
 };
 
 /**

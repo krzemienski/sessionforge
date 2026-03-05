@@ -1,13 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { workspaces, insights } from "@sessionforge/db";
 import { eq, desc, and } from "drizzle-orm";
-import { getModelForAgent } from "@/lib/ai/orchestration/model-selector";
-import { getToolsForAgent } from "@/lib/ai/orchestration/tool-registry";
-import { handleSessionReaderTool } from "@/lib/ai/tools/session-reader";
-import { handleInsightTool } from "@/lib/ai/tools/insight-tools";
-import { handlePostManagerTool } from "@/lib/ai/tools/post-manager";
-import { handleSkillLoaderTool } from "@/lib/ai/tools/skill-loader";
+import { createAgentMcpServer } from "@/lib/ai/mcp-server-factory";
+import { runAgent } from "@/lib/ai/agent-runner";
 import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";
@@ -20,8 +15,6 @@ import { LINKEDIN_PROMPT } from "@/lib/ai/prompts/social/linkedin-post";
 import { CHANGELOG_PROMPT } from "@/lib/ai/prompts/changelog";
 import { NEWSLETTER_PROMPT } from "@/lib/ai/prompts/newsletter";
 import type { contentTypeEnum, lookbackWindowEnum } from "@sessionforge/db";
-
-const client = new Anthropic();
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
 type LookbackWindow = (typeof lookbackWindowEnum.enumValues)[number];
@@ -54,115 +47,28 @@ type PipelineAgentType =
   | "changelog-writer"
   | "newsletter-writer";
 
-async function runAgentLoop(
+async function runPipelineAgent(
   workspaceId: string,
   systemPrompt: string,
   userMessage: string,
   agentType: PipelineAgentType
 ): Promise<number> {
-  const model = getModelForAgent(agentType);
-  const tools = getToolsForAgent(agentType);
+  const mcpServer = createAgentMcpServer(agentType, workspaceId);
 
-  const messages: Anthropic.MessageParam[] = [
-    { role: "user", content: userMessage },
-  ];
+  const result = await runAgent(
+    {
+      agentType,
+      workspaceId,
+      systemPrompt,
+      userMessage,
+      mcpServer,
+      trackRun: true,
+    },
+    { agentType, workspaceId },
+  );
 
-  let response = await client.messages.create({
-    model,
-    max_tokens: 8192,
-    system: systemPrompt,
-    tools: tools as Anthropic.Tool[],
-    messages,
-  });
-
-  let postsCreated = 0;
-
-  while (response.stop_reason === "tool_use") {
-    const toolUseBlocks = response.content.filter(
-      (b): b is Anthropic.ContentBlock & { type: "tool_use" } =>
-        b.type === "tool_use"
-    );
-
-    const toolResults: Anthropic.MessageParam = {
-      role: "user",
-      content: await Promise.all(
-        toolUseBlocks.map(async (toolUse) => {
-          try {
-            const result = await dispatchTool(
-              workspaceId,
-              agentType,
-              toolUse.name,
-              toolUse.input as Record<string, unknown>
-            );
-            if (toolUse.name === "create_post") postsCreated++;
-            return {
-              type: "tool_result" as const,
-              tool_use_id: toolUse.id,
-              content: JSON.stringify(result),
-            };
-          } catch (error) {
-            const errMsg =
-              error instanceof Error ? error.message : String(error);
-            return {
-              type: "tool_result" as const,
-              tool_use_id: toolUse.id,
-              content: `Error: ${errMsg}`,
-              is_error: true,
-            };
-          }
-        })
-      ),
-    };
-
-    messages.push({ role: "assistant", content: response.content });
-    messages.push(toolResults);
-
-    response = await client.messages.create({
-      model,
-      max_tokens: 8192,
-      system: systemPrompt,
-      tools: tools as Anthropic.Tool[],
-      messages,
-    });
-  }
-
-  return postsCreated;
-}
-
-async function dispatchTool(
-  workspaceId: string,
-  agentType: PipelineAgentType,
-  toolName: string,
-  toolInput: Record<string, unknown>
-): Promise<unknown> {
-  if (
-    toolName.startsWith("get_session") ||
-    toolName === "list_sessions_by_timeframe"
-  ) {
-    return handleSessionReaderTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName.startsWith("get_insight") ||
-    toolName === "get_top_insights" ||
-    toolName === "create_insight"
-  ) {
-    return handleInsightTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName === "create_post" ||
-    toolName === "update_post" ||
-    toolName === "get_post" ||
-    toolName === "get_markdown"
-  ) {
-    return handlePostManagerTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName === "list_available_skills" ||
-    toolName === "get_skill_by_name"
-  ) {
-    return handleSkillLoaderTool(toolName, toolInput);
-  }
-  throw new Error(`Unknown tool: ${toolName}`);
+  // Count create_post tool calls in the results
+  return result.toolResults.filter((t) => t.tool === "create_post").length;
 }
 
 export async function runAutomationPipeline(
@@ -205,7 +111,7 @@ export async function runAutomationPipeline(
   if (contentType === "changelog") {
     const userMessage = `Generate a changelog for the last ${lookbackDays} days. First use list_sessions_by_timeframe with lookbackDays=${lookbackDays}, then get_session_summary for notable sessions, then create a changelog post with create_post.`;
     try {
-      const count = await runAgentLoop(
+      const count = await runPipelineAgent(
         workspaceId,
         CHANGELOG_PROMPT,
         userMessage,
@@ -220,7 +126,7 @@ export async function runAutomationPipeline(
   } else if (contentType === "newsletter") {
     const userMessage = `Generate a newsletter digest for the last ${lookbackDays} days. First use list_sessions_by_timeframe with lookbackDays=${lookbackDays} to get all sessions in the time window. Then use get_session_summary for the most interesting sessions to gather content. Finally create the newsletter post with create_post using content_type "newsletter".`;
     try {
-      const count = await runAgentLoop(
+      const count = await runPipelineAgent(
         workspaceId,
         NEWSLETTER_PROMPT,
         userMessage,
@@ -260,7 +166,7 @@ export async function runAutomationPipeline(
 
         if (contentType === "twitter_thread") {
           const userMessage = `Create a twitter post about insight "${insight.id}". First fetch insight details. Then create the post with content_type "twitter_thread".`;
-          count = await runAgentLoop(
+          count = await runPipelineAgent(
             workspaceId,
             TWITTER_THREAD_PROMPT,
             userMessage,
@@ -268,7 +174,7 @@ export async function runAutomationPipeline(
           );
         } else if (contentType === "linkedin_post") {
           const userMessage = `Create a linkedin post about insight "${insight.id}". First fetch insight details and session data. Then save it with create_post using content_type "linkedin_post".`;
-          count = await runAgentLoop(
+          count = await runPipelineAgent(
             workspaceId,
             LINKEDIN_PROMPT,
             userMessage,
@@ -276,7 +182,7 @@ export async function runAutomationPipeline(
           );
         } else if (contentType === "devto_post") {
           const userMessage = `Write a blog post for dev.to about insight "${insight.id}". First fetch the insight details and related session data. Then create the post using create_post.`;
-          count = await runAgentLoop(
+          count = await runPipelineAgent(
             workspaceId,
             BLOG_TUTORIAL_PROMPT,
             userMessage,
@@ -285,7 +191,7 @@ export async function runAutomationPipeline(
         } else {
           // blog_post or custom
           const userMessage = `Write a blog post about insight "${insight.id}". First fetch the insight details and related session data. Then create the post using create_post.`;
-          count = await runAgentLoop(
+          count = await runPipelineAgent(
             workspaceId,
             BLOG_TECHNICAL_PROMPT,
             userMessage,

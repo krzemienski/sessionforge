@@ -124,6 +124,31 @@ export const templateTypeEnum = pgEnum("template_type", [
   "workspace_default",
 ]);
 
+export const metricsPlatformEnum = pgEnum("metrics_platform", [
+  "devto",
+  "hashnode",
+  "manual",
+]);
+
+export const editTypeEnum = pgEnum("edit_type", [
+  "user_edit",
+  "ai_generated",
+  "auto_save",
+  "restore",
+]);
+
+export const versionTypeEnum = pgEnum("version_type", [
+  "major",
+  "minor",
+]);
+
+export const scheduledPublicationStatusEnum = pgEnum("scheduled_publication_status", [
+  "pending",
+  "publishing",
+  "published",
+  "failed",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -246,6 +271,24 @@ export const styleSettings = pgTable(
   ]
 );
 
+export const integrationSettings = pgTable(
+  "integration_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    hashnodeApiToken: text("hashnode_api_token"),
+    hashnodePublicationId: text("hashnode_publication_id"),
+    hashnodeDefaultCanonicalDomain: text("hashnode_default_canonical_domain"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("integrationSettings_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
 export const claudeSessions = pgTable(
   "claude_sessions",
   {
@@ -310,6 +353,30 @@ export const insights = pgTable(
   ]
 );
 
+export const writingStyleProfiles = pgTable(
+  "writing_style_profiles",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default("Default Style"),
+    description: text("description"),
+    voiceCharacteristics: jsonb("voice_characteristics").$type<string[]>(),
+    toneAttributes: jsonb("tone_attributes").$type<Record<string, number>>(),
+    vocabularyLevel: text("vocabulary_level"),
+    sentenceStructure: text("sentence_structure"),
+    exampleExcerpts: jsonb("example_excerpts").$type<string[]>(),
+    generationStatus: styleProfileGenerationStatusEnum("generation_status").default("pending"),
+    generatedAt: timestamp("generated_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("writingStyleProfiles_workspaceId_idx").on(table.workspaceId),
+  ]
+);
+
 export const posts = pgTable(
   "posts",
   {
@@ -343,6 +410,10 @@ export const posts = pgTable(
     styleProfileUsed: text("style_profile_used"),
     badgeEnabled: boolean("badge_enabled").default(false),
     platformFooterEnabled: boolean("platform_footer_enabled").default(false),
+    hashnodeUrl: text("hashnode_url"),
+    wordpressPublishedUrl: text("wordpress_published_url"),
+    wordpressPostId: text("wordpress_post_id"),
+    seoMetadata: jsonb("seo_metadata"),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -399,6 +470,128 @@ export const apiKeys = pgTable(
   },
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
 );
+
+export const sessionBookmarks = pgTable(
+  "session_bookmarks",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => claudeSessions.id, { onDelete: "cascade" }),
+    messageIndex: integer("message_index").notNull(),
+    label: text("label").notNull(),
+    note: text("note"),
+    sentToInsights: boolean("sent_to_insights").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("sessionBookmarks_workspaceId_idx").on(table.workspaceId),
+    index("sessionBookmarks_sessionId_idx").on(table.sessionId),
+  ]
+);
+
+export const contentMetrics = pgTable(
+  "content_metrics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id").references(() => posts.id, { onDelete: "set null" }),
+    platform: metricsPlatformEnum("platform").notNull(),
+    externalId: text("external_id"),
+    title: text("title").notNull(),
+    url: text("url"),
+    views: integer("views").default(0),
+    reactions: integer("reactions").default(0),
+    comments: integer("comments").default(0),
+    likes: integer("likes").default(0),
+    publishedAt: timestamp("published_at"),
+    fetchedAt: timestamp("fetched_at").defaultNow(),
+  },
+  (table) => [
+    index("contentMetrics_workspaceId_idx").on(table.workspaceId),
+    index("contentMetrics_fetchedAt_idx").on(table.fetchedAt),
+    index("contentMetrics_platform_idx").on(table.platform),
+  ]
+);
+
+export const platformSettings = pgTable(
+  "platform_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    devtoApiKey: text("devto_api_key"),
+    devtoUsername: text("devto_username"),
+    hashnodeApiKey: text("hashnode_api_key"),
+    hashnodeUsername: text("hashnode_username"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("platformSettings_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const postRevisions = pgTable(
+  "post_revisions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    versionType: versionTypeEnum("version_type").notNull(),
+    editType: editTypeEnum("edit_type").notNull(),
+    contentSnapshot: text("content_snapshot"),
+    contentDiff: jsonb("content_diff").$type<
+      { count?: number; added?: boolean; removed?: boolean; value: string }[]
+    >(),
+    parentRevisionId: text("parent_revision_id"),
+    title: text("title").notNull(),
+    wordCount: integer("word_count").default(0),
+    wordCountDelta: integer("word_count_delta").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    createdBy: text("created_by"),
+  },
+  (table) => [
+    index("postRevisions_postId_idx").on(table.postId),
+    index("postRevisions_postId_versionNumber_idx").on(
+      table.postId,
+      table.versionNumber
+    ),
+  ]
+);
+
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    events: jsonb("events").$type<string[]>().notNull(),
+    secret: text("secret").notNull(),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [index("webhookEndpoints_workspaceId_idx").on(table.workspaceId)]
+);
+
+export const webhookEndpointsRelations = relations(webhookEndpoints, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [webhookEndpoints.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
 
 // ── Team Workspaces tables (from 023-team-workspaces-collaboration) ──
 
@@ -634,6 +827,35 @@ export const devtoPublications = pgTable(
   ]
 );
 
+// ── Scheduled Publications (from 002-content-scheduling-publish-queue) ──
+
+export const scheduledPublications = pgTable(
+  "scheduled_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    platforms: jsonb("platforms").$type<string[]>().notNull(),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    status: scheduledPublicationStatusEnum("status").default("pending"),
+    qstashScheduleId: text("qstash_schedule_id"),
+    publishedAt: timestamp("published_at"),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("scheduledPublications_workspaceId_idx").on(table.workspaceId),
+    index("scheduledPublications_postId_idx").on(table.postId),
+    index("scheduledPublications_scheduledFor_idx").on(table.scheduledFor),
+    index("scheduledPublications_status_idx").on(table.status),
+  ]
+);
+
 // ── Ghost CMS Integration tables (from 016-ghost-cms-publishing-integration) ──
 
 export const ghostIntegrations = pgTable(
@@ -678,6 +900,202 @@ export const ghostPublications = pgTable(
     index("ghostPublications_workspaceId_idx").on(table.workspaceId),
     index("ghostPublications_postId_idx").on(table.postId),
     uniqueIndex("ghostPublications_postId_uidx").on(table.postId),
+  ]
+);
+
+// ── Agent Runs (from 004-error-recovery) ──
+
+export const agentRuns = pgTable(
+  "agent_runs",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    agentType: agentTypeEnum("agent_type").notNull(),
+    status: agentRunStatusEnum("status").default("running"),
+    attemptCount: integer("attempt_count").default(0),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at").defaultNow(),
+    completedAt: timestamp("completed_at"),
+    inputMetadata: jsonb("input_metadata"),
+    resultMetadata: jsonb("result_metadata"),
+  },
+  (table) => [index("agentRuns_workspaceId_idx").on(table.workspaceId)]
+);
+
+// ── Writing Skills (from 021-skill-loader-ui-custom-writing-skills) ──
+
+export const writingSkills = pgTable(
+  "writing_skills",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    instructions: text("instructions").notNull(),
+    appliesTo: jsonb("applies_to").$type<string[]>(),
+    enabled: boolean("enabled").default(true),
+    source: text("source").notNull(),
+    filePath: text("file_path"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("writingSkills_workspaceId_idx").on(table.workspaceId),
+    uniqueIndex("writingSkills_workspace_filePath_uidx").on(
+      table.workspaceId,
+      table.filePath
+    ),
+  ]
+);
+
+export const writingSkillsRelations = relations(writingSkills, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [writingSkills.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+// ── Automation Runs (from 013-working-automation-pipeline) ──
+
+export const automationRuns = pgTable(
+  "automation_runs",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    triggerId: text("trigger_id")
+      .notNull()
+      .references(() => contentTriggers.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    status: automationRunStatusEnum("status").notNull().default("pending"),
+    sessionsScanned: integer("sessions_scanned").notNull().default(0),
+    insightsExtracted: integer("insights_extracted").notNull().default(0),
+    postId: text("post_id").references(() => posts.id),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+    durationMs: integer("duration_ms"),
+  },
+  (table) => [
+    index("automationRuns_workspaceId_idx").on(table.workspaceId),
+    index("automationRuns_triggerId_idx").on(table.triggerId),
+    index("automationRuns_startedAt_idx").on(table.startedAt),
+  ]
+);
+
+export const automationRunsRelations = relations(automationRuns, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [automationRuns.workspaceId],
+    references: [workspaces.id],
+  }),
+  trigger: one(contentTriggers, {
+    fields: [automationRuns.triggerId],
+    references: [contentTriggers.id],
+  }),
+  post: one(posts, {
+    fields: [automationRuns.postId],
+    references: [posts.id],
+  }),
+}));
+
+// ── WordPress Connections table (from 034-wordpress-publishing-integration) ──
+
+export const wordpressConnections = pgTable(
+  "wordpress_connections",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    siteUrl: text("site_url").notNull(),
+    username: text("username").notNull(),
+    encryptedAppPassword: text("encrypted_app_password").notNull(),
+    isActive: boolean("is_active").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [index("wordpressConnections_workspaceId_idx").on(table.workspaceId)]
+);
+
+// ── Post Conversations (chat persistence) ──
+
+export const postConversations = pgTable("post_conversations", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  postId: text("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  messages: jsonb("messages").$type<{ role: string; content: string; toolActions?: string[] }[]>().default([]),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ── Billing tables (from 035-free-tier-usage-metering-dashboard) ──
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planTier: planTierEnum("plan_tier").notNull().default("free"),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    currentPeriodStart: timestamp("current_period_start"),
+    currentPeriodEnd: timestamp("current_period_end"),
+    status: subscriptionStatusEnum("status").notNull().default("active"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("subscriptions_userId_idx").on(table.userId),
+    index("subscriptions_stripeCustomerId_idx").on(table.stripeCustomerId),
+  ]
+);
+
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    eventType: usageEventTypeEnum("event_type").notNull(),
+    costUsd: real("cost_usd").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("usageEvents_userId_idx").on(table.userId),
+    index("usageEvents_workspaceId_idx").on(table.workspaceId),
+    index("usageEvents_createdAt_idx").on(table.createdAt),
+  ]
+);
+
+export const usageMonthlySummary = pgTable(
+  "usage_monthly_summary",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    month: text("month").notNull(),
+    sessionScans: integer("session_scans").notNull().default(0),
+    insightExtractions: integer("insight_extractions").notNull().default(0),
+    contentGenerations: integer("content_generations").notNull().default(0),
+    estimatedCostUsd: real("estimated_cost_usd").notNull().default(0),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("usageMonthlySummary_userId_month_uidx").on(
+      table.userId,
+      table.month
+    ),
+    index("usageMonthlySummary_userId_idx").on(table.userId),
   ]
 );
 
@@ -968,7 +1386,7 @@ export const insightsRelations = relations(insights, ({ one, many }) => ({
   posts: many(posts),
 }));
 
-export const postsRelations = relations(posts, ({ one }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   workspace: one(workspaces, {
     fields: [posts.workspaceId],
     references: [workspaces.id],
@@ -1201,6 +1619,33 @@ export const postConversationsRelations = relations(postConversations, ({ one })
     references: [workspaces.id],
   }),
 }));
+
+// ── Content Assets (Phase 5 – Diagrams & Media) ──
+
+export const contentAssetTypeEnum = pgEnum("content_asset_type", [
+  "diagram",
+  "hero_image",
+  "section_image",
+  "evidence_diagram",
+  "timeline_viz",
+]);
+
+export const contentAssets = pgTable("content_assets", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  postId: text("post_id")
+    .notNull()
+    .references(() => posts.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  assetType: contentAssetTypeEnum("asset_type").notNull(),
+  content: text("content").notNull(),
+  altText: text("alt_text"),
+  caption: text("caption"),
+  placement: jsonb("placement").$type<{ section?: string; position?: string }>().default({}),
+  metadata: jsonb("metadata").$type<{ generatedAt?: string; model?: string; diagramType?: string }>().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 // ── Supplementary Content (Phase 6) ──
 

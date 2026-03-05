@@ -35,7 +35,7 @@ export function usePost(id: string) {
 export function useUpdatePost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: string; title?: string; markdown?: string; status?: string; badgeEnabled?: boolean; platformFooterEnabled?: boolean }) => {
+    mutationFn: async ({ id, ...data }: { id: string; title?: string; markdown?: string; status?: string; badgeEnabled?: boolean; platformFooterEnabled?: boolean; versionType?: string; editType?: string }) => {
       const res = await fetch(`/api/content/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -101,4 +101,74 @@ export function useExportContent() {
   );
 
   return { exportContent, isExporting, exportCount };
+}
+
+export function useContentCalendar(workspace: string, year: number, month: number) {
+  return useQuery({
+    queryKey: ["content-calendar", workspace, year, month],
+    queryFn: async () => {
+      const sp = new URLSearchParams({ workspace, year: String(year), month: String(month) });
+      const res = await fetch(`/api/content?${sp}&limit=100`);
+      if (!res.ok) throw new Error("Failed to fetch calendar data");
+      return res.json();
+    },
+    enabled: !!workspace,
+  });
+}
+
+export function useContentStreak(workspace: string) {
+  return useQuery({
+    queryKey: ["content-streak", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/content/streak?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed to fetch streak");
+      return res.json();
+    },
+    enabled: !!workspace,
+  });
+}
+
+export function useSeoData(postId: string) {
+  return useQuery({
+    queryKey: ["seo", postId],
+    queryFn: async () => {
+      const res = await fetch(`/api/content/${postId}/seo`);
+      if (!res.ok) throw new Error("Failed to fetch SEO data");
+      return res.json();
+    },
+    enabled: !!postId,
+  });
+}
+
+export function useGenerateSeo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ postId }: { postId: string }) => {
+      const res = await fetch(`/api/content/${postId}/seo`, { method: "POST" });
+      if (!res.ok) throw new Error("SEO generation failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["seo", vars.postId] });
+      qc.invalidateQueries({ queryKey: ["post", vars.postId] });
+    },
+  });
+}
+
+export function useSaveSeo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ postId, ...data }: { postId: string; metaTitle?: string; metaDescription?: string }) => {
+      const res = await fetch(`/api/content/${postId}/seo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("SEO save failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["seo", vars.postId] });
+    },
+  });
 }

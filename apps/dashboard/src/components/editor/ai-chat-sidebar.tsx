@@ -190,7 +190,7 @@ export function AIChatSidebar({ postId, workspace, onEditsApplied }: AIChatSideb
           <div className="text-center py-8">
             <Bot size={32} className="mx-auto text-sf-text-muted mb-2" />
             <p className="text-sm text-sf-text-muted">Ask the AI to edit your content.</p>
-            <p className="text-xs text-sf-text-muted mt-1">Try: "Make the intro more engaging"</p>
+            <p className="text-xs text-sf-text-muted mt-1">Try: &quot;Make the intro more engaging&quot;</p>
           </div>
         )}
 

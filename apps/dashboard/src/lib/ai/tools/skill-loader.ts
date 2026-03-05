@@ -2,6 +2,9 @@ import { readdir, readFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import os from "os";
+import { db } from "@/lib/db";
+import { writingSkills } from "@sessionforge/db";
+import { eq, and } from "drizzle-orm";
 
 export interface SkillInfo {
   name: string;
@@ -89,6 +92,42 @@ export const skillLoaderTools = [
     },
   },
 ];
+
+export interface ActiveSkill {
+  name: string;
+  instructions: string;
+}
+
+export async function getActiveSkillsForAgentType(
+  workspaceId: string,
+  agentType: string
+): Promise<ActiveSkill[]> {
+  const skills = await db
+    .select({
+      name: writingSkills.name,
+      instructions: writingSkills.instructions,
+      appliesTo: writingSkills.appliesTo,
+    })
+    .from(writingSkills)
+    .where(
+      and(
+        eq(writingSkills.workspaceId, workspaceId),
+        eq(writingSkills.enabled, true)
+      )
+    );
+
+  return skills
+    .filter((s) => !s.appliesTo || s.appliesTo.includes(agentType))
+    .map((s) => ({ name: s.name, instructions: s.instructions }));
+}
+
+export function buildSkillSystemPromptSuffix(skills: ActiveSkill[]): string {
+  if (!skills.length) return "";
+  const sections = skills.map(
+    (s) => `### Skill: ${s.name}\n${s.instructions}`
+  );
+  return `\n\n## Active Writing Skills\n\n${sections.join("\n\n")}`;
+}
 
 export async function handleSkillLoaderTool(
   toolName: string,

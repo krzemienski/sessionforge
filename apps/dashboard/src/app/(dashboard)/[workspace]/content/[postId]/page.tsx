@@ -516,7 +516,7 @@ export default function ContentEditorPage() {
                 {/* Sidebar content */}
                 <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                   {sidebarTab === "chat" && (
-                    <AIChatSidebar chat={editorChat} />
+                    <AIChatSidebar postId={postId} workspace={workspace} onEditsApplied={handleEditsApplied} />
                   )}
                   {sidebarTab === "seo" && (
                     <SeoPanel
@@ -668,7 +668,7 @@ export default function ContentEditorPage() {
           {/* Modal Content */}
           <div className="flex-1 overflow-hidden flex flex-col">
             <div className="flex-1 bg-sf-bg-secondary border-b border-sf-border overflow-hidden flex flex-col">
-              <AIChatSidebar chat={editorChat} />
+              <AIChatSidebar postId={postId} workspace={workspace} onEditsApplied={handleEditsApplied} />
             </div>
 
             {/* Mobile Sidebar Footer with Source and Badge */}

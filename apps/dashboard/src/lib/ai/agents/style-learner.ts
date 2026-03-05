@@ -101,68 +101,50 @@ export async function analyzeWritingStyle(
     return null;
   }
 
-  // 6. Map Claude's response to the DB schema
-  const headingStyleData = {
-    preferredLevels: ["h2", "h3"],
-    capitalization:
-      styleData.headingStyle === "sentence_case"
-        ? ("sentence" as const)
-        : ("title" as const),
-    includeEmoji: false,
+  // 6. Map Claude's response to the DB schema columns
+  const voiceCharacteristics = [
+    `Formality: ${styleData.formalityScore}/10`,
+    `Technical depth: ${styleData.technicalDepth}/10`,
+    `Humor: ${styleData.humorScore}/10`,
+    `Heading style: ${styleData.headingStyle}`,
+    `Code explanation: ${styleData.codeExplanationStyle}`,
+    styleData.openingPattern ? `Opening: ${styleData.openingPattern}` : null,
+    styleData.closingPattern ? `Closing: ${styleData.closingPattern}` : null,
+  ].filter((s): s is string => s !== null);
+
+  const toneAttributes: Record<string, number> = {
+    formality: styleData.formalityScore,
+    technicalDepth: styleData.technicalDepth,
+    humor: styleData.humorScore,
   };
 
-  const codeStyleData = {
-    commentDensity: (
-      styleData.codeExplanationStyle === "annotated" ? "heavy" : "moderate"
-    ) as "minimal" | "moderate" | "heavy",
-    preferInlineComments: styleData.codeExplanationStyle === "inline",
-    explanationStyle: (
-      styleData.codeExplanationStyle === "separate" ? "before" : "inline"
-    ) as "before" | "after" | "inline",
-  };
-
-  const vocabularyPatterns = [
-    styleData.vocabularyNotes,
-    styleData.sentenceStructureNotes,
-    styleData.openingPattern,
-    styleData.closingPattern,
-  ].filter((s): s is string => typeof s === "string" && s.trim().length > 0);
-
-  const sampleEdits = styleData.representativeEdits.map((edit) => ({
-    original: edit.original,
-    edited: edit.edited,
-    postId: "",
-  }));
+  const exampleExcerpts = styleData.representativeEdits
+    .slice(0, 5)
+    .map((edit) => `Original: ${edit.original}\nEdited: ${edit.edited}\nPattern: ${edit.pattern}`);
 
   // 7. Upsert to writingStyleProfiles
   const [profile] = await db
     .insert(writingStyleProfiles)
     .values({
       workspaceId,
-      formality: styleData.formalityScore,
-      technicalDepth: styleData.technicalDepth,
-      humor: styleData.humorScore,
-      headingStyle: headingStyleData,
-      codeStyle: codeStyleData,
-      vocabularyPatterns,
-      sampleEdits,
-      publishedPostsAnalyzed: qualifyingPosts.length,
+      voiceCharacteristics,
+      toneAttributes,
+      vocabularyLevel: styleData.vocabularyNotes || "standard",
+      sentenceStructure: styleData.sentenceStructureNotes || "varied",
+      exampleExcerpts,
       generationStatus: "completed",
-      lastGeneratedAt: new Date(),
+      generatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: writingStyleProfiles.workspaceId,
       set: {
-        formality: styleData.formalityScore,
-        technicalDepth: styleData.technicalDepth,
-        humor: styleData.humorScore,
-        headingStyle: headingStyleData,
-        codeStyle: codeStyleData,
-        vocabularyPatterns,
-        sampleEdits,
-        publishedPostsAnalyzed: qualifyingPosts.length,
+        voiceCharacteristics,
+        toneAttributes,
+        vocabularyLevel: styleData.vocabularyNotes || "standard",
+        sentenceStructure: styleData.sentenceStructureNotes || "varied",
+        exampleExcerpts,
         generationStatus: "completed",
-        lastGeneratedAt: new Date(),
+        generatedAt: new Date(),
         updatedAt: new Date(),
       },
     })
