@@ -136,6 +136,12 @@ export const usageEventTypeEnum = pgEnum("usage_event_type", [
   "content_generation",
 ]);
 
+export const templateTypeEnum = pgEnum("template_type", [
+  "built_in",
+  "custom",
+  "workspace_default",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -972,6 +978,45 @@ export const contentAssets = pgTable("content_assets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ── Content Templates (from 007-content-templates-library) ──
+
+export const contentTemplates = pgTable(
+  "content_templates",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    templateType: templateTypeEnum("template_type").notNull(),
+    contentType: contentTypeEnum("content_type").notNull(),
+    description: text("description"),
+    structure: jsonb("structure").$type<{
+      sections: {
+        heading: string;
+        description: string;
+        required: boolean;
+      }[];
+    }>(),
+    toneGuidance: text("tone_guidance"),
+    exampleContent: text("example_content"),
+    isActive: boolean("is_active").default(true),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    usageCount: integer("usage_count").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("contentTemplates_workspaceId_idx").on(table.workspaceId),
+    index("contentTemplates_templateType_idx").on(table.templateType),
+    uniqueIndex("contentTemplates_slug_uidx").on(table.slug),
+  ]
+);
+
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -987,6 +1032,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   subscriptions: many(subscriptions),
   usageEvents: many(usageEvents),
   usageMonthlySummary: many(usageMonthlySummary),
+  contentTemplates: many(contentTemplates),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -1033,6 +1079,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   automationRuns: many(automationRuns),
   usageEvents: many(usageEvents),
   postConversations: many(postConversations),
+  contentTemplates: many(contentTemplates),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1426,6 +1473,20 @@ export const ghostPublicationsRelations = relations(
     integration: one(ghostIntegrations, {
       fields: [ghostPublications.integrationId],
       references: [ghostIntegrations.id],
+    }),
+  })
+);
+
+export const contentTemplatesRelations = relations(
+  contentTemplates,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [contentTemplates.workspaceId],
+      references: [workspaces.id],
+    }),
+    creator: one(users, {
+      fields: [contentTemplates.createdBy],
+      references: [users.id],
     }),
   })
 );
