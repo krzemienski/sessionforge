@@ -1,7 +1,9 @@
 /**
  * Batch processor for background job execution.
  * Processes extract_insights, generate_content, batch_archive, and batch_delete jobs
- * one item at a time with progress tracking and error isolation.
+ * with concurrency-limited parallelism, progress tracking, and error isolation.
+ * AI-heavy operations (extract insights, generate content) are capped at
+ * MAX_CONCURRENT_AI_CALLS simultaneous Anthropic API calls to prevent rate limit errors.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -20,15 +22,52 @@ import { getJob, updateJobProgress, completeJob, failJob } from "./job-tracker";
 
 const client = new Anthropic();
 
-/** Delay between AI API calls to respect rate limits. */
-const RATE_LIMIT_DELAY_MS = 500;
+/** Maximum number of concurrent Anthropic API calls allowed at once. */
+const MAX_CONCURRENT_AI_CALLS = 5;
 
 /**
- * Pauses execution for a given number of milliseconds.
+ * Semaphore that limits concurrent Anthropic API calls to prevent rate limit errors.
+ * Queues requests beyond the concurrency cap and releases slots as calls complete.
  */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+class Semaphore {
+  private permits: number;
+  private readonly queue: Array<() => void> = [];
+
+  constructor(permits: number) {
+    this.permits = permits;
+  }
+
+  acquire(): Promise<void> {
+    if (this.permits > 0) {
+      this.permits--;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      this.queue.push(resolve);
+    });
+  }
+
+  release(): void {
+    const next = this.queue.shift();
+    if (next) {
+      next();
+    } else {
+      this.permits++;
+    }
+  }
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
 }
+
+/** Shared rate limiter for all Anthropic API calls in the batch processor. */
+const aiRateLimiter = new Semaphore(MAX_CONCURRENT_AI_CALLS);
 
 /**
  * Routes a blog-writer tool call to the appropriate handler.
@@ -160,8 +199,9 @@ async function generateContentFromInsight(
 
 /**
  * Processes a batch insight extraction job.
- * Runs the insight-extractor agent for each session in sequence,
- * updating job progress after each item. Stops early if the job is cancelled.
+ * Runs the insight-extractor agent for each session concurrently (up to
+ * MAX_CONCURRENT_AI_CALLS at once), updating job progress after each item.
+ * Stops early if the job is cancelled.
  *
  * @param jobId - The batch job record to track progress.
  * @param workspaceId - The workspace that owns the sessions.
@@ -175,30 +215,33 @@ export async function processExtractInsights(
   let processedItems = 0;
   let successCount = 0;
   let errorCount = 0;
+  let cancelled = false;
 
   try {
-    for (const sessionId of sessionIds) {
-      // Check for cancellation before each item
-      const job = await getJob(jobId);
-      if (!job || job.status === "cancelled") {
-        return;
-      }
+    await Promise.all(
+      sessionIds.map((sessionId) =>
+        aiRateLimiter.run(async () => {
+          if (cancelled) return;
 
-      try {
-        await extractInsight({ workspaceId, sessionId });
-        successCount++;
-      } catch {
-        errorCount++;
-      }
+          // Check for cancellation before each item
+          const job = await getJob(jobId);
+          if (!job || job.status === "cancelled") {
+            cancelled = true;
+            return;
+          }
 
-      processedItems++;
-      await updateJobProgress(jobId, { processedItems, successCount, errorCount });
+          try {
+            await extractInsight({ workspaceId, sessionId });
+            successCount++;
+          } catch {
+            errorCount++;
+          }
 
-      // Rate limiting delay between AI calls
-      if (processedItems < sessionIds.length) {
-        await delay(RATE_LIMIT_DELAY_MS);
-      }
-    }
+          processedItems++;
+          await updateJobProgress(jobId, { processedItems, successCount, errorCount });
+        })
+      )
+    );
 
     await completeJob(jobId, { processedItems, successCount, errorCount });
   } catch (error) {
@@ -211,8 +254,9 @@ export async function processExtractInsights(
 
 /**
  * Processes a batch content generation job.
- * Runs the blog-writer agent for each insight in sequence,
- * updating job progress after each item. Stops early if the job is cancelled.
+ * Runs the blog-writer agent for each insight concurrently (up to
+ * MAX_CONCURRENT_AI_CALLS at once), updating job progress after each item.
+ * Stops early if the job is cancelled.
  *
  * @param jobId - The batch job record to track progress.
  * @param workspaceId - The workspace that owns the insights.
@@ -228,30 +272,33 @@ export async function processGenerateContent(
   let processedItems = 0;
   let successCount = 0;
   let errorCount = 0;
+  let cancelled = false;
 
   try {
-    for (const insightId of insightIds) {
-      // Check for cancellation before each item
-      const job = await getJob(jobId);
-      if (!job || job.status === "cancelled") {
-        return;
-      }
+    await Promise.all(
+      insightIds.map((insightId) =>
+        aiRateLimiter.run(async () => {
+          if (cancelled) return;
 
-      try {
-        await generateContentFromInsight(workspaceId, insightId, contentType);
-        successCount++;
-      } catch {
-        errorCount++;
-      }
+          // Check for cancellation before each item
+          const job = await getJob(jobId);
+          if (!job || job.status === "cancelled") {
+            cancelled = true;
+            return;
+          }
 
-      processedItems++;
-      await updateJobProgress(jobId, { processedItems, successCount, errorCount });
+          try {
+            await generateContentFromInsight(workspaceId, insightId, contentType);
+            successCount++;
+          } catch {
+            errorCount++;
+          }
 
-      // Rate limiting delay between AI calls
-      if (processedItems < insightIds.length) {
-        await delay(RATE_LIMIT_DELAY_MS);
-      }
-    }
+          processedItems++;
+          await updateJobProgress(jobId, { processedItems, successCount, errorCount });
+        })
+      )
+    );
 
     await completeJob(jobId, { processedItems, successCount, errorCount });
   } catch (error) {
