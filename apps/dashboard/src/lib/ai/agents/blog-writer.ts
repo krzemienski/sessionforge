@@ -11,6 +11,7 @@ import { BLOG_CONVERSATIONAL_PROMPT } from "../prompts/blog/conversational";
 import { injectStyleProfile } from "@/lib/style/profile-injector";
 import { createAgentMcpServer } from "../mcp-server-factory";
 import { runAgentStreaming } from "../agent-runner";
+import { getTemplateBySlug } from "@/lib/templates";
 
 /** Writing style applied to the generated blog post. */
 type BlogTone = "technical" | "tutorial" | "conversational";
@@ -31,13 +32,24 @@ interface BlogWriterInput {
   tone?: BlogTone;
   /** Optional freeform instructions appended to the agent's prompt. */
   customInstructions?: string;
+  /** Optional template slug to use as scaffolding for the blog post. */
+  templateId?: string;
 }
 
 
 export async function streamBlogWriter(input: BlogWriterInput): Promise<Response> {
   const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "blog");
   const styleInjectedPrompt = await injectStyleProfile(PROMPTS[input.tone ?? "technical"], input.workspaceId);
-  const systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
+  let systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
+
+  // Fetch and apply template if provided
+  if (input.templateId) {
+    const template = getTemplateBySlug(input.templateId);
+    if (template) {
+      const templateInstructions = buildTemplateInstructions(template);
+      systemPrompt = `${systemPrompt}\n\n${templateInstructions}`;
+    }
+  }
 
   const userMessage = input.customInstructions
     ? `Write a blog post about insight "${input.insightId}". First fetch the insight details and related session data. Then create the post. When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
@@ -59,4 +71,47 @@ export async function streamBlogWriter(input: BlogWriterInput): Promise<Response
       workspaceId: input.workspaceId,
     },
   );
+}
+
+/**
+ * Builds template-specific instructions from a template definition.
+ * Converts template structure and tone guidance into prompt instructions
+ * that guide the AI in following the template format.
+ */
+function buildTemplateInstructions(template: ReturnType<typeof getTemplateBySlug>): string {
+  if (!template) return "";
+
+  const instructions: string[] = [];
+
+  instructions.push(`## Content Template: ${template.name}`);
+  instructions.push(`\n${template.description}\n`);
+
+  if (template.structure?.sections && template.structure.sections.length > 0) {
+    instructions.push("### Required Structure");
+    instructions.push("\nYour blog post MUST follow this structure:\n");
+
+    template.structure.sections.forEach((section, index) => {
+      const requiredLabel = section.required ? "(REQUIRED)" : "(OPTIONAL)";
+      instructions.push(`${index + 1}. **${section.heading}** ${requiredLabel}`);
+      instructions.push(`   ${section.description}`);
+      instructions.push("");
+    });
+  }
+
+  if (template.toneGuidance) {
+    instructions.push("### Tone and Style Guidance");
+    instructions.push(`\n${template.toneGuidance}\n`);
+  }
+
+  if (template.exampleContent) {
+    instructions.push("### Example Format");
+    instructions.push("\nHere's an example of how this template should look:\n");
+    instructions.push("```markdown");
+    instructions.push(template.exampleContent.substring(0, 500) + "...");
+    instructions.push("```\n");
+  }
+
+  instructions.push("**Important:** Use the template structure as scaffolding, but fill it with content based on the actual insight data you fetch. The template provides the format and guidance, not the content itself.");
+
+  return instructions.join("\n");
 }
