@@ -88,8 +88,8 @@
             "expected": "Schema pushed successfully"
           },
           "status": "completed",
-          "notes": "Relations for all social tables were already added in previous subtasks (1-1 through 1-3). Schema pushed to database: created social_platform enum and 5 new tables (twitter_integrations, linkedin_integrations, twitter_publications, linkedin_publications, social_analytics) with all indexes. Used psql direct SQL for safe push against shared database to avoid dropping unrelated tables from other worktrees.",
-          "updated_at": "2026-03-05T09:00:00.000Z"
+          "notes": "Relations for all social tables were already present in schema.ts from prior subtasks (1-1 through 1-3). Schema pushed to Neon database: created social_platform enum and all 5 social tables (twitter_integrations, linkedin_integrations, twitter_publications, linkedin_publications, social_analytics) with all correct indexes and foreign keys. Used targeted psql SQL to safely push against the shared database without dropping unrelated tables from other worktrees.",
+          "updated_at": "2026-03-05T05:29:36.992077+00:00"
         }
       ]
     },
@@ -119,8 +119,9 @@
             "command": "cd apps/dashboard && bun run build",
             "expected": "Build succeeds without errors"
           },
-          "status": "pending",
-          "notes": "Use twitter-api-v2 package; implement: verifyTwitterAuth, getTwitterUser, getTweetAnalytics methods"
+          "status": "completed",
+          "notes": "Created apps/dashboard/src/lib/integrations/twitter.ts following the devto.ts pattern. Uses native fetch against Twitter API v2 (no external packages needed). Implements: verifyTwitterAuth (verifies OAuth 2.0 Bearer token via /users/me), getTwitterUser (alias for verifyTwitterAuth), getTweetAnalytics (fetches paginated user tweets with public_metrics), and getTweetById. Maps all required metrics: impressions, likes, retweets, replies, clicks, quotes. Error handling with TwitterApiError classifying unauthorized/forbidden/not_found/rate_limited/unknown. Also fixed pre-existing bug in schema.ts where postsRelations destructured only `one` but called `many(socialAnalytics)`. Build passes successfully.",
+          "updated_at": "2026-03-05T05:31:56.770952+00:00"
         },
         {
           "id": "subtask-2-2",
@@ -140,7 +141,9 @@
             "expected_status": 302,
             "notes": "Should redirect to Twitter OAuth"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Created GET /api/integrations/twitter/oauth route implementing Twitter OAuth 2.0 PKCE flow. Validates session and workspace ownership, generates cryptographically secure state and code_verifier, computes SHA-256 code_challenge, stores all in httpOnly cookies (10min TTL), and returns 302 redirect to Twitter authorization URL. Build verified successfully.",
+          "updated_at": "2026-03-05T06:00:00.000000+00:00"
         },
         {
           "id": "subtask-2-3",
@@ -756,8 +759,8 @@
   "executionPhase": "coding",
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-03-05T04:43:56.493Z",
+  "updated_at": "2026-03-05T05:36:10.884Z",
   "recoveryNote": "Task recovered from stuck state at 2026-03-05T04:32:16.973Z",
   "xstateState": "backlog",
-  "last_updated": "2026-03-05T04:39:57.014036+00:00"
+  "last_updated": "2026-03-05T05:31:56.770956+00:00"
 }
