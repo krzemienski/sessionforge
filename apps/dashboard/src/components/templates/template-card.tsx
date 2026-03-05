@@ -67,7 +67,7 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
 
       <div className="flex items-center justify-between text-xs text-sf-text-muted">
         <span>{sectionCount} section{sectionCount !== 1 ? "s" : ""}</span>
-        {template.usageCount > 0 && (
+        {template.usageCount && template.usageCount > 0 && (
           <span>{template.usageCount} use{template.usageCount !== 1 ? "s" : ""}</span>
         )}
       </div>

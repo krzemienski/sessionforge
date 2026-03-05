@@ -47,11 +47,11 @@ export interface ContentTemplate {
   structure: TemplateStructure | null;
   toneGuidance: string | null;
   exampleContent: string | null;
-  isActive: boolean;
+  isActive: boolean | null;
   createdBy: string | null;
-  usageCount: number;
-  createdAt: Date;
-  updatedAt: Date;
+  usageCount: number | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
 }
 
 /**
