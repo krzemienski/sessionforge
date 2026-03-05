@@ -1,0 +1,763 @@
+{
+  "feature": "Social Media Engagement Analytics",
+  "workflow_type": "feature",
+  "workflow_rationale": "Multi-service feature requiring backend schema changes, OAuth integrations, API sync jobs, and frontend analytics dashboard. Phases follow dependency order: database → integrations → sync → UI → integration.",
+  "phases": [
+    {
+      "id": "phase-1-database",
+      "name": "Database Schema for Social Analytics",
+      "type": "implementation",
+      "description": "Add database tables for Twitter and LinkedIn integrations, social post publications, and analytics metrics snapshots",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add social integration tables (twitterIntegrations, linkedinIntegrations) to schema.ts",
+          "service": "database",
+          "files_to_modify": [
+            "packages/db/src/schema.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "packages/db/src/schema.ts (lines 405-421: devtoIntegrations pattern)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd packages/db && bun run db:generate",
+            "expected": "Migration generated successfully"
+          },
+          "status": "completed",
+          "notes": "Added twitterIntegrations and linkedinIntegrations tables to schema.ts following devtoIntegrations pattern. Both tables include OAuth fields (accessToken, refreshToken, accessTokenExpiresAt), platform user ID, username, enabled flag, and lastSyncAt. Added relations and updated workspacesRelations. Also resolved pre-existing merge conflict in 0000_snapshot.json. Migration generated successfully as 0002_faithful_landau.sql.",
+          "updated_at": "2026-03-05T04:36:52.691612+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Add social publications tables (twitterPublications, linkedinPublications) to track posted content",
+          "service": "database",
+          "files_to_modify": [
+            "packages/db/src/schema.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "packages/db/src/schema.ts (lines 423-448: devtoPublications pattern)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd packages/db && bun run db:generate",
+            "expected": "Migration generated successfully"
+          },
+          "status": "completed",
+          "notes": "Added twitterPublications and linkedinPublications tables following the devtoPublications pattern. Updated workspace, post, twitter/linkedin integration relations to include the new publication tables. Migration generated successfully (0003_dizzy_forge.sql).",
+          "updated_at": "2026-03-05T04:38:26.090882+00:00"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Add socialAnalytics table to store engagement metrics snapshots",
+          "service": "database",
+          "files_to_modify": [
+            "packages/db/src/schema.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "packages/db/src/schema.ts (existing table patterns)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd packages/db && bun run db:generate",
+            "expected": "Migration generated successfully"
+          },
+          "status": "completed",
+          "notes": "Added socialPlatformEnum (twitter/linkedin) and socialAnalytics table with workspaceId, postId, platform, impressions, likes, shares, comments, clicks, rawMetrics, syncedAt fields. Includes indexes on workspaceId, postId, platform, syncedAt, and a unique constraint on (postId, platform). Added socialAnalyticsRelations and updated workspacesRelations and postsRelations. Migration generated successfully as 0004_nifty_mimic.sql.",
+          "updated_at": "2026-03-05T04:39:57.014031+00:00"
+        },
+        {
+          "id": "subtask-1-4",
+          "description": "Add relations for new social tables and push schema to database",
+          "service": "database",
+          "files_to_modify": [
+            "packages/db/src/schema.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "packages/db/src/schema.ts (lines 610-637: devtoIntegrationsRelations pattern)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd packages/db && bun run db:push",
+            "expected": "Schema pushed successfully"
+          },
+          "status": "completed",
+          "notes": "Relations for all social tables were already added in previous subtasks (1-1 through 1-3). Schema pushed to database: created social_platform enum and 5 new tables (twitter_integrations, linkedin_integrations, twitter_publications, linkedin_publications, social_analytics) with all indexes. Used psql direct SQL for safe push against shared database to avoid dropping unrelated tables from other worktrees.",
+          "updated_at": "2026-03-05T09:00:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-twitter-integration",
+      "name": "Twitter/X OAuth Integration",
+      "type": "implementation",
+      "description": "Implement Twitter OAuth 2.0 flow, API client, and integration settings UI",
+      "depends_on": [
+        "phase-1-database"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create Twitter API client with OAuth 2.0 and analytics endpoints",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/lib/integrations/twitter.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/lib/integrations/devto.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd apps/dashboard && bun run build",
+            "expected": "Build succeeds without errors"
+          },
+          "status": "pending",
+          "notes": "Use twitter-api-v2 package; implement: verifyTwitterAuth, getTwitterUser, getTweetAnalytics methods"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create Twitter OAuth initiation route (/api/integrations/twitter/oauth)",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/integrations/twitter/oauth/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/integrations/devto/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "GET",
+            "url": "http://localhost:3000/api/integrations/twitter/oauth?workspace=test",
+            "expected_status": 302,
+            "notes": "Should redirect to Twitter OAuth"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Create Twitter OAuth callback route (/api/integrations/twitter/callback)",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/integrations/twitter/callback/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/integrations/devto/route.ts"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Complete OAuth flow end-to-end; verify tokens stored in twitterIntegrations table"
+          },
+          "status": "pending",
+          "notes": "Exchange code for access token, fetch user info, store in DB"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Create Twitter integration management route (GET/DELETE /api/integrations/twitter)",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/integrations/twitter/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/integrations/devto/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "GET",
+            "url": "http://localhost:3000/api/integrations/twitter?workspace=test",
+            "expected_status": 200
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-5",
+          "description": "Add Twitter integration UI to integrations settings page",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/settings/integrations/page.tsx"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/settings/integrations/page.tsx (Dev.to pattern)"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/settings/integrations",
+            "checks": [
+              "Twitter integration card renders",
+              "Connect button works",
+              "OAuth flow completes"
+            ]
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-linkedin-integration",
+      "name": "LinkedIn OAuth Integration",
+      "type": "implementation",
+      "description": "Implement LinkedIn OAuth 2.0 flow, API client, and integration settings UI",
+      "depends_on": [
+        "phase-1-database"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create LinkedIn API client with OAuth 2.0 and analytics endpoints",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/lib/integrations/linkedin.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/lib/integrations/devto.ts",
+            "apps/dashboard/src/lib/integrations/twitter.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd apps/dashboard && bun run build",
+            "expected": "Build succeeds without errors"
+          },
+          "status": "pending",
+          "notes": "Implement: verifyLinkedInAuth, getLinkedInProfile, getPostAnalytics methods"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Create LinkedIn OAuth initiation route (/api/integrations/linkedin/oauth)",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/integrations/linkedin/oauth/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/integrations/twitter/oauth/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "GET",
+            "url": "http://localhost:3000/api/integrations/linkedin/oauth?workspace=test",
+            "expected_status": 302,
+            "notes": "Should redirect to LinkedIn OAuth"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Create LinkedIn OAuth callback route (/api/integrations/linkedin/callback)",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/integrations/linkedin/callback/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/integrations/twitter/callback/route.ts"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Complete OAuth flow end-to-end; verify tokens stored in linkedinIntegrations table"
+          },
+          "status": "pending",
+          "notes": "Exchange code for access token, fetch profile, store in DB"
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Create LinkedIn integration management route (GET/DELETE /api/integrations/linkedin)",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/integrations/linkedin/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/integrations/twitter/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "GET",
+            "url": "http://localhost:3000/api/integrations/linkedin?workspace=test",
+            "expected_status": 200
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Add LinkedIn integration UI to integrations settings page",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/settings/integrations/page.tsx"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/settings/integrations/page.tsx (Twitter pattern)"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/settings/integrations",
+            "checks": [
+              "LinkedIn integration card renders",
+              "Connect button works",
+              "OAuth flow completes"
+            ]
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-analytics-sync",
+      "name": "Analytics Data Sync Service",
+      "type": "implementation",
+      "description": "Build background sync service to pull engagement metrics from Twitter and LinkedIn APIs",
+      "depends_on": [
+        "phase-2-twitter-integration",
+        "phase-3-linkedin-integration"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create analytics sync API route to pull metrics for all connected platforms",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/analytics/social/sync/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/sessions/scan/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "POST",
+            "url": "http://localhost:3000/api/analytics/social/sync",
+            "body": {
+              "workspaceSlug": "test"
+            },
+            "expected_status": 200
+          },
+          "status": "pending",
+          "notes": "For each connected integration, fetch analytics for recent posts and store in socialAnalytics table"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Add sync trigger configuration to automation system (manual + scheduled)",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/automation/page.tsx"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/automation/page.tsx (existing triggers)"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/automation",
+            "checks": [
+              "Can create social analytics sync trigger",
+              "Can configure hourly/daily schedule"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Create QStash webhook handler for scheduled analytics sync",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/automation/social-sync/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/automation/execute/route.ts"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Trigger QStash job manually via automation page; verify metrics are synced"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-analytics-dashboard",
+      "name": "Analytics Dashboard UI",
+      "type": "implementation",
+      "description": "Build analytics dashboard with metrics cards, trend charts, and cross-platform comparison views",
+      "depends_on": [
+        "phase-4-analytics-sync"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Create analytics API route to fetch aggregated metrics",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/analytics/social/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/insights/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "GET",
+            "url": "http://localhost:3000/api/analytics/social?workspace=test&timeframe=30d",
+            "expected_status": 200
+          },
+          "status": "pending",
+          "notes": "Support query params: workspace, timeframe (7d/30d/90d), platform filter"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Create analytics dashboard page with metrics overview",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/analytics/page.tsx"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/insights/page.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/analytics",
+            "checks": [
+              "Page renders",
+              "Shows metrics for connected platforms",
+              "No console errors"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Create reusable MetricsCard component for individual metric display",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/components/analytics/metrics-card.tsx"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/components/insights/insight-card.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/analytics",
+            "checks": [
+              "Metrics cards display impressions, likes, shares, comments",
+              "Shows trend indicators"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Create TrendChart component for time-series visualization",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/components/analytics/trend-chart.tsx"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/components/ui (chart patterns if any exist)"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/analytics",
+            "checks": [
+              "Chart displays engagement over time",
+              "Supports 7/30/90-day views"
+            ]
+          },
+          "status": "pending",
+          "notes": "Consider using recharts or similar library for visualization"
+        },
+        {
+          "id": "subtask-5-5",
+          "description": "Create PlatformComparison component for cross-platform analysis",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/components/analytics/platform-comparison.tsx"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/components/analytics/metrics-card.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/analytics",
+            "checks": [
+              "Shows side-by-side platform performance",
+              "Highlights best-performing content"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-6",
+          "description": "Add analytics navigation link to workspace sidebar",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/components/layout/sidebar.tsx"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "apps/dashboard/src/components/layout/sidebar.tsx (existing nav items)"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace",
+            "checks": [
+              "Analytics link appears in sidebar",
+              "Navigates to analytics page"
+            ]
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-6-integration",
+      "name": "End-to-End Integration & Testing",
+      "type": "integration",
+      "description": "Wire all components together and verify complete analytics workflow",
+      "depends_on": [
+        "phase-5-analytics-dashboard"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "End-to-end verification of Twitter analytics flow",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Connect Twitter account via OAuth",
+              "Post a tweet (external)",
+              "Manually trigger analytics sync",
+              "Verify metrics appear in dashboard",
+              "Check trend chart updates",
+              "Verify scheduled sync works"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "End-to-end verification of LinkedIn analytics flow",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Connect LinkedIn account via OAuth",
+              "Post a LinkedIn update (external)",
+              "Manually trigger analytics sync",
+              "Verify metrics appear in dashboard",
+              "Check trend chart updates",
+              "Verify scheduled sync works"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Verify cross-platform comparison view with real data",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Ensure both Twitter and LinkedIn are connected",
+              "Sync analytics for both platforms",
+              "Open analytics dashboard",
+              "Verify platform comparison shows both",
+              "Check best-performing content highlights",
+              "Test timeframe filters (7d/30d/90d)"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Error handling and edge case testing",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Test: expired OAuth tokens, API rate limits, missing posts, disconnected integrations, empty analytics state"
+          },
+          "status": "pending"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 6,
+    "total_subtasks": 25,
+    "services_involved": [
+      "database",
+      "dashboard"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-2-twitter-integration",
+            "phase-3-linkedin-integration"
+          ],
+          "reason": "Both depend only on phase-1-database, work on different files, can run concurrently"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "~25% faster than sequential (2 phases run in parallel)"
+    },
+    "startup_command": "cd /path/to/sessionforge && bun install && bun dev"
+  },
+  "verification_strategy": {
+    "risk_level": "high",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "unit",
+      "integration",
+      "e2e"
+    ],
+    "security_scanning_required": true,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "Users can connect Twitter/X accounts via OAuth",
+      "Users can connect LinkedIn accounts via OAuth",
+      "Per-post analytics show impressions, likes, shares, comments, clicks",
+      "Cross-platform comparison view works",
+      "Trend charts display 7/30/90-day windows",
+      "Analytics sync on schedule works",
+      "OAuth tokens are stored securely",
+      "No secrets in code or logs"
+    ],
+    "verification_steps": [
+      {
+        "name": "Database Migration",
+        "command": "cd packages/db && bun run db:push",
+        "expected_outcome": "Schema updated without errors",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "TypeScript Build",
+        "command": "bun run build",
+        "expected_outcome": "Build succeeds without type errors",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Secrets Scan",
+        "command": "python auto-claude/scan_secrets.py --all-files --json",
+        "expected_outcome": "No secrets detected",
+        "type": "security",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "OAuth Security Review",
+        "command": "manual",
+        "expected_outcome": "OAuth tokens encrypted, PKCE used, redirect URIs validated",
+        "type": "security",
+        "required": true,
+        "blocking": false
+      }
+    ],
+    "reasoning": "High risk due to OAuth implementation, sensitive token storage, and external API dependencies. Requires security scanning and OAuth best practices review."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": false,
+      "commands": [],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": [
+        "manual"
+      ],
+      "services_to_test": [
+        "dashboard",
+        "database"
+      ]
+    },
+    "e2e_tests": {
+      "required": true,
+      "commands": [
+        "manual"
+      ],
+      "flows": [
+        "twitter-oauth-flow",
+        "linkedin-oauth-flow",
+        "analytics-sync",
+        "dashboard-display"
+      ]
+    },
+    "browser_verification": {
+      "required": true,
+      "pages": [
+        {
+          "url": "http://localhost:3000/test-workspace/settings/integrations",
+          "checks": [
+            "Twitter and LinkedIn integration cards",
+            "OAuth flows work",
+            "Disconnect buttons work"
+          ]
+        },
+        {
+          "url": "http://localhost:3000/test-workspace/analytics",
+          "checks": [
+            "Metrics display",
+            "Trend charts render",
+            "Platform comparison works"
+          ]
+        }
+      ]
+    },
+    "database_verification": {
+      "required": true,
+      "checks": [
+        "migrations-exist",
+        "migrations-applied",
+        "schema-valid",
+        "oauth-tokens-encrypted"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "executionPhase": "coding",
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "updated_at": "2026-03-05T04:43:56.493Z",
+  "recoveryNote": "Task recovered from stuck state at 2026-03-05T04:32:16.973Z",
+  "xstateState": "backlog",
+  "last_updated": "2026-03-05T04:39:57.014036+00:00"
+}
