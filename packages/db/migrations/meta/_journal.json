@@ -50,6 +50,27 @@
       "when": 1772685432976,
       "tag": "0004_eminent_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772685393815,
+      "tag": "0002_faithful_landau",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772685496014,
+      "tag": "0003_dizzy_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772685583704,
+      "tag": "0004_nifty_mimic",
+      "breakpoints": true
     }
   ]
 }

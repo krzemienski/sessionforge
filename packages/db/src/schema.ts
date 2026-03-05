@@ -140,6 +140,11 @@ export const templateTypeEnum = pgEnum("template_type", [
   "workspace_default",
 ]);
 
+export const socialPlatformEnum = pgEnum("social_platform", [
+  "twitter",
+  "linkedin",
+]);
+
 export const metricsPlatformEnum = pgEnum("metrics_platform", [
   "devto",
   "hashnode",
@@ -1583,6 +1588,11 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   githubRepositories: many(githubRepositories),
   githubPrivacySettings: many(githubPrivacySettings),
   contentRecommendations: many(contentRecommendations),
+  twitterIntegrations: many(twitterIntegrations),
+  linkedinIntegrations: many(linkedinIntegrations),
+  twitterPublications: many(twitterPublications),
+  linkedinPublications: many(linkedinPublications),
+  socialAnalytics: many(socialAnalytics),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1650,6 +1660,15 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.id],
     references: [engagementMetrics.postId],
   }),
+  twitterPublication: one(twitterPublications, {
+    fields: [posts.id],
+    references: [twitterPublications.postId],
+  }),
+  linkedinPublication: one(linkedinPublications, {
+    fields: [posts.id],
+    references: [linkedinPublications.postId],
+  }),
+  socialAnalytics: many(socialAnalytics),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -1949,6 +1968,138 @@ export const recommendationFeedbackRelations = relations(
   })
 );
 
+// ── Social Media Integration tables (from 010-social-media-engagement-analytics) ──
+
+export const twitterIntegrations = pgTable(
+  "twitter_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at"),
+    twitterUserId: text("twitter_user_id"),
+    username: text("username"),
+    enabled: boolean("enabled").default(true),
+    lastSyncAt: timestamp("last_sync_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("twitterIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const linkedinIntegrations = pgTable(
+  "linkedin_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at"),
+    linkedinUserId: text("linkedin_user_id"),
+    username: text("username"),
+    enabled: boolean("enabled").default(true),
+    lastSyncAt: timestamp("last_sync_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("linkedinIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const twitterPublications = pgTable(
+  "twitter_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => twitterIntegrations.id, { onDelete: "cascade" }),
+    tweetId: text("tweet_id").notNull(),
+    tweetUrl: text("tweet_url"),
+    publishedAsThread: boolean("published_as_thread").default(false),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("twitterPublications_workspaceId_idx").on(table.workspaceId),
+    index("twitterPublications_postId_idx").on(table.postId),
+    uniqueIndex("twitterPublications_postId_uidx").on(table.postId),
+  ]
+);
+
+export const linkedinPublications = pgTable(
+  "linkedin_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => linkedinIntegrations.id, { onDelete: "cascade" }),
+    linkedinPostId: text("linkedin_post_id").notNull(),
+    linkedinUrl: text("linkedin_url"),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("linkedinPublications_workspaceId_idx").on(table.workspaceId),
+    index("linkedinPublications_postId_idx").on(table.postId),
+    uniqueIndex("linkedinPublications_postId_uidx").on(table.postId),
+  ]
+);
+
+export const socialAnalytics = pgTable(
+  "social_analytics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    platform: socialPlatformEnum("platform").notNull(),
+    impressions: integer("impressions").default(0),
+    likes: integer("likes").default(0),
+    shares: integer("shares").default(0),
+    comments: integer("comments").default(0),
+    clicks: integer("clicks").default(0),
+    rawMetrics: jsonb("raw_metrics"),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("socialAnalytics_workspaceId_idx").on(table.workspaceId),
+    index("socialAnalytics_postId_idx").on(table.postId),
+    index("socialAnalytics_platform_idx").on(table.platform),
+    index("socialAnalytics_syncedAt_idx").on(table.syncedAt),
+    uniqueIndex("socialAnalytics_postId_platform_uidx").on(
+      table.postId,
+      table.platform
+    ),
+  ]
+);
+
 // ── Supplementary Content (Phase 6) ──
 
 export const supplementaryTypeEnum = pgEnum("supplementary_type", [
@@ -2087,6 +2238,78 @@ export const mediumPublicationsRelations = relations(
     integration: one(mediumIntegrations, {
       fields: [mediumPublications.integrationId],
       references: [mediumIntegrations.id],
+    }),
+  })
+);
+
+export const twitterIntegrationsRelations = relations(
+  twitterIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [twitterIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    publications: many(twitterPublications),
+  })
+);
+
+export const linkedinIntegrationsRelations = relations(
+  linkedinIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [linkedinIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    publications: many(linkedinPublications),
+  })
+);
+
+export const twitterPublicationsRelations = relations(
+  twitterPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [twitterPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [twitterPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(twitterIntegrations, {
+      fields: [twitterPublications.integrationId],
+      references: [twitterIntegrations.id],
+    }),
+  })
+);
+
+export const linkedinPublicationsRelations = relations(
+  linkedinPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [linkedinPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [linkedinPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(linkedinIntegrations, {
+      fields: [linkedinPublications.integrationId],
+      references: [linkedinIntegrations.id],
+    }),
+  })
+);
+
+export const socialAnalyticsRelations = relations(
+  socialAnalytics,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [socialAnalytics.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [socialAnalytics.postId],
+      references: [posts.id],
     }),
   })
 );
