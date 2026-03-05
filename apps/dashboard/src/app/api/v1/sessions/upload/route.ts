@@ -5,14 +5,37 @@ import { db } from "@/lib/db";
 import { workspaces, workspaceActivity } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { processUploadedFile, processZipFile } from "@/lib/sessions/upload-processor";
+import { validateApiKey } from "@/lib/auth/api-key";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Support both API key and session authentication
+  const authHeader = req.headers.get("Authorization");
+  let workspaceId: string | undefined;
+  let userId: string | undefined;
 
-  try {
+  // Try API key authentication first
+  if (authHeader) {
+    const apiKeyResult = await validateApiKey(authHeader);
+    if (apiKeyResult.valid) {
+      workspaceId = apiKeyResult.workspaceId;
+      // For API key auth, we'll use a system user ID (the workspace owner)
+      const workspace = await db.query.workspaces.findFirst({
+        where: eq(workspaces.id, workspaceId!),
+        columns: { ownerId: true },
+      });
+      userId = workspace?.ownerId;
+    } else {
+      return NextResponse.json({ error: apiKeyResult.error }, { status: 401 });
+    }
+  } else {
+    // Fall back to session authentication (for UI)
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     // Get user's workspace
     const workspace = await db
       .select()
@@ -24,7 +47,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No workspace found" }, { status: 404 });
     }
 
-    const ws = workspace[0];
+    workspaceId = workspace[0].id;
+    userId = session.user.id;
+  }
+
+  if (!workspaceId || !userId) {
+    return NextResponse.json({ error: "Authentication failed" }, { status: 401 });
+  }
+
+  try {
 
     // Extract files from multipart form data
     const formData = await req.formData();
@@ -78,11 +109,11 @@ export async function POST(req: NextRequest) {
 
       if (fileExtension === ".jsonl") {
         // Process single .jsonl file
-        const result = await processUploadedFile(file, ws.id);
+        const result = await processUploadedFile(file, workspaceId);
         allResults.push(result);
       } else if (fileExtension === ".zip") {
         // Process zip archive containing multiple .jsonl files
-        const results = await processZipFile(file, ws.id);
+        const results = await processZipFile(file, workspaceId);
         allResults.push(...results);
       }
     }
@@ -95,8 +126,8 @@ export async function POST(req: NextRequest) {
 
     // Log upload activity
     await db.insert(workspaceActivity).values({
-      workspaceId: ws.id,
-      userId: session.user.id,
+      workspaceId,
+      userId,
       action: "session_upload",
       resourceType: "session",
       metadata: {
