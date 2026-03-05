@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
+import { workspaces, workspaceActivity } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { processUploadedFile, processZipFile } from "@/lib/sessions/upload-processor";
 
@@ -92,6 +92,20 @@ export async function POST(req: NextRequest) {
     const newSessions = allResults.filter(r => r.isNew === true).length;
     const updated = allResults.filter(r => r.isNew === false && r.status === "success").length;
     const errors = allResults.filter(r => r.status === "error").map(r => r.error ?? "Unknown error");
+
+    // Log upload activity
+    await db.insert(workspaceActivity).values({
+      workspaceId: ws.id,
+      userId: session.user.id,
+      action: "session_upload",
+      resourceType: "session",
+      metadata: {
+        filesUploaded: validatedFiles.length,
+        sessionsNew: newSessions,
+        sessionsUpdated: updated,
+        errors: errors.length > 0 ? errors : undefined,
+      },
+    });
 
     return NextResponse.json({
       uploaded,
