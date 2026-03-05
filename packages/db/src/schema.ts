@@ -677,6 +677,115 @@ export const workspaceActivity = pgTable(
   ]
 );
 
+// ── Collections & Series tables (from 013-static-site-github-pages-export) ──
+
+export const siteThemeEnum = pgEnum("site_theme", [
+  "minimal-portfolio",
+  "technical-blog",
+  "changelog",
+]);
+
+export const collections = pgTable(
+  "collections",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    theme: siteThemeEnum("theme").default("technical-blog"),
+    customDomain: text("custom_domain"),
+    poweredByFooter: boolean("powered_by_footer").default(true),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("collections_workspaceId_idx").on(table.workspaceId),
+    uniqueIndex("collections_workspaceId_slug_uidx").on(
+      table.workspaceId,
+      table.slug
+    ),
+  ]
+);
+
+export const collectionPosts = pgTable(
+  "collection_posts",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    collectionId: text("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    orderIndex: integer("order_index").default(0),
+    addedAt: timestamp("added_at").defaultNow(),
+  },
+  (table) => [
+    index("collectionPosts_collectionId_idx").on(table.collectionId),
+    index("collectionPosts_postId_idx").on(table.postId),
+    uniqueIndex("collectionPosts_collectionId_postId_uidx").on(
+      table.collectionId,
+      table.postId
+    ),
+  ]
+);
+
+export const series = pgTable(
+  "series",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    collectionId: text("collection_id").references(() => collections.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    orderIndex: integer("order_index").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("series_workspaceId_idx").on(table.workspaceId),
+    index("series_collectionId_idx").on(table.collectionId),
+    uniqueIndex("series_workspaceId_slug_uidx").on(
+      table.workspaceId,
+      table.slug
+    ),
+  ]
+);
+
+export const seriesPosts = pgTable(
+  "series_posts",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    orderIndex: integer("order_index").default(0),
+    addedAt: timestamp("added_at").defaultNow(),
+  },
+  (table) => [
+    index("seriesPosts_seriesId_idx").on(table.seriesId),
+    index("seriesPosts_postId_idx").on(table.postId),
+    uniqueIndex("seriesPosts_seriesId_postId_uidx").on(
+      table.seriesId,
+      table.postId
+    ),
+  ]
+);
+
 // ── Dev.to Integration tables (from 008-one-click-dev-to-publishing) ──
 
 export const devtoIntegrations = pgTable(
@@ -984,6 +1093,8 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   automationRuns: many(automationRuns),
   usageEvents: many(usageEvents),
   postConversations: many(postConversations),
+  collections: many(collections),
+  series: many(series),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1071,6 +1182,8 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   automationRuns: many(automationRuns),
   revisions: many(postRevisions),
   conversations: many(postConversations),
+  collectionPosts: many(collectionPosts),
+  seriesPosts: many(seriesPosts),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -1078,7 +1191,6 @@ export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
     fields: [postRevisions.postId],
     references: [posts.id],
   }),
-}));
 
 export const contentTriggersRelations = relations(
   contentTriggers,
@@ -1290,6 +1402,33 @@ export const automationRunsRelations = relations(
   })
 );
 
+export const collectionsRelations = relations(collections, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [collections.workspaceId],
+    references: [workspaces.id],
+  }),
+  createdBy: one(users, {
+    fields: [collections.createdBy],
+    references: [users.id],
+  }),
+  collectionPosts: many(collectionPosts),
+  series: many(series),
+}));
+
+export const collectionPostsRelations = relations(
+  collectionPosts,
+  ({ one }) => ({
+    collection: one(collections, {
+      fields: [collectionPosts.collectionId],
+      references: [collections.id],
+    }),
+    post: one(posts, {
+      fields: [collectionPosts.postId],
+      references: [posts.id],
+    }),
+  })
+);
+
 export const postConversationsRelations = relations(postConversations, ({ one }) => ({
   post: one(posts, {
     fields: [postConversations.postId],
@@ -1349,5 +1488,28 @@ export const contentAssetsRelations = relations(contentAssets, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [contentAssets.workspaceId],
     references: [workspaces.id],
+  }),
+}));
+
+export const seriesRelations = relations(series, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [series.workspaceId],
+    references: [workspaces.id],
+  }),
+  collection: one(collections, {
+    fields: [series.collectionId],
+    references: [collections.id],
+  }),
+  seriesPosts: many(seriesPosts),
+}));
+
+export const seriesPostsRelations = relations(seriesPosts, ({ one }) => ({
+  series: one(series, {
+    fields: [seriesPosts.seriesId],
+    references: [series.id],
+  }),
+  post: one(posts, {
+    fields: [seriesPosts.postId],
+    references: [posts.id],
   }),
 }));
