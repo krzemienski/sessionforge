@@ -244,8 +244,8 @@ export function TrendChart({ posts, timeframe, className }: TrendChartProps) {
           </defs>
 
           {/* Y-axis grid lines */}
-          {yTicks.map((tick) => (
-            <g key={tick.value}>
+          {yTicks.map((tick, i) => (
+            <g key={i}>
               <line
                 x1={PAD_X}
                 y1={tick.y}

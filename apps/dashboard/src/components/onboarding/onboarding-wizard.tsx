@@ -28,6 +28,21 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
   const completeOnboarding = useCompleteOnboarding();
 
   async function handleSkip() {
+    // Create a default workspace so the user isn't left workspace-less
+    const name = initialWorkspaceName || "My Workspace";
+    try {
+      const res = await fetch("/api/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, sessionBasePath: "~/.claude" }),
+      });
+      if (!res.ok) {
+        // If workspace creation fails (e.g. already exists), still complete onboarding
+        console.warn("Skip: workspace creation failed, completing onboarding anyway");
+      }
+    } catch {
+      // Network error — still complete onboarding
+    }
     await completeOnboarding.mutateAsync();
     router.push("/");
   }

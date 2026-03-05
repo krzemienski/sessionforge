@@ -32,10 +32,10 @@ export interface Plan {
 /** null means unlimited */
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
-    sessionScansPerMonth: 5,
-    insightExtractionsPerMonth: 10,
-    contentGenerationsPerMonth: 3,
-    workspaces: 1,
+    sessionScansPerMonth: null,
+    insightExtractionsPerMonth: null,
+    contentGenerationsPerMonth: null,
+    workspaces: null,
   },
   solo: {
     sessionScansPerMonth: 100,
@@ -59,10 +59,10 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
 
 export const PLAN_FEATURES: Record<PlanTier, PlanFeature[]> = {
   free: [
-    { label: "5 session scans / month", included: true },
-    { label: "10 insight extractions / month", included: true },
-    { label: "3 content generations / month", included: true },
-    { label: "1 workspace", included: true },
+    { label: "Unlimited session scans", included: true },
+    { label: "Unlimited insight extractions", included: true },
+    { label: "Unlimited content generations", included: true },
+    { label: "Unlimited workspaces", included: true },
     { label: "Usage dashboard", included: true },
     { label: "Email support", included: false },
     { label: "Priority processing", included: false },

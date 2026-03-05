@@ -32,10 +32,24 @@ export async function POST(req: Request) {
     const rawBody = await req.json().catch(() => ({}));
     const { name, sessionBasePath } = parseBody(workspaceCreateSchema, rawBody);
 
-    const slug = name
+    const baseSlug = name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
+
+    // Check for slug collision and append suffix if needed
+    let slug = baseSlug;
+    let suffix = 2;
+    while (true) {
+      const existing = await db
+        .select({ id: workspaces.id })
+        .from(workspaces)
+        .where(eq(workspaces.slug, slug))
+        .limit(1);
+      if (existing.length === 0) break;
+      slug = `${baseSlug}-${suffix}`;
+      suffix++;
+    }
 
     const [created] = await db
       .insert(workspaces)

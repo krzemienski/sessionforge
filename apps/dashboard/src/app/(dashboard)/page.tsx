@@ -14,5 +14,5 @@ export default async function DashboardRoot() {
   });
 
   if (ws) redirect(`/${ws.slug}`);
-  redirect("/login");
+  redirect("/onboarding");
 }
