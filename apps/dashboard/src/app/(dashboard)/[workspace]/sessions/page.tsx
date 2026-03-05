@@ -3,11 +3,14 @@
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useSessions, useScanSessions, useStreamingScan, ScanResult, ScanProgressEvent } from "@/hooks/use-sessions";
+import { useSessions, useScanSessions, useStreamingScan, useUploadSessions, ScanResult, ScanProgressEvent, UploadResult } from "@/hooks/use-sessions";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { timeAgo, formatDuration, cn } from "@/lib/utils";
 import { useState } from "react";
 import { Zap, ScrollText, SlidersHorizontal, X, RotateCcw } from "lucide-react";
+import { UploadZone } from "@/components/sessions/upload-zone";
+import { UploadProgress, UploadState, UploadStats } from "@/components/sessions/upload-progress";
+import type { UploadedFileResult } from "@/lib/sessions/upload-processor";
 
 const FILTER_DEFAULTS = {
   dateFrom: "",
@@ -24,6 +27,10 @@ export default function SessionsPage() {
   const [offset, setOffset] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [lastScanResult, setLastScanResult] = useState<ScanResult | null>(null);
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [uploadFiles, setUploadFiles] = useState<Array<{ name: string; size?: number }>>([]);
+  const [uploadResults, setUploadResults] = useState<UploadedFileResult[]>([]);
+  const [uploadStats, setUploadStats] = useState<UploadStats | null>(null);
   const limit = 20;
 
   const [filters, setFilter, resetFilters] = useFilterParams(FILTER_DEFAULTS);
@@ -48,6 +55,7 @@ export default function SessionsPage() {
 
   const scan = useScanSessions(workspace);
   const streamingScan = useStreamingScan(workspace);
+  const upload = useUploadSessions();
   const sessionList = sessions.data?.data ?? [];
 
   const workspaceData = useQuery({
@@ -79,6 +87,51 @@ export default function SessionsPage() {
   const streamProgress = streamingScan.progress;
 
   const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
+
+  const handleFilesSelected = (files: File[]) => {
+    // Reset state
+    setUploadState("uploading");
+    setUploadFiles(files.map(f => ({ name: f.name, size: f.size })));
+    setUploadResults([]);
+    setUploadStats(null);
+
+    // Trigger upload mutation
+    upload.mutate(files, {
+      onSuccess: (result: UploadResult) => {
+        setUploadState("complete");
+        setUploadStats({
+          uploaded: result.uploaded,
+          new: result.new,
+          updated: result.updated,
+          errors: result.errors.length,
+        });
+        // Create upload results from API response
+        const results: UploadedFileResult[] = files.map((file, idx) => ({
+          sessionId: file.name.replace(".jsonl", ""),
+          status: "success",
+          isNew: idx < result.new,
+        }));
+        setUploadResults(results);
+      },
+      onError: (error: Error) => {
+        setUploadState("error");
+        setUploadResults(
+          files.map(f => ({
+            sessionId: f.name.replace(".jsonl", ""),
+            status: "error",
+            error: error.message,
+          }))
+        );
+      },
+    });
+  };
+
+  const handleCloseUpload = () => {
+    setUploadState("idle");
+    setUploadFiles([]);
+    setUploadResults([]);
+    setUploadStats(null);
+  };
 
   return (
     <div>
@@ -197,6 +250,25 @@ export default function SessionsPage() {
           <span className="text-sf-text-muted ml-auto">
             {(lastScanResult.durationMs / 1000).toFixed(1)}s
           </span>
+        </div>
+      )}
+
+      <div className="mb-4">
+        <UploadZone
+          onFilesSelected={handleFilesSelected}
+          isUploading={upload.isPending}
+        />
+      </div>
+
+      {uploadState !== "idle" && (
+        <div className="mb-4">
+          <UploadProgress
+            state={uploadState}
+            files={uploadFiles}
+            results={uploadResults}
+            stats={uploadStats ?? undefined}
+            onClose={uploadState === "complete" ? handleCloseUpload : undefined}
+          />
         </div>
       )}
 

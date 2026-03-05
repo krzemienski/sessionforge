@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useInsight } from "@/hooks/use-insights";
 import { useGenerateFormats, type FormatKey, type FormatStatus } from "@/hooks/use-generate";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { TemplateSelector } from "@/components/templates/template-selector";
+import type { ContentTemplate } from "@/types/templates";
 
 const DIMS = [
   { key: "noveltyScore", label: "Novel Problem-Solving", weight: "3x" },
@@ -44,12 +45,13 @@ export default function InsightDetailPage() {
   const router = useRouter();
   const insight = useInsight(insightId);
   const ins = insight.data;
+  const [selectedTemplate, setSelectedTemplate] = useState<ContentTemplate | null>(null);
 
   const [selectedFormats, setSelectedFormats] = useState<Set<FormatKey>>(
     new Set<FormatKey>(["blog", "twitter", "linkedin", "newsletter", "changelog"])
   );
 
-  const { statuses, postIds, generateFormats } = useGenerateFormats(workspace, insightId);
+  const { statuses, postIds, generateFormats } = useGenerateFormats(workspace, insightId, selectedTemplate?.id ?? undefined);
 
   const isAnyGenerating = Object.values(statuses).some((s) => s === "generating");
   const hasSelection = selectedFormats.size > 0;
@@ -151,6 +153,16 @@ export default function InsightDetailPage() {
           ))}
         </div>
       )}
+
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold font-display mb-4">Select a Template</h2>
+        <TemplateSelector
+          workspace={workspace}
+          contentType="blog_post"
+          selectedTemplateId={selectedTemplate?.id}
+          onSelect={setSelectedTemplate}
+        />
+      </div>
 
       {/* Generate All Formats section */}
       <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4">
