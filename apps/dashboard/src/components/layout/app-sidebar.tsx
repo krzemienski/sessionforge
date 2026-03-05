@@ -10,6 +10,7 @@ import {
   CalendarDays,
   Zap,
   BarChart3,
+  TrendingUp,
   Settings,
   Palette,
   KeyRound,
@@ -30,6 +31,7 @@ const mainNav = [
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: CalendarDays, href: "/content" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
+  { label: "Recommendations", icon: TrendingUp, href: "/recommendations" },
   { label: "Automation", icon: Zap, href: "/automation" },
 ];
 
