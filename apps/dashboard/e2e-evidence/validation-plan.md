@@ -1,141 +1,140 @@
-# E2E Validation Plan
-Generated: 2026-03-03
-Platform: Web (Next.js 15 Fullstack)
+# E2E Validation Plan — SessionForge
 
-## Prerequisites
-- [x] Dev server running: `curl http://localhost:3000/api/healthcheck`
-- [x] Database connected: healthcheck returns `db: true`
-- [x] Playwright MCP browser available
-
-## Journey 1: API Healthcheck
-**PASS Criteria:**
-- [ ] GET /api/healthcheck returns HTTP 200
-- [ ] Response contains `"status":"ok"` and `"db":true`
-
-**Steps:**
-1. curl GET /api/healthcheck
-   Evidence: `e2e-evidence/web/01-healthcheck.json`
+**Platform:** fullstack (Next.js 15 + Neon Postgres + better-auth)
+**Date:** 2026-03-02
+**Validation order:** Database → Backend API → Frontend → Integration
 
 ---
 
-## Journey 2: Auth Login Flow
-**PASS Criteria:**
-- [ ] /login page renders with email/password fields and "Sign in" button
-- [ ] After login, redirects to /[workspace] dashboard
-- [ ] Dashboard shows user name in sidebar
+## Layer 1: Database Connectivity
+> No remote DB configured locally — healthcheck confirms `db: false`. Skip direct DB queries. Validate DB-dependent routes return proper error handling (not 500s).
 
-**Steps:**
-1. Navigate to /login, screenshot
-   Evidence: `e2e-evidence/web/02-login-page.png`
-2. Fill credentials, submit
-3. Screenshot dashboard after redirect
-   Evidence: `e2e-evidence/web/02-post-login-dashboard.png`
+| # | Check | PASS Criteria |
+|---|-------|---------------|
+| L1.1 | Healthcheck reports DB status | Returns JSON with `db` field (true/false), no crash |
+
+## Layer 2: Backend API (20 journeys)
+
+### J1: Healthcheck
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 1.1 | GET | /api/healthcheck | Returns JSON `{status, db, redis, timestamp}`, HTTP 200 or 503 |
+
+### J2: Auth — Session Check
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 2.1 | GET | /api/auth/get-session | HTTP 200, body `null` (unauthenticated) |
+| 2.2 | POST | /api/auth/sign-in/email | HTTP 200/4xx, valid JSON response (not 500) |
+| 2.3 | POST | /api/auth/sign-up/email | HTTP 200/4xx, valid JSON response (not 500) |
+
+### J3: Sessions — Auth Guard
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 3.1 | GET | /api/sessions | 401 `{"error":"Unauthorized"}` |
+| 3.2 | POST | /api/sessions/scan | 401 `{"error":"Unauthorized"}` |
+| 3.3 | GET | /api/sessions/:id | 401 `{"error":"Unauthorized"}` |
+| 3.4 | GET | /api/sessions/:id/messages | 401 `{"error":"Unauthorized"}` |
+
+### J4: Workspace — Auth Guard
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 4.1 | GET | /api/workspace | 401 `{"error":"Unauthorized"}` |
+| 4.2 | POST | /api/workspace | 401 `{"error":"Unauthorized"}` |
+| 4.3 | GET | /api/workspace/:slug | 401 `{"error":"Unauthorized"}` |
+| 4.4 | PUT | /api/workspace/:slug/style | 401 `{"error":"Unauthorized"}` |
+
+### J5: Insights — Auth Guard
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 5.1 | GET | /api/insights | 401 `{"error":"Unauthorized"}` |
+| 5.2 | POST | /api/insights/extract | 401 `{"error":"Unauthorized"}` |
+| 5.3 | GET | /api/insights/:id | 401 `{"error":"Unauthorized"}` |
+
+### J6: Content — Auth Guard
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 6.1 | GET | /api/content | 401 `{"error":"Unauthorized"}` |
+| 6.2 | POST | /api/content | 401 `{"error":"Unauthorized"}` |
+| 6.3 | GET | /api/content/:id | 401 `{"error":"Unauthorized"}` |
+| 6.4 | PUT | /api/content/:id | 401 `{"error":"Unauthorized"}` |
+| 6.5 | DELETE | /api/content/:id | 401 `{"error":"Unauthorized"}` |
+
+### J7: AI Agents — Auth Guard
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 7.1 | POST | /api/agents/blog | 401 `{"error":"Unauthorized"}` |
+| 7.2 | POST | /api/agents/social | 401 `{"error":"Unauthorized"}` |
+| 7.3 | POST | /api/agents/changelog | 401 `{"error":"Unauthorized"}` |
+| 7.4 | POST | /api/agents/chat | 401 `{"error":"Unauthorized"}` |
+
+### J8: Invalid Method Handling
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 8.1 | DELETE | /api/healthcheck | 405 Method Not Allowed |
+| 8.2 | PUT | /api/sessions | 405 Method Not Allowed |
+| 8.3 | PATCH | /api/insights | 405 Method Not Allowed |
+| 8.4 | GET | /api/agents/blog | 405 Method Not Allowed |
+
+### J9: 404 Handling
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 9.1 | GET | /api/nonexistent | 404 Not Found |
+
+### J10: Input Validation
+| Step | Method | Endpoint | Body | PASS Criteria |
+|------|--------|----------|------|---------------|
+| 10.1 | POST | /api/auth/sign-in/email | `{}` (empty) | 4xx, not 500 |
+| 10.2 | POST | /api/auth/sign-up/email | `{"email":"bad"}` | 4xx, not 500 |
+| 10.3 | POST | /api/content | `{}` (empty, unauthed) | 401 |
+
+### J11: Response Time (Performance)
+| Step | Method | Endpoint | PASS Criteria |
+|------|--------|----------|---------------|
+| 11.1 | GET | /api/healthcheck | < 500ms |
+| 11.2 | GET | /api/sessions (unauthed) | < 500ms |
+| 11.3 | POST | /api/agents/blog (unauthed) | < 500ms |
+
+## Layer 3: Frontend (4 journeys)
+
+### J12: Login Page Render
+| Step | Action | PASS Criteria |
+|------|--------|---------------|
+| 12.1 | Navigate to / | Redirects to /login |
+| 12.2 | Screenshot login | Shows "SessionForge" heading, email field, password field, "Sign in" button, GitHub OAuth, "Sign up" link |
+| 12.3 | Snapshot interactive | Finds email input, password input, submit button |
+
+### J13: Signup Page Render
+| Step | Action | PASS Criteria |
+|------|--------|---------------|
+| 13.1 | Navigate to /signup | Page loads, shows signup form |
+| 13.2 | Screenshot signup | Shows name, email, password fields, "Create account" button |
+
+### J14: 404 Page
+| Step | Action | PASS Criteria |
+|------|--------|---------------|
+| 14.1 | Navigate to /nonexistent | Shows 404 page or redirect |
+
+### J15: Login Form Interaction
+| Step | Action | PASS Criteria |
+|------|--------|---------------|
+| 15.1 | Fill email + password | Fields accept input |
+| 15.2 | Click Sign In | Form submits (error expected without DB, but no crash) |
+| 15.3 | Screenshot result | Shows error message or stays on login — not a blank page or 500 |
+
+## Layer 4: Integration
+
+> Limited without real DB. Validate that frontend-to-API communication works correctly.
+
+### J16: Auth Flow Integration
+| Step | Action | PASS Criteria |
+|------|--------|---------------|
+| 16.1 | Submit login form via UI | Network request hits /api/auth/sign-in/email |
+| 16.2 | Verify error handling | UI shows meaningful error, not blank screen |
 
 ---
 
-## Journey 3: Dashboard Home
-**PASS Criteria:**
-- [ ] Page shows "Settings" heading or stats cards
-- [ ] Sidebar navigation has all 6+ links
-- [ ] No console errors
-
-**Steps:**
-1. Navigate to /my-workspace, screenshot at 1440px
-   Evidence: `e2e-evidence/web/03-dashboard-1440.png`
-
----
-
-## Journey 4: Sessions Page
-**PASS Criteria:**
-- [ ] Page renders with "Sessions" heading
-- [ ] "Scan Now" button visible
-- [ ] Filter input visible
-- [ ] Empty state or session list displayed
-
-**Steps:**
-1. Navigate to /my-workspace/sessions, screenshot
-   Evidence: `e2e-evidence/web/04-sessions-1440.png`
-
----
-
-## Journey 5: Insights Page
-**PASS Criteria:**
-- [ ] Page renders with "Insights" heading
-- [ ] Score bars use /10 scale (not /5)
-- [ ] Composite scores use /75 scale
-
-**Steps:**
-1. Navigate to /my-workspace/insights, screenshot
-   Evidence: `e2e-evidence/web/05-insights-1440.png`
-
----
-
-## Journey 6: Content Page
-**PASS Criteria:**
-- [ ] Page renders with "Content" heading
-- [ ] Empty state or post list displayed
-
-**Steps:**
-1. Navigate to /my-workspace/content, screenshot
-   Evidence: `e2e-evidence/web/06-content-1440.png`
-
----
-
-## Journey 7: Settings Page (All Sections)
-**PASS Criteria:**
-- [ ] General: Workspace Name and Slug fields populated
-- [ ] Scan Config: Lookback Window dropdown with 6 options
-- [ ] RSS Feeds: RSS 2.0 and Atom URLs displayed with Copy buttons
-- [ ] Danger Zone: Delete button with red styling
-
-**Steps:**
-1. Navigate to /my-workspace/settings, full-page screenshot
-   Evidence: `e2e-evidence/web/07-settings-1440.png`
-
----
-
-## Journey 8: Settings Save (Interactive)
-**PASS Criteria:**
-- [ ] Changing lookback window and clicking Save shows "Settings saved." confirmation
-- [ ] Workspace name change persists after page reload
-
-**Steps:**
-1. Change lookback to "Last 90 days", click Save
-2. Screenshot success message
-   Evidence: `e2e-evidence/web/08-settings-saved.png`
-
----
-
-## Journey 9: Responsive - Mobile (375px)
-**PASS Criteria:**
-- [ ] Sidebar hidden, bottom navigation bar visible with 5 icons
-- [ ] Content fills full width, no horizontal overflow
-- [ ] Settings sections stack vertically
-
-**Steps:**
-1. Resize to 375x812, screenshot dashboard
-   Evidence: `e2e-evidence/web/09-mobile-dashboard.png`
-2. Screenshot settings
-   Evidence: `e2e-evidence/web/09-mobile-settings.png`
-
----
-
-## Journey 10: Responsive - Tablet (768px)
-**PASS Criteria:**
-- [ ] Layout adapts (sidebar may collapse or remain)
-- [ ] Content readable, no overflow
-
-**Steps:**
-1. Resize to 768x1024, screenshot dashboard
-   Evidence: `e2e-evidence/web/10-tablet-dashboard.png`
-
----
-
-## Journey 11: Responsive - Desktop (1440px)
-**PASS Criteria:**
-- [ ] Sidebar visible with full labels
-- [ ] Content area properly spaced
-
-**Steps:**
-1. Resize to 1440x900, screenshot dashboard
-   Evidence: `e2e-evidence/web/11-desktop-dashboard.png`
+## Summary
+- **Platform:** fullstack
+- **Journeys:** 16
+- **Steps:** 42
+- **Estimated time:** ~3 minutes
