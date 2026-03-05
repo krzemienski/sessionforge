@@ -12,6 +12,8 @@ import { injectStyleProfile } from "@/lib/style/profile-injector";
 import { createAgentMcpServer } from "../mcp-server-factory";
 import { runAgentStreaming } from "../agent-runner";
 import { getTemplateBySlug } from "@/lib/templates";
+import { getTemplateById, incrementTemplateUsage } from "@/lib/templates/db-operations";
+import type { ContentTemplate, BuiltInTemplate } from "@/types/templates";
 
 /** Writing style applied to the generated blog post. */
 type BlogTone = "technical" | "tutorial" | "conversational";
@@ -43,8 +45,15 @@ export async function streamBlogWriter(input: BlogWriterInput): Promise<Response
   let systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
 
   // Fetch and apply template if provided
+  // Try database template first (by ID), then fall back to built-in (by slug)
   if (input.templateId) {
-    const template = getTemplateBySlug(input.templateId);
+    let template: ContentTemplate | BuiltInTemplate | null = null;
+    const dbTemplate = await getTemplateById(input.templateId);
+    if (dbTemplate) {
+      template = dbTemplate;
+    } else {
+      template = getTemplateBySlug(input.templateId) ?? null;
+    }
     if (template) {
       const templateInstructions = buildTemplateInstructions(template);
       systemPrompt = `${systemPrompt}\n\n${templateInstructions}`;
@@ -77,14 +86,26 @@ export async function streamBlogWriter(input: BlogWriterInput): Promise<Response
  * Builds template-specific instructions from a template definition.
  * Converts template structure and tone guidance into prompt instructions
  * that guide the AI in following the template format.
+ *
+ * @param template - The template to build instructions from (database or built-in).
+ * @returns Formatted instructions string to append to the system prompt.
  */
-function buildTemplateInstructions(template: ReturnType<typeof getTemplateBySlug>): string {
+function buildTemplateInstructions(
+  template: ContentTemplate | BuiltInTemplate
+): string {
   if (!template) return "";
 
   const instructions: string[] = [];
 
   instructions.push(`## Content Template: ${template.name}`);
-  instructions.push(`\n${template.description}\n`);
+
+  // Handle both ContentTemplate (with nullable description) and BuiltInTemplate
+  const description = 'description' in template && template.description
+    ? template.description
+    : '';
+  if (description) {
+    instructions.push(`\n${description}\n`);
+  }
 
   if (template.structure?.sections && template.structure.sections.length > 0) {
     instructions.push("### Required Structure");
