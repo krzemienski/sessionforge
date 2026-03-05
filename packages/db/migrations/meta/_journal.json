@@ -5,8 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1772681293180,
-      "tag": "0000_busy_vivisector",
+      "when": 1772674233752,
+      "tag": "0000_demonic_cassandra_nova",
       "breakpoints": true
     },
     {
@@ -25,6 +25,20 @@
     },
     {
       "idx": 3,
+      "version": "7",
+      "when": 1772685567678,
+      "tag": "0003_ghost_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772681293180,
+      "tag": "0004_engagement_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
       "version": "7",
       "when": 1772682124479,
       "tag": "0002_chunky_phalanx",

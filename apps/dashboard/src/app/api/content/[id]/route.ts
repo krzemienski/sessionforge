@@ -3,112 +3,104 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
-import { eq } from "drizzle-orm/sql";
+import { eq } from "drizzle-orm";
 import { updatePost } from "@/lib/ai/tools/post-manager";
-import { withApiHandler } from "@/lib/api-handler";
-import { parseBody, contentUpdateSchema } from "@/lib/validation";
-import { AppError, ERROR_CODES } from "@/lib/errors";
-import { withFrontmatter } from "@/lib/seo/frontmatter";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  request: Request,
-  ctx: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await ctx.params;
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const post = await db.query.posts.findFirst({
-      where: eq(posts.id, id),
-      with: { workspace: true, insight: true },
-    });
+  const { id } = await params;
 
-    if (!post) {
-      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
-    }
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, id),
+    with: { workspace: true, insight: true },
+  });
 
-    if (post.workspace.ownerId !== session.user.id) {
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-    }
+  if (!post) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
 
-    const { searchParams } = new URL(request.url);
-    if (searchParams.get("frontmatter") === "true") {
-      return NextResponse.json({
-        ...post,
-        markdown: withFrontmatter(post.markdown ?? "", post.title, post.seoMetadata ?? {}),
-        hasFrontmatter: true,
-      });
-    }
+  if (post.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-    return NextResponse.json(post);
-  })(request);
+  return NextResponse.json(post);
 }
 
 export async function PUT(
   request: Request,
-  ctx: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await ctx.params;
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const existing = await db.query.posts.findFirst({
-      where: eq(posts.id, id),
-      with: { workspace: true },
-    });
+  const { id } = await params;
 
-    if (!existing) {
-      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
-    }
+  // Verify ownership
+  const existing = await db.query.posts.findFirst({
+    where: eq(posts.id, id),
+    with: { workspace: true },
+  });
 
-    if (existing.workspace.ownerId !== session.user.id) {
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-    }
+  if (!existing) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
 
-    const rawBody = await request.json().catch(() => ({}));
-    const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled } = parseBody(contentUpdateSchema, rawBody);
+  if (existing.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
+  const body = await request.json();
+  const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled } = body;
+
+  try {
     const updated = await updatePost(existing.workspaceId, id, {
       title,
       markdown,
-      status: status as Parameters<typeof updatePost>[2]["status"],
-      toneUsed: toneUsed as Parameters<typeof updatePost>[2]["toneUsed"],
+      status,
+      toneUsed,
       badgeEnabled,
       platformFooterEnabled,
     });
 
     return NextResponse.json(updated);
-  })(request);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Update failed" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function DELETE(
-  request: Request,
-  ctx: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await ctx.params;
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const existing = await db.query.posts.findFirst({
-      where: eq(posts.id, id),
-      with: { workspace: true },
-    });
+  const { id } = await params;
 
-    if (!existing) {
-      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
-    }
+  const existing = await db.query.posts.findFirst({
+    where: eq(posts.id, id),
+    with: { workspace: true },
+  });
 
-    if (existing.workspace.ownerId !== session.user.id) {
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-    }
+  if (!existing) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
 
-    await db.delete(posts).where(eq(posts.id, id));
+  if (existing.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-    return NextResponse.json({ deleted: true });
-  })(request);
+  await db.delete(posts).where(eq(posts.id, id));
+
+  return NextResponse.json({ deleted: true });
 }

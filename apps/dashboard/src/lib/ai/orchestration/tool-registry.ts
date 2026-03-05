@@ -1,7 +1,7 @@
 /**
- * Agent type registry.
- * Defines the canonical set of agent identifiers used across the system.
- * Tool-to-agent mapping lives in mcp-server-factory.ts (single source of truth).
+ * Tool registry for AI agents.
+ * Maps each agent type to the subset of Anthropic tool definitions it is
+ * permitted to call, providing a single point of control for tool access.
  */
 
 import { sessionReaderTools } from "../tools/session-reader";
@@ -11,6 +11,7 @@ import { markdownEditorTools } from "../tools/markdown-editor";
 import { skillLoaderTools } from "../tools/skill-loader";
 import { analyticsTools } from "../tools/analytics-tools";
 import { recommendationTools } from "../tools/recommendation-tools";
+import { githubContextTools } from "../tools/github-context";
 
 /** Union of all recognised agent identifiers in the system. */
 export type AgentType =
@@ -51,6 +52,7 @@ const ALL_TOOLS: Record<string, AnthropicTool[]> = {
   skill: skillLoaderTools as AnthropicTool[],
   analytics: analyticsTools as AnthropicTool[],
   recommendation: recommendationTools as AnthropicTool[],
+  github: githubContextTools as AnthropicTool[],
 };
 
 /**
@@ -60,9 +62,9 @@ const ALL_TOOLS: Record<string, AnthropicTool[]> = {
  */
 const AGENT_TOOL_SETS: Partial<Record<AgentType, (keyof typeof ALL_TOOLS)[]>> = {
   "insight-extractor": ["session", "insight"],
-  "blog-writer": ["session", "insight", "post", "skill"],
+  "blog-writer": ["session", "insight", "post", "skill", "github"],
   "social-writer": ["session", "insight", "post"],
-  "changelog-writer": ["session", "post"],
+  "changelog-writer": ["session", "post", "github"],
   "editor-chat": ["post", "markdown"],
   "newsletter-writer": ["session", "insight", "post"],
   "content-strategist": ["insight", "analytics", "recommendation"],

@@ -46,12 +46,12 @@ export default function InsightsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold font-display">Insights</h1>
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={cn(
-            "relative flex items-center gap-2 border px-4 py-2 rounded-sf font-medium text-sm transition-colors",
+            "relative flex items-center justify-center gap-2 border px-4 py-2.5 rounded-sf font-medium text-sm transition-colors w-full sm:w-auto min-h-[44px]",
             showFilters
               ? "bg-sf-accent-bg border-sf-accent text-sf-accent"
               : "bg-sf-bg-secondary border-sf-border text-sf-text-primary hover:bg-sf-bg-hover"
@@ -124,14 +124,14 @@ export default function InsightsPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-sf-text-muted mb-1">From</label>
               <input
                 type="date"
                 value={filters.dateFrom}
                 onChange={(e) => setFilter("dateFrom", e.target.value)}
-                className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary"
+                className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary min-h-[44px]"
               />
             </div>
             <div>
@@ -140,7 +140,7 @@ export default function InsightsPage() {
                 type="date"
                 value={filters.dateTo}
                 onChange={(e) => setFilter("dateTo", e.target.value)}
-                className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary"
+                className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary min-h-[44px]"
               />
             </div>
           </div>
@@ -152,7 +152,7 @@ export default function InsightsPage() {
               placeholder="Filter by session ID..."
               value={filters.sessionId}
               onChange={(e) => setFilter("sessionId", e.target.value)}
-              className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary placeholder:text-sf-text-muted focus:border-sf-border-focus focus:outline-none"
+              className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary placeholder:text-sf-text-muted focus:border-sf-border-focus focus:outline-none min-h-[44px]"
             />
           </div>
         </div>

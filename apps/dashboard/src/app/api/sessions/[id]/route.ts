@@ -1,49 +1,45 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions, workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm/sql";
-import { withApiHandler } from "@/lib/api-handler";
-import { AppError, ERROR_CODES } from "@/lib/errors";
+import { eq, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await ctx.params;
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // Look up the session first, then verify the user owns its workspace
-    const rows = await db
-      .select()
-      .from(claudeSessions)
-      .where(eq(claudeSessions.id, id))
-      .limit(1);
+  const { id } = await params;
 
-    if (!rows.length) {
-      throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
-    }
+  const workspace = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.ownerId, session.user.id))
+    .limit(1);
 
-    const ownerCheck = await db
-      .select({ id: workspaces.id })
-      .from(workspaces)
-      .where(
-        and(
-          eq(workspaces.id, rows[0].workspaceId),
-          eq(workspaces.ownerId, session.user.id)
-        )
+  if (!workspace.length) {
+    return NextResponse.json({ error: "No workspace found" }, { status: 404 });
+  }
+
+  const rows = await db
+    .select()
+    .from(claudeSessions)
+    .where(
+      and(
+        eq(claudeSessions.workspaceId, workspace[0].id),
+        eq(claudeSessions.id, id)
       )
-      .limit(1);
+    )
+    .limit(1);
 
-    if (!ownerCheck.length) {
-      throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
-    }
+  if (!rows.length) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
 
-    return NextResponse.json(rows[0]);
-  })(req);
+  return NextResponse.json(rows[0]);
 }

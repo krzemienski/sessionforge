@@ -448,3 +448,27 @@ code, pre {
   color: #ffdcd7;
   background-color: #67060c;
 }
+
+/* Mobile-friendly editor enhancements */
+.sf-editor-content {
+  /* Smooth touch scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+  /* Disable double-tap zoom for better touch experience */
+  touch-action: manipulation;
+  /* Ensure proper text selection on touch devices */
+  -webkit-user-select: text;
+  user-select: text;
+  /* Enable touch callout on iOS for copy/paste */
+  -webkit-touch-callout: default;
+  /* Ensure consistent line height for better touch targeting */
+  line-height: 1.7;
+}
+
+/* Improve touch target size for interactive elements within editor */
+.sf-editor-content a,
+.sf-editor-content button {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+}

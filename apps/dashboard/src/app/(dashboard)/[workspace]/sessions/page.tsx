@@ -3,11 +3,14 @@
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useSessions, useScanSessions, useStreamingScan, ScanResult, ScanProgressEvent } from "@/hooks/use-sessions";
+import { useSessions, useScanSessions, useStreamingScan, useUploadSessions, ScanResult, ScanProgressEvent, UploadResult } from "@/hooks/use-sessions";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { timeAgo, formatDuration, cn } from "@/lib/utils";
 import { useState } from "react";
 import { Zap, ScrollText, SlidersHorizontal, X, RotateCcw } from "lucide-react";
+import { UploadZone } from "@/components/sessions/upload-zone";
+import { UploadProgress, UploadState, UploadStats } from "@/components/sessions/upload-progress";
+import type { UploadedFileResult } from "@/lib/sessions/upload-processor";
 
 const FILTER_DEFAULTS = {
   dateFrom: "",
@@ -24,6 +27,10 @@ export default function SessionsPage() {
   const [offset, setOffset] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [lastScanResult, setLastScanResult] = useState<ScanResult | null>(null);
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [uploadFiles, setUploadFiles] = useState<Array<{ name: string; size?: number }>>([]);
+  const [uploadResults, setUploadResults] = useState<UploadedFileResult[]>([]);
+  const [uploadStats, setUploadStats] = useState<UploadStats | null>(null);
   const limit = 20;
 
   const [filters, setFilter, resetFilters] = useFilterParams(FILTER_DEFAULTS);
@@ -48,6 +55,7 @@ export default function SessionsPage() {
 
   const scan = useScanSessions(workspace);
   const streamingScan = useStreamingScan(workspace);
+  const upload = useUploadSessions();
   const sessionList = sessions.data?.data ?? [];
 
   const workspaceData = useQuery({
@@ -80,9 +88,54 @@ export default function SessionsPage() {
 
   const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
 
+  const handleFilesSelected = (files: File[]) => {
+    // Reset state
+    setUploadState("uploading");
+    setUploadFiles(files.map(f => ({ name: f.name, size: f.size })));
+    setUploadResults([]);
+    setUploadStats(null);
+
+    // Trigger upload mutation
+    upload.mutate(files, {
+      onSuccess: (result: UploadResult) => {
+        setUploadState("complete");
+        setUploadStats({
+          uploaded: result.uploaded,
+          new: result.new,
+          updated: result.updated,
+          errors: result.errors.length,
+        });
+        // Create upload results from API response
+        const results: UploadedFileResult[] = files.map((file, idx) => ({
+          sessionId: file.name.replace(".jsonl", ""),
+          status: "success",
+          isNew: idx < result.new,
+        }));
+        setUploadResults(results);
+      },
+      onError: (error: Error) => {
+        setUploadState("error");
+        setUploadResults(
+          files.map(f => ({
+            sessionId: f.name.replace(".jsonl", ""),
+            status: "error",
+            error: error.message,
+          }))
+        );
+      },
+    });
+  };
+
+  const handleCloseUpload = () => {
+    setUploadState("idle");
+    setUploadFiles([]);
+    setUploadResults([]);
+    setUploadStats(null);
+  };
+
   return (
     <div>
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold font-display">Sessions</h1>
           {lastScanAt && (
@@ -91,7 +144,7 @@ export default function SessionsPage() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 mt-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:mt-1">
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
@@ -112,7 +165,7 @@ export default function SessionsPage() {
           <button
             onClick={() => handleScan(true)}
             disabled={isBusy}
-            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary px-3 py-2 rounded-sf text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+            className="flex items-center justify-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary px-3 py-2.5 rounded-sf text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50 min-h-[44px]"
           >
             <RotateCcw size={14} />
             Full Rescan
@@ -120,7 +173,7 @@ export default function SessionsPage() {
           <button
             onClick={() => handleScan(false)}
             disabled={isBusy}
-            className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+            className="flex items-center justify-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50 min-h-[44px]"
           >
             <Zap size={16} />
             {isBusy ? "Scanning..." : "Scan Now"}
@@ -197,6 +250,25 @@ export default function SessionsPage() {
           <span className="text-sf-text-muted ml-auto">
             {(lastScanResult.durationMs / 1000).toFixed(1)}s
           </span>
+        </div>
+      )}
+
+      <div className="mb-4">
+        <UploadZone
+          onFilesSelected={handleFilesSelected}
+          isUploading={upload.isPending}
+        />
+      </div>
+
+      {uploadState !== "idle" && (
+        <div className="mb-4">
+          <UploadProgress
+            state={uploadState}
+            files={uploadFiles}
+            results={uploadResults}
+            stats={uploadStats ?? undefined}
+            onClose={uploadState === "complete" ? handleCloseUpload : undefined}
+          />
         </div>
       )}
 

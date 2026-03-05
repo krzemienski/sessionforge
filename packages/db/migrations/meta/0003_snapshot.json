@@ -1,6 +1,6 @@
 {
-  "id": "344dd2fa-96a3-4a50-addf-0783d603285f",
-  "prevId": "94b76f90-7924-4ca1-b29a-17018c650fee",
+  "id": "d6e96c50-8570-4be7-9eb4-d93a1a9153d3",
+  "prevId": "bbc899b6-9870-447a-8195-59a38a4f5874",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -502,202 +502,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.content_recommendations": {
-      "name": "content_recommendations",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recommendation_type": {
-          "name": "recommendation_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reasoning": {
-          "name": "reasoning",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "suggested_content_type": {
-          "name": "suggested_content_type",
-          "type": "content_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "suggested_publish_time": {
-          "name": "suggested_publish_time",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "insight_id": {
-          "name": "insight_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "priority": {
-          "name": "priority",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "accepted_at": {
-          "name": "accepted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dismissed_at": {
-          "name": "dismissed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "contentRecommendations_workspaceId_idx": {
-          "name": "contentRecommendations_workspaceId_idx",
-          "columns": [
-            {
-              "expression": "workspace_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "contentRecommendations_status_idx": {
-          "name": "contentRecommendations_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "contentRecommendations_insightId_idx": {
-          "name": "contentRecommendations_insightId_idx",
-          "columns": [
-            {
-              "expression": "insight_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "contentRecommendations_priority_idx": {
-          "name": "contentRecommendations_priority_idx",
-          "columns": [
-            {
-              "expression": "priority",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "content_recommendations_workspace_id_workspaces_id_fk": {
-          "name": "content_recommendations_workspace_id_workspaces_id_fk",
-          "tableFrom": "content_recommendations",
-          "tableTo": "workspaces",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "content_recommendations_insight_id_insights_id_fk": {
-          "name": "content_recommendations_insight_id_insights_id_fk",
-          "tableFrom": "content_recommendations",
-          "tableTo": "insights",
-          "columnsFrom": [
-            "insight_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.content_triggers": {
       "name": "content_triggers",
       "schema": "",
@@ -1103,8 +907,96 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.engagement_metrics": {
-      "name": "engagement_metrics",
+    "public.ghost_integrations": {
+      "name": "ghost_integrations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ghost_url": {
+          "name": "ghost_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "admin_api_key": {
+          "name": "admin_api_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ghostIntegrations_workspaceId_uidx": {
+          "name": "ghostIntegrations_workspaceId_uidx",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ghost_integrations_workspace_id_workspaces_id_fk": {
+          "name": "ghost_integrations_workspace_id_workspaces_id_fk",
+          "tableFrom": "ghost_integrations",
+          "tableTo": "workspaces",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ghost_publications": {
+      "name": "ghost_publications",
       "schema": "",
       "columns": {
         "id": {
@@ -1125,65 +1017,37 @@
           "primaryKey": false,
           "notNull": true
         },
-        "published_at": {
-          "name": "published_at",
+        "integration_id": {
+          "name": "integration_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ghost_post_id": {
+          "name": "ghost_post_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ghost_url": {
+          "name": "ghost_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "published_as_draft": {
+          "name": "published_as_draft",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "synced_at": {
+          "name": "synced_at",
           "type": "timestamp",
           "primaryKey": false,
-          "notNull": false
-        },
-        "views": {
-          "name": "views",
-          "type": "integer",
-          "primaryKey": false,
           "notNull": false,
-          "default": 0
-        },
-        "clicks": {
-          "name": "clicks",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "shares": {
-          "name": "shares",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "likes": {
-          "name": "likes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "comments": {
-          "name": "comments",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "engagement_rate": {
-          "name": "engagement_rate",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false,
-          "default": 0
-        },
-        "platform_specific_metrics": {
-          "name": "platform_specific_metrics",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_synced_at": {
-          "name": "last_synced_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
+          "default": "now()"
         },
         "created_at": {
           "name": "created_at",
@@ -1201,8 +1065,8 @@
         }
       },
       "indexes": {
-        "engagementMetrics_workspaceId_idx": {
-          "name": "engagementMetrics_workspaceId_idx",
+        "ghostPublications_workspaceId_idx": {
+          "name": "ghostPublications_workspaceId_idx",
           "columns": [
             {
               "expression": "workspace_id",
@@ -1216,8 +1080,8 @@
           "method": "btree",
           "with": {}
         },
-        "engagementMetrics_postId_idx": {
-          "name": "engagementMetrics_postId_idx",
+        "ghostPublications_postId_idx": {
+          "name": "ghostPublications_postId_idx",
           "columns": [
             {
               "expression": "post_id",
@@ -1231,23 +1095,8 @@
           "method": "btree",
           "with": {}
         },
-        "engagementMetrics_publishedAt_idx": {
-          "name": "engagementMetrics_publishedAt_idx",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "engagementMetrics_postId_uidx": {
-          "name": "engagementMetrics_postId_uidx",
+        "ghostPublications_postId_uidx": {
+          "name": "ghostPublications_postId_uidx",
           "columns": [
             {
               "expression": "post_id",
@@ -1263,9 +1112,9 @@
         }
       },
       "foreignKeys": {
-        "engagement_metrics_workspace_id_workspaces_id_fk": {
-          "name": "engagement_metrics_workspace_id_workspaces_id_fk",
-          "tableFrom": "engagement_metrics",
+        "ghost_publications_workspace_id_workspaces_id_fk": {
+          "name": "ghost_publications_workspace_id_workspaces_id_fk",
+          "tableFrom": "ghost_publications",
           "tableTo": "workspaces",
           "columnsFrom": [
             "workspace_id"
@@ -1276,12 +1125,25 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "engagement_metrics_post_id_posts_id_fk": {
-          "name": "engagement_metrics_post_id_posts_id_fk",
-          "tableFrom": "engagement_metrics",
+        "ghost_publications_post_id_posts_id_fk": {
+          "name": "ghost_publications_post_id_posts_id_fk",
+          "tableFrom": "ghost_publications",
           "tableTo": "posts",
           "columnsFrom": [
             "post_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ghost_publications_integration_id_ghost_integrations_id_fk": {
+          "name": "ghost_publications_integration_id_ghost_integrations_id_fk",
+          "tableFrom": "ghost_publications",
+          "tableTo": "ghost_integrations",
+          "columnsFrom": [
+            "integration_id"
           ],
           "columnsTo": [
             "id"

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { posts, workspaces } from "@sessionforge/db";
-import { eq, desc, and } from "drizzle-orm/sql";
+import { eq, desc, and } from "drizzle-orm";
 import { marked } from "marked";
 
 export const dynamic = "force-dynamic";

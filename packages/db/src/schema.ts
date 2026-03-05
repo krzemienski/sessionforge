@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm/relations";
+import { relations } from "drizzle-orm";
 
 // ── Enums (PRD §4.1) ──
 
@@ -139,6 +139,12 @@ export const usageEventTypeEnum = pgEnum("usage_event_type", [
 export const feedbackActionEnum = pgEnum("feedback_action", [
   "accepted",
   "dismissed",
+]);
+
+export const templateTypeEnum = pgEnum("template_type", [
+  "built_in",
+  "custom",
+  "workspace_default",
 ]);
 
 // ── Types ──
@@ -727,6 +733,245 @@ export const devtoPublications = pgTable(
   ]
 );
 
+// ── Ghost CMS Integration tables (from 016-ghost-cms-publishing-integration) ──
+
+export const ghostIntegrations = pgTable(
+  "ghost_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ghostUrl: text("ghost_url").notNull(),
+    adminApiKey: text("admin_api_key").notNull(),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("ghostIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const ghostPublications = pgTable(
+  "ghost_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => ghostIntegrations.id, { onDelete: "cascade" }),
+    ghostPostId: text("ghost_post_id").notNull(),
+    ghostUrl: text("ghost_url"),
+    publishedAsDraft: boolean("published_as_draft").default(false),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("ghostPublications_workspaceId_idx").on(table.workspaceId),
+    index("ghostPublications_postId_idx").on(table.postId),
+    uniqueIndex("ghostPublications_postId_uidx").on(table.postId),
+  ]
+);
+
+// ── GitHub Integration tables (from 012-github-repository-deep-integration) ──
+
+export const githubIntegrations = pgTable(
+  "github_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    accessToken: text("access_token").notNull(),
+    githubUsername: text("github_username"),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("githubIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const githubRepositories = pgTable(
+  "github_repositories",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => githubIntegrations.id, { onDelete: "cascade" }),
+    githubRepoId: integer("github_repo_id").notNull(),
+    repoName: text("repo_name").notNull(),
+    repoUrl: text("repo_url").notNull(),
+    defaultBranch: text("default_branch").default("main"),
+    lastSyncedAt: timestamp("last_synced_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubRepositories_workspaceId_idx").on(table.workspaceId),
+    index("githubRepositories_integrationId_idx").on(table.integrationId),
+    uniqueIndex("githubRepositories_workspaceId_githubRepoId_uidx").on(
+      table.workspaceId,
+      table.githubRepoId
+    ),
+  ]
+);
+
+export const githubCommits = pgTable(
+  "github_commits",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    repositoryId: text("repository_id")
+      .notNull()
+      .references(() => githubRepositories.id, { onDelete: "cascade" }),
+    commitSha: text("commit_sha").notNull(),
+    message: text("message").notNull(),
+    authorName: text("author_name"),
+    authorEmail: text("author_email"),
+    authorDate: timestamp("author_date").notNull(),
+    commitUrl: text("commit_url").notNull(),
+    additions: integer("additions"),
+    deletions: integer("deletions"),
+    filesChanged: jsonb("files_changed").$type<string[]>(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubCommits_repositoryId_idx").on(table.repositoryId),
+    index("githubCommits_authorDate_idx").on(table.authorDate),
+    uniqueIndex("githubCommits_repositoryId_commitSha_uidx").on(
+      table.repositoryId,
+      table.commitSha
+    ),
+  ]
+);
+
+export const githubPullRequests = pgTable(
+  "github_pull_requests",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    repositoryId: text("repository_id")
+      .notNull()
+      .references(() => githubRepositories.id, { onDelete: "cascade" }),
+    prNumber: integer("pr_number").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    state: text("state").notNull(),
+    authorName: text("author_name"),
+    prUrl: text("pr_url").notNull(),
+    mergedAt: timestamp("merged_at"),
+    createdAtGithub: timestamp("created_at_github").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubPullRequests_repositoryId_idx").on(table.repositoryId),
+    index("githubPullRequests_createdAtGithub_idx").on(table.createdAtGithub),
+    uniqueIndex("githubPullRequests_repositoryId_prNumber_uidx").on(
+      table.repositoryId,
+      table.prNumber
+    ),
+  ]
+);
+
+export const githubIssues = pgTable(
+  "github_issues",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    repositoryId: text("repository_id")
+      .notNull()
+      .references(() => githubRepositories.id, { onDelete: "cascade" }),
+    issueNumber: integer("issue_number").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    state: text("state").notNull(),
+    authorName: text("author_name"),
+    issueUrl: text("issue_url").notNull(),
+    createdAtGithub: timestamp("created_at_github").notNull(),
+    closedAt: timestamp("closed_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubIssues_repositoryId_idx").on(table.repositoryId),
+    index("githubIssues_createdAtGithub_idx").on(table.createdAtGithub),
+    uniqueIndex("githubIssues_repositoryId_issueNumber_uidx").on(
+      table.repositoryId,
+      table.issueNumber
+    ),
+  ]
+);
+
+export const githubPrivacySettings = pgTable(
+  "github_privacy_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: text("repository_id").references(() => githubRepositories.id, {
+      onDelete: "cascade",
+    }),
+    commitSha: text("commit_sha"),
+    excludeFromContent: boolean("exclude_from_content").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubPrivacySettings_workspaceId_idx").on(table.workspaceId),
+    index("githubPrivacySettings_repositoryId_idx").on(table.repositoryId),
+  ]
+);
+
+// ── Content Templates (from 007-content-templates-library) ──
+
+export const contentTemplates = pgTable(
+  "content_templates",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    templateType: templateTypeEnum("template_type").notNull(),
+    contentType: contentTypeEnum("content_type").notNull(),
+    description: text("description"),
+    structure: jsonb("structure").$type<{
+      sections: {
+        heading: string;
+        description: string;
+        required: boolean;
+      }[];
+    }>(),
+    toneGuidance: text("tone_guidance"),
+    exampleContent: text("example_content"),
+    isActive: boolean("is_active").default(true),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    usageCount: integer("usage_count").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("contentTemplates_workspaceId_idx").on(table.workspaceId),
+    index("contentTemplates_templateType_idx").on(table.templateType),
+    uniqueIndex("contentTemplates_slug_uidx").on(table.slug),
+  ]
+);
+
 // ── Agent Runs (from 004-error-recovery) ──
 
 export const agentRuns = pgTable(
@@ -1036,6 +1281,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   usageEvents: many(usageEvents),
   usageMonthlySummary: many(usageMonthlySummary),
   recommendationFeedback: many(recommendationFeedback),
+  contentTemplates: many(contentTemplates),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -1082,6 +1328,12 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   postConversations: many(postConversations),
   engagementMetrics: many(engagementMetrics),
   contentRecommendations: many(contentRecommendations),
+  ghostIntegrations: many(ghostIntegrations),
+  ghostPublications: many(ghostPublications),
+  githubIntegrations: many(githubIntegrations),
+  githubRepositories: many(githubRepositories),
+  githubPrivacySettings: many(githubPrivacySettings),
+  contentTemplates: many(contentTemplates),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1442,6 +1694,118 @@ export const recommendationFeedbackRelations = relations(
     }),
     user: one(users, {
       fields: [recommendationFeedback.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+// ── Ghost/GitHub/ContentTemplates Relations ──
+
+export const ghostIntegrationsRelations = relations(
+  ghostIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [ghostIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    publications: many(ghostPublications),
+  })
+);
+
+export const ghostPublicationsRelations = relations(
+  ghostPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [ghostPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [ghostPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(ghostIntegrations, {
+      fields: [ghostPublications.integrationId],
+      references: [ghostIntegrations.id],
+    }),
+  })
+);
+
+export const githubIntegrationsRelations = relations(
+  githubIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [githubIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    repositories: many(githubRepositories),
+  })
+);
+
+export const githubRepositoriesRelations = relations(
+  githubRepositories,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [githubRepositories.workspaceId],
+      references: [workspaces.id],
+    }),
+    integration: one(githubIntegrations, {
+      fields: [githubRepositories.integrationId],
+      references: [githubIntegrations.id],
+    }),
+    commits: many(githubCommits),
+    pullRequests: many(githubPullRequests),
+    issues: many(githubIssues),
+    privacySettings: many(githubPrivacySettings),
+  })
+);
+
+export const githubCommitsRelations = relations(githubCommits, ({ one }) => ({
+  repository: one(githubRepositories, {
+    fields: [githubCommits.repositoryId],
+    references: [githubRepositories.id],
+  }),
+}));
+
+export const githubPullRequestsRelations = relations(
+  githubPullRequests,
+  ({ one }) => ({
+    repository: one(githubRepositories, {
+      fields: [githubPullRequests.repositoryId],
+      references: [githubRepositories.id],
+    }),
+  })
+);
+
+export const githubIssuesRelations = relations(githubIssues, ({ one }) => ({
+  repository: one(githubRepositories, {
+    fields: [githubIssues.repositoryId],
+    references: [githubRepositories.id],
+  }),
+}));
+
+export const githubPrivacySettingsRelations = relations(
+  githubPrivacySettings,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [githubPrivacySettings.workspaceId],
+      references: [workspaces.id],
+    }),
+    repository: one(githubRepositories, {
+      fields: [githubPrivacySettings.repositoryId],
+      references: [githubRepositories.id],
+    }),
+  })
+);
+
+export const contentTemplatesRelations = relations(
+  contentTemplates,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [contentTemplates.workspaceId],
+      references: [workspaces.id],
+    }),
+    creator: one(users, {
+      fields: [contentTemplates.createdBy],
       references: [users.id],
     }),
   })
