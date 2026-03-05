@@ -7,7 +7,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude 'tests/e2e/**'",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.63",
@@ -51,8 +57,11 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@sessionforge/tsconfig": "workspace:*",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.2",
     "@types/diff": "^7.0.0",
     "@types/jszip": "^3.4.1",
     "@types/node": "^22",
@@ -62,8 +71,11 @@
     "drizzle-kit": "^0.31.9",
     "eslint": "^8.0.0",
     "eslint-config-next": "^15.0.0",
+    "happy-dom": "^15.0.0",
+    "msw": "^2.7.0",
     "postcss": "^8",
     "tailwindcss": "^4",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vitest": "^4.0.0"
   }
 }
