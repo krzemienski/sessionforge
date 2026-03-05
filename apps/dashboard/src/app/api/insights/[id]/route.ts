@@ -2,33 +2,35 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { insights, workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { insights } from "@sessionforge/db";
+import { eq } from "drizzle-orm/sql";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await ctx.params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const insight = await db.query.insights.findFirst({
+      where: eq(insights.id, id),
+      with: { workspace: true, session: true },
+    });
 
-  const insight = await db.query.insights.findFirst({
-    where: eq(insights.id, id),
-    with: { workspace: true, session: true },
-  });
+    if (!insight) {
+      throw new AppError("Insight not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (!insight) {
-    return NextResponse.json({ error: "Insight not found" }, { status: 404 });
-  }
+    if (insight.workspace.ownerId !== session.user.id) {
+      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    }
 
-  // Verify ownership
-  if (insight.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  return NextResponse.json(insight);
+    return NextResponse.json(insight);
+  })(req);
 }

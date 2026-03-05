@@ -1,11 +1,15 @@
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
-import { eq, and, desc } from "drizzle-orm";
-import type { contentTypeEnum, postStatusEnum, toneProfileEnum } from "@sessionforge/db";
+import { eq, and, desc } from "drizzle-orm/sql";
+import type { contentTypeEnum, postStatusEnum, toneProfileEnum, editTypeEnum, versionTypeEnum } from "@sessionforge/db";
+import { computeEditStats } from "@/lib/style/edit-distance";
+import { createRevision } from "@/lib/revisions/manager";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
 type PostStatus = (typeof postStatusEnum.enumValues)[number];
 type ToneProfile = (typeof toneProfileEnum.enumValues)[number];
+type EditType = (typeof editTypeEnum.enumValues)[number];
+type VersionType = (typeof versionTypeEnum.enumValues)[number];
 
 export interface CreatePostInput {
   workspaceId: string;
@@ -13,14 +17,11 @@ export interface CreatePostInput {
   markdown: string;
   contentType: ContentType;
   insightId?: string;
+  parentPostId?: string;
   status?: PostStatus;
   toneUsed?: ToneProfile;
-  sourceMetadata?: {
-    sessionIds: string[];
-    insightIds: string[];
-    lookbackWindow?: string;
-    generatedBy: "blog_writer" | "social_writer" | "changelog_writer" | "editor_chat" | "manual" | "newsletter_writer";
-  };
+  aiDraftMarkdown?: string;
+  sourceMetadata?: Record<string, unknown>;
 }
 
 export interface UpdatePostInput {
@@ -29,6 +30,10 @@ export interface UpdatePostInput {
   content?: string;
   status?: PostStatus;
   toneUsed?: ToneProfile;
+  versionType?: VersionType;
+  editType?: EditType;
+  createdBy?: string;
+  publishedAt?: Date;
   badgeEnabled?: boolean;
   platformFooterEnabled?: boolean;
 }
@@ -56,12 +61,22 @@ export async function createPost(input: CreatePostInput) {
       markdown: input.markdown,
       contentType: input.contentType,
       insightId: input.insightId,
+      parentPostId: input.parentPostId,
       status: input.status ?? "draft",
       toneUsed: input.toneUsed,
       wordCount,
-      sourceMetadata: input.sourceMetadata,
+      aiDraftMarkdown: input.aiDraftMarkdown,
+      sourceMetadata: input.sourceMetadata as any,
     })
     .returning();
+
+  await createRevision({
+    postId: created.id,
+    title: created.title,
+    markdown: input.markdown,
+    versionType: "major",
+    editType: "ai_generated",
+  });
 
   return created;
 }
@@ -79,12 +94,31 @@ export async function updatePost(
   if (input.badgeEnabled !== undefined) updates.badgeEnabled = input.badgeEnabled;
   if (input.platformFooterEnabled !== undefined) updates.platformFooterEnabled = input.platformFooterEnabled;
 
+  // Set publishedAt when transitioning to 'published' status (only if not explicitly provided)
+  if (input.status === "published") {
+    updates.publishedAt = input.publishedAt ?? new Date();
+  } else if (input.publishedAt !== undefined) {
+    updates.publishedAt = input.publishedAt;
+  }
+
   if (input.markdown !== undefined) {
     updates.markdown = input.markdown;
     updates.content = markdownToHtml(input.markdown);
     updates.wordCount = countWords(input.markdown);
   } else if (input.content !== undefined) {
     updates.content = input.content;
+  }
+
+  // Compute edit distance when publishing if an AI draft was saved
+  if (input.status === "published") {
+    const existing = await db.query.posts.findFirst({
+      where: and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId)),
+    });
+    if (existing?.aiDraftMarkdown) {
+      const finalMarkdown = input.markdown ?? existing.markdown;
+      const stats = computeEditStats(existing.aiDraftMarkdown, finalMarkdown);
+      updates.editDistance = Math.round(stats.percentChanged);
+    }
   }
 
   const [updated] = await db
@@ -96,6 +130,15 @@ export async function updatePost(
   if (!updated) {
     throw new Error(`Post ${postId} not found`);
   }
+
+  await createRevision({
+    postId: updated.id,
+    title: updated.title,
+    markdown: updated.markdown,
+    versionType: input.versionType ?? "minor",
+    editType: input.editType ?? "user_edit",
+    createdBy: input.createdBy,
+  });
 
   return updated;
 }
@@ -129,8 +172,13 @@ export const postManagerTools = [
         markdown: { type: "string", description: "Full markdown content" },
         contentType: { type: "string" },
         insightId: { type: "string" },
+        parentPostId: { type: "string", description: "ID of the source post being repurposed" },
         status: { type: "string" },
         toneUsed: { type: "string" },
+        aiDraftMarkdown: {
+          type: "string",
+          description: "Original AI-generated markdown to preserve for style learning. Set equal to markdown when creating an AI-generated draft.",
+        },
         sourceMetadata: { type: "object" },
       },
       required: ["title", "markdown", "contentType"],

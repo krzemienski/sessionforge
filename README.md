@@ -6,20 +6,33 @@ SessionForge ingests JSONL session files from `~/.claude/projects/`, analyzes de
 
 ---
 
-## Table of Contents
+## Quick Start
 
-- [What It Does](#what-it-does)
-- [Tech Stack](#tech-stack)
-- [Monorepo Structure](#monorepo-structure)
-- [Architecture Overview](#architecture-overview)
-- [Prerequisites](#prerequisites)
-- [Local Setup](#local-setup)
-- [Environment Variables](#environment-variables)
-- [Database Setup](#database-setup)
-- [Running the App](#running-the-app)
-- [Key Concepts](#key-concepts)
-- [Content Pipeline](#content-pipeline)
-- [Deployment](#deployment)
+### Local Development
+
+```bash
+git clone https://github.com/your-username/sessionforge.git
+cd sessionforge
+bun install
+cp .env.example apps/dashboard/.env.local
+# Edit apps/dashboard/.env.local with your credentials
+bun db:push
+bun dev
+```
+
+### Docker
+
+```bash
+docker compose up -d
+# App at http://localhost:3000 (AI features disabled — requires Claude CLI)
+```
+
+### Docker (Production)
+
+```bash
+# Set environment variables in your shell or .env file
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
 
 ---
 
@@ -28,17 +41,17 @@ SessionForge ingests JSONL session files from `~/.claude/projects/`, analyzes de
 1. **Scans** your `~/.claude/projects/` directory for Claude Code session JSONL files
 2. **Parses** each session — extracting tool usage, file modifications, errors, costs, and timestamps
 3. **Scores** sessions across 6 dimensions to identify which ones contain publishable insights
-4. **Extracts** insights using the AI Insight Extractor agent (Claude Opus)
-5. **Generates** content using specialized agents: Blog Writer, Social Writer, Changelog Writer
-6. **Edits** content interactively via an AI chat sidebar (streaming)
-7. **Publishes** or exports drafts through the Lexical-powered markdown editor
+4. **Extracts** insights using the AI Insight Extractor agent
+5. **Generates** content using specialized agents: Blog Writer, Social Writer, Changelog Writer, Newsletter Writer
+6. **Edits** content interactively via an AI chat sidebar with inline quick-edit controls
+7. **Publishes** to Hashnode, WordPress, or Dev.to — or exports as markdown/HTML
 
 ### Who Is This For?
 
 Solo developers and engineering leads who:
 - Use Claude Code daily and have `~/.claude/projects/` populated with sessions
 - Want to build a technical personal brand from authentic, real-work content
-- Are comfortable deploying a Vercel + Neon + Upstash stack
+- Are comfortable deploying a Vercel + Neon + Upstash stack (or Docker)
 
 ---
 
@@ -51,13 +64,12 @@ Solo developers and engineering leads who:
 | Editor | Lexical (rich text, markdown import/export) |
 | Server state | TanStack Query v5 |
 | Client state | Zustand |
-| Auth | better-auth (email + GitHub OAuth) |
+| Auth | Better Auth (email + GitHub OAuth) |
 | Database | PostgreSQL via Drizzle ORM (Neon serverless) |
-| Queue | Upstash QStash (cron + scheduled jobs) |
+| Queue | Upstash QStash |
 | Cache | Upstash Redis |
-| AI SDK | `@anthropic-ai/sdk` |
-| AI Models | `claude-opus-4-5-20250514` (generation), `claude-haiku-4-5-20251001` (routing) |
-| Deployment | Vercel |
+| AI | `@anthropic-ai/claude-agent-sdk` (CLI-inherited auth, zero API keys) |
+| Deployment | Vercel (primary) / Docker (self-hosted) |
 | Monorepo | Turborepo + Bun |
 
 ---
@@ -68,386 +80,130 @@ Solo developers and engineering leads who:
 sessionforge/
 ├── turbo.json                 # Turborepo task graph
 ├── package.json               # Root workspace (bun)
-├── .env.example               # Environment variable template
+├── Dockerfile                 # Multi-stage production build
+├── docker-compose.yml         # Local dev with Postgres
+├── docker-compose.prod.yml    # Production override
+├── vercel.json                # Vercel deployment config
 │
 ├── apps/
 │   └── dashboard/             # Next.js 15 application
 │       ├── next.config.ts
-│       ├── tailwind.config.ts
 │       └── src/
 │           ├── app/
-│           │   ├── (auth)/    # Login + signup pages
+│           │   ├── (auth)/              # Login + signup
 │           │   ├── (dashboard)/[workspace]/
 │           │   │   ├── page.tsx          # Dashboard home
 │           │   │   ├── sessions/         # Session browser + detail
 │           │   │   ├── insights/         # Ranked insights list + detail
-│           │   │   ├── content/          # Content library + Lexical editor
+│           │   │   ├── content/          # Content library + editor
 │           │   │   ├── automation/       # Trigger management
 │           │   │   └── settings/         # Workspace, style, API keys
-│           │   └── api/
-│           │       ├── auth/             # better-auth handler
-│           │       ├── sessions/scan/    # POST: trigger JSONL scan
-│           │       ├── insights/extract/ # POST: run insight extractor
-│           │       ├── agents/           # blog, social, changelog, chat (SSE)
-│           │       └── automation/       # Triggers + QStash execute endpoint
+│           │   └── api/                  # 76+ internal + 9 public v1 routes
 │           ├── components/
-│           │   ├── ui/          # shadcn/ui base components
-│           │   ├── layout/      # Sidebar, workspace selector, user menu
-│           │   ├── sessions/    # Session cards, timeline, scan button
-│           │   ├── insights/    # Insight cards, score badge, dimension chart
-│           │   ├── content/     # Content editor, AI chat sidebar, publish button
-│           │   └── automation/  # Trigger cards + cron input
+│           │   ├── editor/               # Markdown editor, AI chat, inline controls
+│           │   ├── preview/              # Content preview with citation links
+│           │   └── ui/                   # shadcn/ui base components
+│           ├── hooks/                    # React hooks (use-editor-chat, etc.)
 │           └── lib/
-│               ├── auth.ts           # better-auth client
-│               ├── db.ts             # Drizzle client
-│               ├── redis.ts          # Upstash Redis client
-│               ├── qstash.ts         # Upstash QStash client
-│               ├── sessions/
-│               │   ├── scanner.ts    # JSONL file discovery
-│               │   ├── parser.ts     # Line-by-line JSONL parsing
-│               │   ├── normalizer.ts # Typed NormalizedSession mapping
-│               │   └── indexer.ts    # Drizzle upsert to PostgreSQL
-│               └── ai/
-│                   ├── orchestration/
-│                   │   ├── tool-registry.ts  # MCP tool set composition
-│                   │   ├── model-selector.ts # Opus vs Haiku routing
-│                   │   └── streaming.ts      # SSE response helpers
-│                   ├── tools/            # MCP tool implementations
-│                   ├── agents/           # AI agent implementations
-│                   └── prompts/          # System prompt templates
+│               ├── ai/                   # Agent runner, tools, prompts
+│               ├── sessions/             # Scanner, parser, indexer
+│               └── ingestion/            # External content ingestion
 │
 └── packages/
-    ├── db/                    # Drizzle schema + migrations
-    │   ├── src/schema.ts      # All tables, enums, relations
-    │   └── migrations/        # drizzle-kit generated
+    ├── db/                    # Drizzle schema + migrations (30+ tables)
     └── tsconfig/              # Shared TypeScript configs
 ```
 
 ---
 
-## Architecture Overview
+## AI Architecture
 
-### Session Pipeline
+SessionForge uses `@anthropic-ai/claude-agent-sdk` exclusively for all AI features. The SDK's `query()` function inherits authentication directly from the Claude CLI session — **there are no API keys**. The SDK spawns the `claude` CLI subprocess which uses the logged-in user's credentials automatically.
 
-```
-~/.claude/projects/           JSONL files on disk
-       │
-       ▼
-  scanner.ts                  Discovers files, decodes project paths
-       │
-       ▼
-  parser.ts                   Streams JSONL line-by-line via readline
-       │                       Extracts: messages, tools, file edits, errors, costs
-       ▼
-  normalizer.ts               Maps parsed data → NormalizedSession type
-       │
-       ▼
-  indexer.ts                  Drizzle upsert → claude_sessions table
-```
+### Agents
 
-### AI Content Pipeline
+| Agent | Purpose |
+|-------|---------|
+| Insight Extractor | Analyzes session transcripts, scores 6 dimensions |
+| Blog Writer | Long-form technical posts (~2500 words) |
+| Social Writer | Twitter threads, LinkedIn posts |
+| Newsletter Writer | Curated insight summaries |
+| Changelog Writer | Developer-focused changelog entries |
+| Editor Chat | Interactive AI editing via chat sidebar |
+| Evidence Writer | Evidence-based content from session mining |
+| Style Learner | Learns and applies user writing style |
 
-```
-claude_sessions (DB)
-       │
-       ▼
-  Insight Extractor           Claude Opus agent
-  (insight-extractor.ts)      Reads session transcript via MCP tools
-       │                       Scores 6 dimensions, produces insights
-       ▼
-  insights (DB)               Ranked by composite score (0–65)
-       │
-       ▼
-  ┌────┴──────────────────────┐
-  │                           │
-Blog Writer              Social Writer            Changelog Writer
-(blog-writer.ts)         (social-writer.ts)       (changelog-writer.ts)
-  │                           │                           │
-  └────────────┬──────────────┘                          │
-               ▼                                         │
-          SSE Stream → content editor             SSE Stream → content editor
-               │
-               ▼
-          posts (DB)           Draft → Publish → Archive
-```
+### Deployment Limitations
 
-### Agent Pattern
-
-All agents follow an identical agentic loop:
-
-```typescript
-// Typed input → Anthropic messages → tool loop → SSE stream
-while (response.stop_reason === 'tool_use') {
-  const toolResult = await dispatchTool(toolCall);
-  messages.push(toolResult);
-  response = await anthropic.messages.create(messages);
-}
-```
-
-Each agent has a restricted tool set via `AGENT_TOOL_SETS`:
-
-| Agent | Tool Sets Available |
-|-------|-------------------|
-| insight-extractor | session, insight |
-| blog-writer | session, insight, post, skill |
-| social-writer | session, insight, post, skill |
-| changelog-writer | session, insight, post |
-| editor-chat | post, markdown |
-
----
-
-## Prerequisites
-
-- **Bun** ≥ 1.2.4 — [install](https://bun.sh)
-- **Node.js** ≥ 20 (for Next.js compatibility)
-- **PostgreSQL** — recommended: [Neon](https://neon.tech) (serverless, free tier available)
-- **Upstash** account — for [Redis](https://upstash.com) and [QStash](https://upstash.com/qstash)
-- **Anthropic API key** — [console.anthropic.com](https://console.anthropic.com)
-- **GitHub OAuth App** (optional) — for GitHub login
-
----
-
-## Local Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/your-username/sessionforge.git
-cd sessionforge
-```
-
-### 2. Install dependencies
-
-```bash
-bun install
-```
-
-### 3. Configure environment variables
-
-```bash
-cp .env.example apps/dashboard/.env.local
-```
-
-Edit `apps/dashboard/.env.local` with your credentials (see [Environment Variables](#environment-variables) below).
-
-### 4. Set up the database
-
-```bash
-bun db:push
-```
-
-This runs `drizzle-kit push` against your Neon database to create all tables.
-
-### 5. Start the development server
-
-```bash
-bun dev
-```
-
-The dashboard will be available at [http://localhost:3000](http://localhost:3000).
-
-### 6. Create your first workspace
-
-1. Sign up at `http://localhost:3000/signup`
-2. Create a workspace — it will default to scanning `~/.claude`
-3. Click **Scan Sessions** on the Sessions page
-4. Once sessions are indexed, click **Extract Insights** to run the AI analysis
+- **Vercel**: AI generation features will NOT work because the Claude CLI subprocess cannot be spawned in serverless functions. Vercel deployment is suitable for content management, viewing, and publishing only.
+- **Docker with `DISABLE_AI_AGENTS=true`**: All AI routes return graceful error messages. The app functions for content management without AI generation.
+- **Docker with Claude CLI available**: Full functionality when the CLI is installed and authenticated in the container.
 
 ---
 
 ## Environment Variables
 
-Copy `.env.example` to `apps/dashboard/.env.local`. All variables are required unless marked optional.
+Copy `.env.example` to `apps/dashboard/.env.local`. See [DEPLOYMENT.md](./DEPLOYMENT.md) for per-environment checklists.
 
-### Database
+### Required
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string (Neon format) | `postgresql://user:pass@ep-xxx.us-east-1.aws.neon.tech/sessionforge` |
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string (Neon format) |
+| `BETTER_AUTH_SECRET` | Random secret — `openssl rand -base64 32` |
+| `NEXT_PUBLIC_APP_URL` | Public URL (e.g., `http://localhost:3000`) |
 
-Get this from your [Neon dashboard](https://neon.tech) after creating a database named `sessionforge`.
+### Optional
 
-### Authentication
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `BETTER_AUTH_SECRET` | Random secret for session signing — generate with `openssl rand -base64 32` | `your-random-32-char-secret` |
-| `GITHUB_CLIENT_ID` | GitHub OAuth App client ID (optional — enables GitHub login) | `Iv1.abc123` |
-| `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret (optional) | `abc123def456` |
-
-To create a GitHub OAuth App:
-1. Go to GitHub → Settings → Developer settings → OAuth Apps → New OAuth App
-2. Set **Authorization callback URL** to `http://localhost:3000/api/auth/callback/github`
-
-### AI
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude agents | `sk-ant-api03-...` |
-
-Get this from [console.anthropic.com/keys](https://console.anthropic.com/keys). The app uses `claude-opus-4-5-20250514` for content generation and `claude-haiku-4-5-20251001` for routing/classification.
-
-### Cache & Queue (Upstash)
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `UPSTASH_REDIS_URL` | Upstash Redis REST URL | `https://your-db.upstash.io` |
-| `UPSTASH_REDIS_TOKEN` | Upstash Redis REST token | `AXxx...` |
-| `UPSTASH_QSTASH_TOKEN` | QStash publishing token | `eyJ...` |
-| `UPSTASH_QSTASH_CURRENT_SIGNING_KEY` | QStash webhook signing key | `sig_...` |
-| `UPSTASH_QSTASH_NEXT_SIGNING_KEY` | QStash next signing key (rotation) | `sig_...` |
-
-Create a Redis database and QStash queue at [console.upstash.com](https://console.upstash.com). Both have free tiers sufficient for development.
-
-### Application
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `NEXT_PUBLIC_APP_URL` | Public URL for the app (used in OAuth callbacks and QStash webhooks) | `http://localhost:3000` |
-
-For production: set this to your Vercel deployment URL (e.g., `https://sessionforge.vercel.app`).
+| Variable | Description |
+|----------|-------------|
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth login |
+| `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` | Caching |
+| `UPSTASH_QSTASH_TOKEN` | Scheduled automation |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Billing |
+| `DISABLE_AI_AGENTS` | Set to `true` to disable AI features |
 
 ---
 
-## Database Setup
+## Database
 
-SessionForge uses Drizzle ORM with a Neon PostgreSQL database.
-
-### Push schema (development)
+SessionForge uses Drizzle ORM with Neon PostgreSQL.
 
 ```bash
-bun db:push
+bun db:push       # Push schema to dev database
+bun db:generate   # Generate SQL migration files
 ```
 
-Introspects the Drizzle schema in `packages/db/src/schema.ts` and applies it to your database. Safe to run repeatedly — it only adds/modifies, does not drop.
-
-### Generate migrations (production)
-
-```bash
-bun db:generate
-```
-
-Generates SQL migration files in `packages/db/migrations/`. Commit these and apply via `drizzle-kit migrate` on your production database.
-
-### Schema overview
-
-| Table | Purpose |
-|-------|---------|
-| `users` | User accounts (better-auth managed) |
-| `auth_sessions` | Active login sessions |
-| `accounts` | OAuth provider links |
-| `workspaces` | User workspaces (maps to Claude project paths) |
-| `style_settings` | Per-workspace writing style configuration |
-| `claude_sessions` | Indexed Claude Code session records |
-| `insights` | AI-extracted insights with composite scores |
-| `posts` | Generated content drafts and published posts |
-| `content_triggers` | Automation trigger rules (manual, scheduled, file_watch) |
-| `api_keys` | External publishing API keys |
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for production migration workflow.
 
 ---
 
-## Running the App
-
-### Development
-
-```bash
-bun dev          # Start all apps in watch mode (turbopack)
-bun build        # Production build
-bun lint         # Run ESLint across all packages
-```
-
-### Individual apps
-
-```bash
-cd apps/dashboard && bun dev   # Dashboard only
-cd packages/db && bun generate # Regenerate Drizzle migrations
-```
-
----
-
-## Key Concepts
-
-### Workspaces
-
-A workspace maps to a Claude session base path (default: `~/.claude`). Each workspace has its own sessions, insights, posts, and style settings. Multiple workspaces are useful if you have sessions in different locations (e.g., separate personal and work Claude accounts).
-
-### Session Scanning
-
-The scanner discovers JSONL files at:
-- `~/.claude/projects/*/sessions/*.jsonl` — per-project sessions
-- `~/.claude/sessions/*.jsonl` — global sessions
-
-Project directory names are encoded paths (`-Users-nick-projects-my-app` → `/Users/nick/projects/my-app`). The scanner decodes these to populate `project_path` and `project_name`.
-
-### Insight Scoring
-
-Each insight is scored on 6 dimensions (1–5 scale):
-
-| Dimension | Weight | What Makes a 5 |
-|-----------|--------|----------------|
-| Novel Problem-Solving | 3× | Technique nobody has written about |
-| Tool/Pattern Discovery | 3× | Novel MCP usage or workflow pattern |
-| Before/After Transformation | 2× | Dramatic improvement with hard numbers |
-| Failure + Recovery | 3× | Deep debugging, satisfying resolution |
-| Reproducibility | 1× | Universal technique any developer can use |
-| Scale/Performance | 1× | Hard numbers: X% faster, Y hours saved |
-
-**Composite score** = `(novelty×3) + (tool×3) + (transform×2) + (failure×3) + (repro×1) + (scale×1)`
-
-Maximum: **65**. Insights scoring ≥ 45 are flagged as exceptional content candidates.
-
-### Content Types
+## Content Types
 
 | Type | Description |
 |------|-------------|
-| `blog_post` | Long-form technical post (default target: 2500 words) |
+| `blog_post` | Long-form technical post |
 | `twitter_thread` | Multi-tweet thread with code snippets |
 | `linkedin_post` | Professional narrative post |
 | `devto_post` | Dev.to formatted post with frontmatter |
 | `changelog` | Developer-focused changelog entry |
-| `newsletter` | Newsletter section (curated insights) |
+| `newsletter` | Newsletter section |
+| `custom` | Freeform content |
 
 ---
 
-## Content Pipeline
+## Publishing Integrations
 
-### Manual generation
-
-1. Browse **Sessions** → select a session → click **Extract Insights**
-2. Browse **Insights** → sort by composite score → select a high-scoring insight
-3. Click **Generate Blog Post** (or Social, Changelog)
-4. Wait for SSE streaming to complete → review in the Lexical editor
-5. Use the **AI Chat Sidebar** to request revisions
-6. Click **Publish** or export as markdown
-
-### Automated generation (Automation tab)
-
-1. Create a trigger with type `scheduled` and a cron expression (e.g., `0 9 * * 1` = Monday 9am)
-2. Set the lookback window (e.g., `last_7_days`)
-3. Set the content type to generate
-4. QStash will call `/api/automation/execute` on schedule — scans recent sessions, extracts insights, and drafts content automatically
+- **Hashnode** — Direct publish from editor
+- **WordPress** — XML-RPC or REST API
+- **Dev.to** — API publish with frontmatter
 
 ---
 
-## Deployment
+## Documentation
 
-### Vercel (recommended)
-
-1. Push this repo to GitHub
-2. Import to [Vercel](https://vercel.com) — it will detect the Turborepo monorepo
-3. Set root directory to `apps/dashboard`
-4. Add all environment variables from `.env.example` in the Vercel dashboard
-5. Set `NEXT_PUBLIC_APP_URL` to your Vercel deployment URL
-6. Update your GitHub OAuth App callback URL to `https://your-app.vercel.app/api/auth/callback/github`
-
-**Note:** Session scanning reads from the local filesystem (`~/.claude/`). On Vercel, this path does not exist — scanning is only possible from a locally running instance or a self-hosted deployment. The Vercel deployment serves the UI and AI generation; pair it with a local instance running the scan endpoint if you need automated scanning.
-
-### Self-hosted
-
-Any Node.js 20+ host works. Build with `bun build` and start with `bun start` from `apps/dashboard`.
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for code style, branch conventions, and PR process.
+- [TOOLING.md](./TOOLING.md) — Full technology inventory
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — System design and data flows
+- [DEPLOYMENT.md](./DEPLOYMENT.md) — Step-by-step deployment guides
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — Development workflow and code style
+- [CHANGELOG.md](./CHANGELOG.md) — Release history

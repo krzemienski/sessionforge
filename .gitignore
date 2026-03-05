@@ -1,4 +1,5 @@
 node_modules/
+**/node_modules
 .next/
 .turbo/
 dist/
@@ -16,6 +17,34 @@ evidence/
 .auto-claude-security.json
 .auto-claude-status
 .claude_settings.json
+.claude
 .worktrees/
 .security-key
 logs/security/
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Screenshots (not committed)
+/*.png
+
+# Playwright
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Plans and e2e evidence (local only)
+plans/
+e2e-evidence/
+apps/dashboard/e2e-evidence/

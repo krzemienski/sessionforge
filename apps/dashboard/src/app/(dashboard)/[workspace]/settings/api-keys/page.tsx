@@ -70,7 +70,7 @@ export default function ApiKeysPage() {
 
       {newKey && (
         <div className="bg-sf-success/10 border border-sf-success/30 rounded-sf-lg p-4 mb-6">
-          <p className="text-sm text-sf-success font-medium mb-2">API key created. Copy it now — it won't be shown again.</p>
+          <p className="text-sm text-sf-success font-medium mb-2">API key created. Copy it now &mdash; it won&apos;t be shown again.</p>
           <div className="flex items-center gap-2">
             <code className="flex-1 bg-sf-bg-tertiary px-3 py-2 rounded-sf text-sm text-sf-accent font-code break-all">{newKey}</code>
             <button onClick={handleCopy} className="text-sf-text-secondary hover:text-sf-text-primary p-2">

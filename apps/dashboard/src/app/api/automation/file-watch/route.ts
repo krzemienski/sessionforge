@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { contentTriggers } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { automationRuns, contentTriggers } from "@sessionforge/db";
+import { and, eq, inArray } from "drizzle-orm/sql";
 import { verifyQStashRequest } from "@/lib/qstash";
-import { runAutomationPipeline } from "@/lib/automation/pipeline";
+import { executePipeline } from "@/lib/automation/pipeline";
 import {
   getSessionFingerprint,
   detectSessionChanges,
@@ -73,36 +73,41 @@ export async function POST(request: Request) {
       });
     }
 
-    await db
-      .update(contentTriggers)
-      .set({ lastRunAt: new Date(), lastRunStatus: "running" })
-      .where(eq(contentTriggers.id, triggerId));
+    // Check for already-running pipeline
+    const activeRun = await db.query.automationRuns.findFirst({
+      where: and(
+        eq(automationRuns.triggerId, triggerId),
+        inArray(automationRuns.status, ["pending", "scanning", "extracting", "generating"])
+      ),
+    });
 
-    try {
-      const result = await runAutomationPipeline({
-        workspaceId: trigger.workspaceId,
-        contentType: trigger.contentType,
-        lookbackWindow: trigger.lookbackWindow ?? "last_7_days",
-        triggerId,
+    if (activeRun) {
+      return NextResponse.json({
+        polled: true,
+        hasChanges: changes.hasChanges,
+        fired: false,
+        reason: "Run already in progress",
       });
-
-      await db
-        .update(contentTriggers)
-        .set({ lastRunStatus: "success", lastRunAt: new Date(), lastFileEventAt: null })
-        .where(eq(contentTriggers.id, triggerId));
-
-      return NextResponse.json({ polled: true, hasChanges: changes.hasChanges, fired: true, ...result });
-    } catch (pipelineError) {
-      await db
-        .update(contentTriggers)
-        .set({ lastRunStatus: "failed", lastRunAt: new Date() })
-        .where(eq(contentTriggers.id, triggerId));
-
-      return NextResponse.json(
-        { error: pipelineError instanceof Error ? pipelineError.message : "Pipeline execution failed" },
-        { status: 500 }
-      );
     }
+
+    // Create run record and start pipeline
+    const [newRun] = await db
+      .insert(automationRuns)
+      .values({
+        triggerId,
+        workspaceId: trigger.workspaceId,
+        status: "pending",
+      })
+      .returning();
+
+    executePipeline(newRun.id, trigger, trigger.workspace);
+
+    return NextResponse.json({
+      polled: true,
+      hasChanges: changes.hasChanges,
+      fired: true,
+      runId: newRun.id,
+    });
   } catch (error) {
     await db
       .update(contentTriggers)

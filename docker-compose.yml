@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: sessionforge
+      POSTGRES_PASSWORD: sessionforge
+      POSTGRES_DB: sessionforge
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sessionforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://sessionforge:sessionforge@postgres:5432/sessionforge"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-dev-secret-change-in-production}"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      DISABLE_AI_AGENTS: "true"
+
+volumes:
+  pgdata:

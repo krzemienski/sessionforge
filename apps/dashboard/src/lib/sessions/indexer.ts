@@ -7,7 +7,7 @@
 
 import { db } from "@/lib/db";
 import { claudeSessions } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and } from "drizzle-orm/sql";
 import type { NormalizedSession } from "./normalizer";
 
 /** Summary of a completed indexing run. */
