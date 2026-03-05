@@ -170,3 +170,81 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const { postId, workspaceSlug, publishStatus } = body;
+
+  if (!postId || !workspaceSlug) {
+    return NextResponse.json(
+      { error: "postId and workspaceSlug are required" },
+      { status: 400 }
+    );
+  }
+
+  const post = await db.query.posts.findFirst({
+    where: eq(posts.id, postId),
+    with: { workspace: true },
+  });
+
+  if (!post) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
+  if (
+    post.workspace.slug !== workspaceSlug ||
+    post.workspace.ownerId !== session.user.id
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const publication = await db.query.mediumPublications.findFirst({
+    where: eq(mediumPublications.postId, postId),
+    with: { integration: true },
+  });
+
+  if (!publication) {
+    return NextResponse.json(
+      { error: "Post not published to Medium yet. Use POST to publish first." },
+      { status: 404 }
+    );
+  }
+
+  if (!publication.integration.enabled) {
+    return NextResponse.json(
+      { error: "Medium integration is disabled" },
+      { status: 400 }
+    );
+  }
+
+  const effectivePublishStatus = (publishStatus ?? (publication.publishedAsDraft ? "draft" : "public")) as
+    | "draft"
+    | "public"
+    | "unlisted";
+
+  await db
+    .update(mediumPublications)
+    .set({
+      publishedAsDraft: effectivePublishStatus !== "public",
+      syncedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(mediumPublications.postId, postId));
+
+  if (effectivePublishStatus === "public") {
+    await db
+      .update(posts)
+      .set({ status: "published", updatedAt: new Date() })
+      .where(eq(posts.id, postId));
+  }
+
+  return NextResponse.json({
+    mediumArticleId: publication.mediumArticleId,
+    mediumUrl: publication.mediumUrl,
+    publishStatus: effectivePublishStatus,
+    note: "Medium does not support article content updates via API. Local publication record has been updated.",
+  });
+}
