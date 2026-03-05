@@ -45,7 +45,7 @@ export async function GET(
 
   const seriesPostRows = await db.query.seriesPosts.findMany({
     where: eq(seriesPosts.seriesId, id),
-    orderBy: [asc(seriesPosts.orderIndex)],
+    orderBy: [asc(seriesPosts.order)],
     with: {
       post: {
         with: {
@@ -81,11 +81,11 @@ export async function GET(
   try {
     const zipBuffer = await buildStaticSiteZip(exportablePosts, {
       themeId,
-      collectionName: seriesItem.name,
+      collectionName: seriesItem.title,
       collectionDescription: seriesItem.description ?? undefined,
     });
 
-    const { contentType, filename } = staticSiteDownloadHeaders(seriesItem.name);
+    const { contentType, filename } = staticSiteDownloadHeaders(seriesItem.title);
 
     return new Response(new Uint8Array(zipBuffer), {
       status: 200,

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { collections, collectionPosts, posts } from "@sessionforge/db";
+import { series, seriesPosts, posts } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -16,28 +16,28 @@ export async function POST(
 
   const { id } = await params;
 
-  // Verify collection exists and user owns it
-  const collection = await db.query.collections.findFirst({
-    where: eq(collections.id, id),
+  // Verify series exists and user owns it
+  const seriesItem = await db.query.series.findFirst({
+    where: eq(series.id, id),
     with: {
       workspace: true,
     },
   });
 
-  if (!collection) {
-    return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+  if (!seriesItem) {
+    return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  if (collection.workspace.ownerId !== session.user.id) {
+  if (seriesItem.workspace.ownerId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json();
-  const { postId, order } = body;
+  const { postId, position } = body;
 
-  if (!postId) {
+  if (!postId || position === undefined) {
     return NextResponse.json(
-      { error: "postId is required" },
+      { error: "postId and position are required" },
       { status: 400 }
     );
   }
@@ -51,34 +51,52 @@ export async function POST(
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  if (post.workspaceId !== collection.workspaceId) {
+  if (post.workspaceId !== seriesItem.workspaceId) {
     return NextResponse.json(
-      { error: "Post must belong to the same workspace as the collection" },
+      { error: "Post must belong to the same workspace as the series" },
       { status: 400 }
     );
   }
 
+  // Check if post is already in another series
+  // (posts can only be in one series but multiple collections per spec)
+  const existingSeriesPost = await db.query.seriesPosts.findFirst({
+    where: eq(seriesPosts.postId, postId),
+    with: {
+      series: true,
+    },
+  });
+
+  if (existingSeriesPost) {
+    return NextResponse.json(
+      {
+        error: `Post is already in series "${existingSeriesPost.series.title}". A post can only belong to one series.`,
+      },
+      { status: 409 }
+    );
+  }
+
   try {
-    const [newCollectionPost] = await db
-      .insert(collectionPosts)
+    const [newSeriesPost] = await db
+      .insert(seriesPosts)
       .values({
-        collectionId: id,
+        seriesId: id,
         postId,
-        order: order ?? 0,
+        order: position,
       })
       .returning();
 
-    return NextResponse.json(newCollectionPost, { status: 201 });
+    return NextResponse.json(newSeriesPost, { status: 201 });
   } catch (error) {
-    // Handle unique constraint violation (post already in this collection)
+    // Handle unique constraint violation (post already in this series)
     if (error instanceof Error && error.message.includes("unique constraint")) {
       return NextResponse.json(
-        { error: "Post is already in this collection" },
+        { error: "Post is already in this series" },
         { status: 409 }
       );
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to add post to collection" },
+      { error: error instanceof Error ? error.message : "Failed to add post to series" },
       { status: 500 }
     );
   }
@@ -93,19 +111,19 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Verify collection exists and user owns it
-  const collection = await db.query.collections.findFirst({
-    where: eq(collections.id, id),
+  // Verify series exists and user owns it
+  const seriesItem = await db.query.series.findFirst({
+    where: eq(series.id, id),
     with: {
       workspace: true,
     },
   });
 
-  if (!collection) {
-    return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+  if (!seriesItem) {
+    return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  if (collection.workspace.ownerId !== session.user.id) {
+  if (seriesItem.workspace.ownerId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -132,21 +150,21 @@ export async function DELETE(
     );
   }
 
-  // Verify the post is actually in this collection
-  const existingCollectionPost = await db.query.collectionPosts.findFirst({
-    where: and(eq(collectionPosts.collectionId, id), eq(collectionPosts.postId, postId)),
+  // Verify the post is actually in this series
+  const existingSeriesPost = await db.query.seriesPosts.findFirst({
+    where: and(eq(seriesPosts.seriesId, id), eq(seriesPosts.postId, postId)),
   });
 
-  if (!existingCollectionPost) {
+  if (!existingSeriesPost) {
     return NextResponse.json(
-      { error: "Post is not in this collection" },
+      { error: "Post is not in this series" },
       { status: 404 }
     );
   }
 
   await db
-    .delete(collectionPosts)
-    .where(and(eq(collectionPosts.collectionId, id), eq(collectionPosts.postId, postId)));
+    .delete(seriesPosts)
+    .where(and(eq(seriesPosts.seriesId, id), eq(seriesPosts.postId, postId)));
 
   return NextResponse.json({ deleted: true });
 }
@@ -160,19 +178,19 @@ export async function PUT(
 
   const { id } = await params;
 
-  // Verify collection exists and user owns it
-  const collection = await db.query.collections.findFirst({
-    where: eq(collections.id, id),
+  // Verify series exists and user owns it
+  const seriesItem = await db.query.series.findFirst({
+    where: eq(series.id, id),
     with: {
       workspace: true,
     },
   });
 
-  if (!collection) {
-    return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+  if (!seriesItem) {
+    return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  if (collection.workspace.ownerId !== session.user.id) {
+  if (seriesItem.workspace.ownerId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -186,29 +204,29 @@ export async function PUT(
     );
   }
 
-  // Get all posts currently in this collection
-  const existingCollectionPosts = await db.query.collectionPosts.findMany({
-    where: eq(collectionPosts.collectionId, id),
+  // Get all posts currently in this series
+  const existingSeriesPosts = await db.query.seriesPosts.findMany({
+    where: eq(seriesPosts.seriesId, id),
   });
 
-  // Validate that all provided postIds are actually in this collection
-  const existingPostIds = new Set(existingCollectionPosts.map((cp) => cp.postId));
+  // Validate that all provided postIds are actually in this series
+  const existingPostIds = new Set(existingSeriesPosts.map((sp) => sp.postId));
   const invalidPostIds = postIds.filter((postId) => !existingPostIds.has(postId));
 
   if (invalidPostIds.length > 0) {
     return NextResponse.json(
       {
-        error: `The following post IDs are not in this collection: ${invalidPostIds.join(", ")}`,
+        error: `The following post IDs are not in this series: ${invalidPostIds.join(", ")}`,
       },
       { status: 400 }
     );
   }
 
-  // Check if all posts in the collection are included in the reorder
-  if (postIds.length !== existingCollectionPosts.length) {
+  // Check if all posts in the series are included in the reorder
+  if (postIds.length !== existingSeriesPosts.length) {
     return NextResponse.json(
       {
-        error: `All posts in the collection must be included in the reorder. Expected ${existingCollectionPosts.length} posts, got ${postIds.length}`,
+        error: `All posts in the series must be included in the reorder. Expected ${existingSeriesPosts.length} posts, got ${postIds.length}`,
       },
       { status: 400 }
     );
@@ -218,19 +236,19 @@ export async function PUT(
     // Update the order for each post
     const updates = postIds.map((postId, index) =>
       db
-        .update(collectionPosts)
+        .update(seriesPosts)
         .set({ order: index })
-        .where(and(eq(collectionPosts.collectionId, id), eq(collectionPosts.postId, postId)))
+        .where(and(eq(seriesPosts.seriesId, id), eq(seriesPosts.postId, postId)))
     );
 
     await Promise.all(updates);
 
-    // Return the updated collection posts
-    const updatedCollectionPosts = await db.query.collectionPosts.findMany({
-      where: eq(collectionPosts.collectionId, id),
+    // Return the updated series posts
+    const updatedSeriesPosts = await db.query.seriesPosts.findMany({
+      where: eq(seriesPosts.seriesId, id),
     });
 
-    return NextResponse.json({ collectionPosts: updatedCollectionPosts });
+    return NextResponse.json({ seriesPosts: updatedSeriesPosts });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to reorder posts" },

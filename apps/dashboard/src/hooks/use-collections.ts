@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useCallback } from "react";
 
 export function useCollections(workspace: string, params?: { limit?: number; offset?: number }) {
   return useQuery({
@@ -18,7 +18,7 @@ export function useCollections(workspace: string, params?: { limit?: number; off
   });
 }
 
-export function useCollection(id: string) {
+export function useSingleCollection(id: string) {
   return useQuery({
     queryKey: ["collection", id],
     queryFn: async () => {
@@ -32,56 +32,26 @@ export function useCollection(id: string) {
 
 export function useCreateCollection() {
   const qc = useQueryClient();
-  const mutation = useMutation({
-    mutationFn: async (data: {
-      workspaceSlug: string;
-      name: string;
-      slug: string;
-      description?: string;
-      theme?: string;
-      customDomain?: string;
-    }) => {
-      const res = await fetch("/api/collections", {
+  return useMutation({
+    mutationFn: async (data: { workspace: string; title: string; description?: string; slug: string; coverImage?: string; isPublic?: boolean }) => {
+      const res = await fetch(`/api/collections?workspace=${data.workspace}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed to create collection");
+      if (!res.ok) throw new Error("Create failed");
       return res.json();
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["collections"] });
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["collections", vars.workspace] });
     },
   });
-
-  const createCollection = useCallback(
-    async (
-      workspaceSlug: string,
-      data: { name: string; slug: string; description?: string; theme?: string }
-    ) => {
-      return mutation.mutateAsync({ workspaceSlug, ...data });
-    },
-    [mutation]
-  );
-
-  return { createCollection, isCreating: mutation.isPending };
 }
 
 export function useUpdateCollection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      id,
-      ...data
-    }: {
-      id: string;
-      name?: string;
-      slug?: string;
-      description?: string;
-      theme?: string;
-      customDomain?: string;
-      poweredByFooter?: boolean;
-    }) => {
+    mutationFn: async ({ id, ...data }: { id: string; title?: string; description?: string; slug?: string; coverImage?: string; isPublic?: boolean }) => {
       const res = await fetch(`/api/collections/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -106,6 +76,61 @@ export function useDeleteCollection() {
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["collections"] }),
+  });
+}
+
+export function useAddPostToCollection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ collectionId, postId, order }: { collectionId: string; postId: string; order?: number }) => {
+      const res = await fetch(`/api/collections/${collectionId}/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId, order }),
+      });
+      if (!res.ok) throw new Error("Add post failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["collection", vars.collectionId] });
+      qc.invalidateQueries({ queryKey: ["collections"] });
+    },
+  });
+}
+
+export function useRemovePostFromCollection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ collectionId, postId }: { collectionId: string; postId: string }) => {
+      const res = await fetch(`/api/collections/${collectionId}/posts?postId=${postId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Remove post failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["collection", vars.collectionId] });
+      qc.invalidateQueries({ queryKey: ["collections"] });
+    },
+  });
+}
+
+export function useReorderCollectionPosts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ collectionId, postIds }: { collectionId: string; postIds: string[] }) => {
+      const res = await fetch(`/api/collections/${collectionId}/posts`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postIds }),
+      });
+      if (!res.ok) throw new Error("Reorder failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["collection", vars.collectionId] });
+      qc.invalidateQueries({ queryKey: ["collections"] });
+    },
   });
 }
 
@@ -138,51 +163,4 @@ export function useExportCollection() {
   );
 
   return { exportCollection, isExporting };
-}
-
-export function useCollectionPosts(collectionId: string) {
-  return useQuery({
-    queryKey: ["collection-posts", collectionId],
-    queryFn: async () => {
-      const res = await fetch(`/api/collections/${collectionId}/posts`);
-      if (!res.ok) throw new Error("Failed to fetch collection posts");
-      return res.json();
-    },
-    enabled: !!collectionId,
-  });
-}
-
-export function useAddPostToCollection() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ collectionId, postId }: { collectionId: string; postId: string }) => {
-      const res = await fetch(`/api/collections/${collectionId}/posts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId }),
-      });
-      if (!res.ok) throw new Error("Failed to add post to collection");
-      return res.json();
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["collection-posts", vars.collectionId] });
-    },
-  });
-}
-
-export function useRemovePostFromCollection() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ collectionId, postId }: { collectionId: string; postId: string }) => {
-      const res = await fetch(
-        `/api/collections/${collectionId}/posts?postId=${postId}`,
-        { method: "DELETE" }
-      );
-      if (!res.ok) throw new Error("Failed to remove post from collection");
-      return res.json();
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["collection-posts", vars.collectionId] });
-    },
-  });
 }

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { posts, workspaces } from "@sessionforge/db";
-import { eq, desc, and } from "drizzle-orm";
+import { posts, workspaces, series, seriesPosts, collections, collectionPosts } from "@sessionforge/db";
+import { eq, desc, asc, and, inArray } from "drizzle-orm";
 import { marked } from "marked";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +28,29 @@ function buildRss(
   workspaceName: string,
   workspaceSlug: string,
   baseUrl: string,
-  feedItems: { title: string; id: string; createdAt: Date | null; htmlContent: string }[]
+  feedItems: { title: string; id: string; createdAt: Date | null; htmlContent: string }[],
+  seriesTitle?: string,
+  seriesSlug?: string,
+  collectionTitle?: string,
+  collectionSlug?: string
 ): string {
   const channelLink = `${baseUrl}/${workspaceSlug}`;
-  const selfLink = `${baseUrl}/api/feed/${workspaceSlug}.xml`;
+  const selfLink = seriesSlug
+    ? `${baseUrl}/api/feed/${workspaceSlug}/series/${seriesSlug}.xml`
+    : collectionSlug
+    ? `${baseUrl}/api/feed/${workspaceSlug}/collections/${collectionSlug}.xml`
+    : `${baseUrl}/api/feed/${workspaceSlug}.xml`;
   const lastBuildDate = feedItems.length > 0 ? toRfc822(feedItems[0].createdAt) : toRfc822(new Date());
+  const feedTitle = seriesTitle
+    ? `${workspaceName} - ${seriesTitle}`
+    : collectionTitle
+    ? `${workspaceName} - ${collectionTitle}`
+    : workspaceName;
+  const feedDescription = seriesTitle
+    ? `Posts from the "${seriesTitle}" series on ${workspaceName}`
+    : collectionTitle
+    ? `Posts from the "${collectionTitle}" collection on ${workspaceName}`
+    : `Published posts from ${workspaceName} on SessionForge`;
 
   const items = feedItems
     .map((item) => {
@@ -50,9 +68,9 @@ function buildRss(
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>${escapeXml(workspaceName)}</title>
+    <title>${escapeXml(feedTitle)}</title>
     <link>${escapeXml(channelLink)}</link>
-    <description>${escapeXml(`Published posts from ${workspaceName} on SessionForge`)}</description>
+    <description>${escapeXml(feedDescription)}</description>
     <lastBuildDate>${lastBuildDate}</lastBuildDate>
     <atom:link href="${escapeXml(selfLink)}" rel="self" type="application/rss+xml"/>
 ${items}
@@ -69,11 +87,29 @@ function buildAtom(
   workspaceName: string,
   workspaceSlug: string,
   baseUrl: string,
-  feedItems: { title: string; id: string; createdAt: Date | null; updatedAt: Date | null; htmlContent: string }[]
+  feedItems: { title: string; id: string; createdAt: Date | null; updatedAt: Date | null; htmlContent: string }[],
+  seriesTitle?: string,
+  seriesSlug?: string,
+  collectionTitle?: string,
+  collectionSlug?: string
 ): string {
-  const feedId = `${baseUrl}/api/feed/${workspaceSlug}.atom`;
+  const feedId = seriesSlug
+    ? `${baseUrl}/api/feed/${workspaceSlug}/series/${seriesSlug}.atom`
+    : collectionSlug
+    ? `${baseUrl}/api/feed/${workspaceSlug}/collections/${collectionSlug}.atom`
+    : `${baseUrl}/api/feed/${workspaceSlug}.atom`;
   const channelLink = `${baseUrl}/${workspaceSlug}`;
   const updated = feedItems.length > 0 ? toIso8601(feedItems[0].updatedAt ?? feedItems[0].createdAt) : toIso8601(new Date());
+  const feedTitle = seriesTitle
+    ? `${workspaceName} - ${seriesTitle}`
+    : collectionTitle
+    ? `${workspaceName} - ${collectionTitle}`
+    : workspaceName;
+  const feedSubtitle = seriesTitle
+    ? `Posts from the "${seriesTitle}" series on ${workspaceName}`
+    : collectionTitle
+    ? `Posts from the "${collectionTitle}" collection on ${workspaceName}`
+    : `Published posts from ${workspaceName} on SessionForge`;
 
   const entries = feedItems
     .map((item) => {
@@ -91,8 +127,8 @@ function buildAtom(
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <title>${escapeXml(workspaceName)}</title>
-  <subtitle>${escapeXml(`Published posts from ${workspaceName} on SessionForge`)}</subtitle>
+  <title>${escapeXml(feedTitle)}</title>
+  <subtitle>${escapeXml(feedSubtitle)}</subtitle>
   <id>${escapeXml(feedId)}</id>
   <link href="${escapeXml(channelLink)}"/>
   <link href="${escapeXml(feedId)}" rel="self"/>
@@ -110,8 +146,11 @@ export async function GET(
   const slugStr = slug.join("/");
 
   let workspaceSlug: string;
+  let seriesSlug: string | undefined;
+  let collectionSlug: string | undefined;
   let format: "rss" | "atom";
 
+  // Parse format (xml/atom)
   if (slugStr.endsWith(".atom")) {
     workspaceSlug = slugStr.slice(0, -5);
     format = "atom";
@@ -123,6 +162,22 @@ export async function GET(
     format = "rss";
   }
 
+  // Parse series slug if present
+  // Pattern: workspace/series/series-slug
+  const seriesMatch = workspaceSlug.match(/^([^/]+)\/series\/(.+)$/);
+  if (seriesMatch) {
+    workspaceSlug = seriesMatch[1];
+    seriesSlug = seriesMatch[2];
+  }
+
+  // Parse collection slug if present
+  // Pattern: workspace/collections/collection-slug
+  const collectionMatch = workspaceSlug.match(/^([^/]+)\/collections\/(.+)$/);
+  if (collectionMatch) {
+    workspaceSlug = collectionMatch[1];
+    collectionSlug = collectionMatch[2];
+  }
+
   const workspace = await db.query.workspaces.findFirst({
     where: eq(workspaces.slug, workspaceSlug),
   });
@@ -131,14 +186,91 @@ export async function GET(
     return new Response("Workspace not found", { status: 404 });
   }
 
-  const publishedPosts = await db.query.posts.findMany({
-    where: and(
-      eq(posts.workspaceId, workspace.id),
-      eq(posts.status, "published")
-    ),
-    orderBy: [desc(posts.createdAt)],
-    limit: 50,
-  });
+  let seriesData: typeof series.$inferSelect | undefined;
+  let collectionData: typeof collections.$inferSelect | undefined;
+  let publishedPosts: (typeof posts.$inferSelect)[];
+
+  if (seriesSlug) {
+    // Query for series and filter posts
+    seriesData = await db.query.series.findFirst({
+      where: and(
+        eq(series.workspaceId, workspace.id),
+        eq(series.slug, seriesSlug)
+      ),
+    });
+
+    if (!seriesData) {
+      return new Response("Series not found", { status: 404 });
+    }
+
+    // Get all post IDs in this series
+    const seriesPostsData = await db.query.seriesPosts.findMany({
+      where: eq(seriesPosts.seriesId, seriesData.id),
+      orderBy: [asc(seriesPosts.order)],
+    });
+
+    const postIds = seriesPostsData.map((sp) => sp.postId);
+
+    if (postIds.length === 0) {
+      publishedPosts = [];
+    } else {
+      // Get published posts from this series
+      publishedPosts = await db.query.posts.findMany({
+        where: and(
+          eq(posts.workspaceId, workspace.id),
+          eq(posts.status, "published"),
+          inArray(posts.id, postIds)
+        ),
+        orderBy: [desc(posts.createdAt)],
+        limit: 50,
+      });
+    }
+  } else if (collectionSlug) {
+    // Query for collection and filter posts
+    collectionData = await db.query.collections.findFirst({
+      where: and(
+        eq(collections.workspaceId, workspace.id),
+        eq(collections.slug, collectionSlug)
+      ),
+    });
+
+    if (!collectionData) {
+      return new Response("Collection not found", { status: 404 });
+    }
+
+    // Get all post IDs in this collection
+    const collectionPostsData = await db.query.collectionPosts.findMany({
+      where: eq(collectionPosts.collectionId, collectionData.id),
+      orderBy: [asc(collectionPosts.order)],
+    });
+
+    const postIds = collectionPostsData.map((cp) => cp.postId);
+
+    if (postIds.length === 0) {
+      publishedPosts = [];
+    } else {
+      // Get published posts from this collection
+      publishedPosts = await db.query.posts.findMany({
+        where: and(
+          eq(posts.workspaceId, workspace.id),
+          eq(posts.status, "published"),
+          inArray(posts.id, postIds)
+        ),
+        orderBy: [desc(posts.createdAt)],
+        limit: 50,
+      });
+    }
+  } else {
+    // Query all published posts for workspace
+    publishedPosts = await db.query.posts.findMany({
+      where: and(
+        eq(posts.workspaceId, workspace.id),
+        eq(posts.status, "published")
+      ),
+      orderBy: [desc(posts.createdAt)],
+      limit: 50,
+    });
+  }
 
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
@@ -154,14 +286,32 @@ export async function GET(
   );
 
   if (format === "atom") {
-    const xml = buildAtom(workspace.name, workspaceSlug, baseUrl, feedItems);
+    const xml = buildAtom(
+      workspace.name,
+      workspaceSlug,
+      baseUrl,
+      feedItems,
+      seriesData?.title,
+      seriesSlug,
+      collectionData?.title,
+      collectionSlug
+    );
     return new Response(xml, {
       status: 200,
       headers: { "Content-Type": "application/atom+xml; charset=utf-8" },
     });
   }
 
-  const xml = buildRss(workspace.name, workspaceSlug, baseUrl, feedItems);
+  const xml = buildRss(
+    workspace.name,
+    workspaceSlug,
+    baseUrl,
+    feedItems,
+    seriesData?.title,
+    seriesSlug,
+    collectionData?.title,
+    collectionSlug
+  );
   return new Response(xml, {
     status: 200,
     headers: { "Content-Type": "application/rss+xml; charset=utf-8" },

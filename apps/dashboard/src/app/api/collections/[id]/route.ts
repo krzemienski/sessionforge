@@ -18,19 +18,23 @@ export async function GET(
 
   const collection = await db.query.collections.findFirst({
     where: eq(collections.id, id),
+    with: {
+      workspace: true,
+      collectionPosts: {
+        orderBy: (collectionPosts, { asc }) => [asc(collectionPosts.order)],
+        with: {
+          post: true,
+        },
+      },
+    },
   });
 
   if (!collection) {
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  // Verify the user owns the workspace this collection belongs to
-  const workspace = await db.query.workspaces.findFirst({
-    where: (workspaces, { eq }) => eq(workspaces.id, collection.workspaceId),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+  if (collection.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   return NextResponse.json(collection);
@@ -45,43 +49,48 @@ export async function PUT(
 
   const { id } = await params;
 
-  const collection = await db.query.collections.findFirst({
+  // Verify ownership
+  const existing = await db.query.collections.findFirst({
     where: eq(collections.id, id),
+    with: { workspace: true },
   });
 
-  if (!collection) {
+  if (!existing) {
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: (workspaces, { eq }) => eq(workspaces.id, collection.workspaceId),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+  if (existing.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json();
-  const { name, slug, description, theme, customDomain, poweredByFooter } = body;
+  const { title, description, slug, coverImage, isPublic } = body;
 
   try {
     const [updated] = await db
       .update(collections)
       .set({
-        ...(name !== undefined && { name }),
-        ...(slug !== undefined && { slug }),
+        ...(title !== undefined && { title }),
         ...(description !== undefined && { description }),
-        ...(theme !== undefined && { theme }),
-        ...(customDomain !== undefined && { customDomain }),
-        ...(poweredByFooter !== undefined && { poweredByFooter }),
+        ...(slug !== undefined && { slug }),
+        ...(isPublic !== undefined && { isPublic }),
+        ...(coverImage !== undefined && { coverImage }),
+        updatedAt: new Date(),
       })
       .where(eq(collections.id, id))
       .returning();
 
     return NextResponse.json(updated);
   } catch (error) {
+    // Handle unique constraint violation
+    if (error instanceof Error && error.message.includes("unique constraint")) {
+      return NextResponse.json(
+        { error: "A collection with this slug already exists in this workspace" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update collection" },
+      { error: error instanceof Error ? error.message : "Update failed" },
       { status: 500 }
     );
   }
@@ -96,29 +105,20 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const collection = await db.query.collections.findFirst({
+  const existing = await db.query.collections.findFirst({
     where: eq(collections.id, id),
+    with: { workspace: true },
   });
 
-  if (!collection) {
+  if (!existing) {
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: (workspaces, { eq }) => eq(workspaces.id, collection.workspaceId),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+  if (existing.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  try {
-    await db.delete(collections).where(eq(collections.id, id));
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete collection" },
-      { status: 500 }
-    );
-  }
+  await db.delete(collections).where(eq(collections.id, id));
+
+  return NextResponse.json({ deleted: true });
 }

@@ -33,21 +33,41 @@ export async function GET(request: Request) {
     orderBy: [desc(series.createdAt)],
     limit,
     offset,
+    with: {
+      seriesPosts: {
+        with: {
+          post: true,
+        },
+      },
+    },
   });
 
-  return NextResponse.json({ series: results, limit, offset });
+  // Transform results to include post count
+  const seriesWithCounts = results.map((s) => ({
+    ...s,
+    postCount: s.seriesPosts.length,
+  }));
+
+  return NextResponse.json({ series: seriesWithCounts, limit, offset });
 }
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
-  const { workspaceSlug, name, slug, description, collectionId, orderIndex } = body;
+  const { searchParams } = new URL(request.url);
+  const workspaceSlug = searchParams.get("workspace");
 
-  if (!workspaceSlug || !name || !slug) {
+  if (!workspaceSlug) {
+    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
+  }
+
+  const body = await request.json();
+  const { title, description, slug, coverImage, isPublic } = body;
+
+  if (!title || !slug) {
     return NextResponse.json(
-      { error: "workspaceSlug, name, and slug are required" },
+      { error: "title and slug are required" },
       { status: 400 }
     );
   }
@@ -61,20 +81,27 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [created] = await db
+    const [newSeries] = await db
       .insert(series)
       .values({
         workspaceId: workspace.id,
-        name,
-        slug,
+        title,
         description,
-        collectionId,
-        orderIndex,
+        slug,
+        coverImage,
+        isPublic: isPublic ?? false,
       })
       .returning();
 
-    return NextResponse.json(created, { status: 201 });
+    return NextResponse.json(newSeries, { status: 201 });
   } catch (error) {
+    // Handle unique constraint violation
+    if (error instanceof Error && error.message.includes("unique constraint")) {
+      return NextResponse.json(
+        { error: "A series with this slug already exists in this workspace" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create series" },
       { status: 500 }

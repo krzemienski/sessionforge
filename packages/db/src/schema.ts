@@ -437,6 +437,7 @@ export const posts = pgTable(
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
+    publishedAt: timestamp("published_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -698,107 +699,6 @@ export const siteThemeEnum = pgEnum("site_theme", [
   "technical-blog",
   "changelog",
 ]);
-
-export const collections = pgTable(
-  "collections",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    slug: text("slug").notNull(),
-    description: text("description"),
-    theme: siteThemeEnum("theme").default("technical-blog"),
-    customDomain: text("custom_domain"),
-    poweredByFooter: boolean("powered_by_footer").default(true),
-    createdBy: text("created_by").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [
-    index("collections_workspaceId_idx").on(table.workspaceId),
-    uniqueIndex("collections_workspaceId_slug_uidx").on(
-      table.workspaceId,
-      table.slug
-    ),
-  ]
-);
-
-export const collectionPosts = pgTable(
-  "collection_posts",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    collectionId: text("collection_id")
-      .notNull()
-      .references(() => collections.id, { onDelete: "cascade" }),
-    postId: text("post_id")
-      .notNull()
-      .references(() => posts.id, { onDelete: "cascade" }),
-    orderIndex: integer("order_index").default(0),
-    addedAt: timestamp("added_at").defaultNow(),
-  },
-  (table) => [
-    index("collectionPosts_collectionId_idx").on(table.collectionId),
-    index("collectionPosts_postId_idx").on(table.postId),
-    uniqueIndex("collectionPosts_collectionId_postId_uidx").on(
-      table.collectionId,
-      table.postId
-    ),
-  ]
-);
-
-export const series = pgTable(
-  "series",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    collectionId: text("collection_id").references(() => collections.id, {
-      onDelete: "set null",
-    }),
-    name: text("name").notNull(),
-    slug: text("slug").notNull(),
-    description: text("description"),
-    orderIndex: integer("order_index").default(0),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [
-    index("series_workspaceId_idx").on(table.workspaceId),
-    index("series_collectionId_idx").on(table.collectionId),
-    uniqueIndex("series_workspaceId_slug_uidx").on(
-      table.workspaceId,
-      table.slug
-    ),
-  ]
-);
-
-export const seriesPosts = pgTable(
-  "series_posts",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    seriesId: text("series_id")
-      .notNull()
-      .references(() => series.id, { onDelete: "cascade" }),
-    postId: text("post_id")
-      .notNull()
-      .references(() => posts.id, { onDelete: "cascade" }),
-    orderIndex: integer("order_index").default(0),
-    addedAt: timestamp("added_at").defaultNow(),
-  },
-  (table) => [
-    index("seriesPosts_seriesId_idx").on(table.seriesId),
-    index("seriesPosts_postId_idx").on(table.postId),
-    uniqueIndex("seriesPosts_seriesId_postId_uidx").on(
-      table.seriesId,
-      table.postId
-    ),
-  ]
-);
 
 // ── Dev.to Integration tables (from 008-one-click-dev-to-publishing) ──
 
@@ -1318,6 +1218,104 @@ export const githubPrivacySettings = pgTable(
   (table) => [
     index("githubPrivacySettings_workspaceId_idx").on(table.workspaceId),
     index("githubPrivacySettings_repositoryId_idx").on(table.repositoryId),
+  ]
+);
+
+
+// -- Content Series & Collections --
+
+export const series = pgTable(
+  "series",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    slug: text("slug").notNull(),
+    coverImage: text("cover_image"),
+    isPublic: boolean("is_public").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("series_workspaceId_slug_uidx").on(table.workspaceId, table.slug),
+    index("series_workspaceId_idx").on(table.workspaceId),
+  ]
+);
+
+export const collections = pgTable(
+  "collections",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    name: text("name"),
+    description: text("description"),
+    slug: text("slug").notNull(),
+    coverImage: text("cover_image"),
+    isPublic: boolean("is_public").default(false),
+    theme: siteThemeEnum("theme").default("technical-blog"),
+    customDomain: text("custom_domain"),
+    poweredByFooter: boolean("powered_by_footer").default(true),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("collections_workspaceId_slug_uidx").on(table.workspaceId, table.slug),
+    index("collections_workspaceId_idx").on(table.workspaceId),
+  ]
+);
+
+export const seriesPosts = pgTable(
+  "series_posts",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    seriesId: text("series_id")
+      .notNull()
+      .references(() => series.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    order: integer("order").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("seriesPosts_seriesId_postId_uidx").on(table.seriesId, table.postId),
+    uniqueIndex("seriesPosts_postId_uidx").on(table.postId),
+    index("seriesPosts_seriesId_idx").on(table.seriesId),
+    index("seriesPosts_seriesId_order_idx").on(table.seriesId, table.order),
+  ]
+);
+
+export const collectionPosts = pgTable(
+  "collection_posts",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    collectionId: text("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    order: integer("order").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("collectionPosts_collectionId_postId_uidx").on(
+      table.collectionId,
+      table.postId
+    ),
+    index("collectionPosts_collectionId_idx").on(table.collectionId),
+    index("collectionPosts_collectionId_order_idx").on(table.collectionId, table.order),
   ]
 );
 
@@ -1842,10 +1840,6 @@ export const seriesRelations = relations(series, ({ one, many }) => ({
   workspace: one(workspaces, {
     fields: [series.workspaceId],
     references: [workspaces.id],
-  }),
-  collection: one(collections, {
-    fields: [series.collectionId],
-    references: [collections.id],
   }),
   seriesPosts: many(seriesPosts),
 }));

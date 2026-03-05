@@ -18,18 +18,23 @@ export async function GET(
 
   const seriesItem = await db.query.series.findFirst({
     where: eq(series.id, id),
+    with: {
+      workspace: true,
+      seriesPosts: {
+        orderBy: (seriesPosts, { asc }) => [asc(seriesPosts.order)],
+        with: {
+          post: true,
+        },
+      },
+    },
   });
 
   if (!seriesItem) {
     return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: (workspaces, { eq }) => eq(workspaces.id, seriesItem.workspaceId),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Series not found" }, { status: 404 });
+  if (seriesItem.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   return NextResponse.json(seriesItem);
@@ -44,42 +49,49 @@ export async function PUT(
 
   const { id } = await params;
 
-  const seriesItem = await db.query.series.findFirst({
+  // Verify ownership
+  const existing = await db.query.series.findFirst({
     where: eq(series.id, id),
+    with: { workspace: true },
   });
 
-  if (!seriesItem) {
+  if (!existing) {
     return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: (workspaces, { eq }) => eq(workspaces.id, seriesItem.workspaceId),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Series not found" }, { status: 404 });
+  if (existing.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json();
-  const { name, slug, description, collectionId, orderIndex } = body;
+  const { title, description, slug, coverImage, isPublic } = body;
 
   try {
+    const updates: Record<string, unknown> = {};
+
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (slug !== undefined) updates.slug = slug;
+    if (coverImage !== undefined) updates.coverImage = coverImage;
+    if (isPublic !== undefined) updates.isPublic = isPublic;
+
     const [updated] = await db
       .update(series)
-      .set({
-        ...(name !== undefined && { name }),
-        ...(slug !== undefined && { slug }),
-        ...(description !== undefined && { description }),
-        ...(collectionId !== undefined && { collectionId }),
-        ...(orderIndex !== undefined && { orderIndex }),
-      })
+      .set(updates)
       .where(eq(series.id, id))
       .returning();
 
     return NextResponse.json(updated);
   } catch (error) {
+    // Handle unique constraint violation for slug
+    if (error instanceof Error && error.message.includes("unique constraint")) {
+      return NextResponse.json(
+        { error: "A series with this slug already exists in this workspace" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update series" },
+      { error: error instanceof Error ? error.message : "Update failed" },
       { status: 500 }
     );
   }
@@ -94,29 +106,20 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const seriesItem = await db.query.series.findFirst({
+  const existing = await db.query.series.findFirst({
     where: eq(series.id, id),
+    with: { workspace: true },
   });
 
-  if (!seriesItem) {
+  if (!existing) {
     return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: (workspaces, { eq }) => eq(workspaces.id, seriesItem.workspaceId),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Series not found" }, { status: 404 });
+  if (existing.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  try {
-    await db.delete(series).where(eq(series.id, id));
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete series" },
-      { status: 500 }
-    );
-  }
+  await db.delete(series).where(eq(series.id, id));
+
+  return NextResponse.json({ deleted: true });
 }

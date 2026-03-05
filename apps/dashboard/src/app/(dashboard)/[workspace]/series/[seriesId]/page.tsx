@@ -1,18 +1,18 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useSingleCollection, useUpdateCollection, useReorderCollectionPosts, useRemovePostFromCollection } from "@/hooks/use-collections";
+import { useSingleSeries, useUpdateSeries, useReorderSeriesPosts, useRemovePostFromSeries } from "@/hooks/use-series";
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Save, GripVertical, X, Loader2, FileText } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 
-export default function CollectionDetailPage() {
-  const { workspace, collectionId } = useParams<{ workspace: string; collectionId: string }>();
+export default function SeriesDetailPage() {
+  const { workspace, seriesId } = useParams<{ workspace: string; seriesId: string }>();
   const router = useRouter();
-  const collection = useSingleCollection(collectionId);
-  const update = useUpdateCollection();
-  const reorder = useReorderCollectionPosts();
-  const removePost = useRemovePostFromCollection();
+  const series = useSingleSeries(seriesId);
+  const update = useUpdateSeries();
+  const reorder = useReorderSeriesPosts();
+  const removePost = useRemovePostFromSeries();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -23,20 +23,20 @@ export default function CollectionDetailPage() {
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    if (collection.data && !initializedRef.current) {
-      setTitle(collection.data.title || "");
-      setDescription(collection.data.description || "");
-      setSlug(collection.data.slug || "");
-      setIsPublic(collection.data.isPublic ?? false);
-      // API returns collectionPosts with nested post objects
-      const posts = collection.data.collectionPosts?.map((cp: any) => cp.post) || [];
+    if (series.data && !initializedRef.current) {
+      setTitle(series.data.title || "");
+      setDescription(series.data.description || "");
+      setSlug(series.data.slug || "");
+      setIsPublic(series.data.isPublic ?? false);
+      // API returns seriesPosts with nested post objects
+      const posts = series.data.seriesPosts?.map((sp: any) => sp.post) || [];
       setPostList(posts);
       initializedRef.current = true;
     }
-  }, [collection.data]);
+  }, [series.data]);
 
   function handleSave() {
-    update.mutate({ id: collectionId, title, description, slug, isPublic });
+    update.mutate({ id: seriesId, title, description, slug, isPublic });
   }
 
   function handleDragStart(index: number) {
@@ -58,21 +58,21 @@ export default function CollectionDetailPage() {
   function handleDragEnd() {
     setDraggedIndex(null);
     const postIds = postList.map((p) => p.id);
-    reorder.mutate({ collectionId, postIds });
+    reorder.mutate({ seriesId, postIds });
   }
 
   function handleRemovePost(postId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm("Remove this post from the collection?")) return;
+    if (!confirm("Remove this post from the series?")) return;
 
-    removePost.mutate({ collectionId, postId }, {
+    removePost.mutate({ seriesId, postId }, {
       onSuccess: () => {
         setPostList((prev) => prev.filter((p) => p.id !== postId));
       },
     });
   }
 
-  if (collection.isLoading) {
+  if (series.isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 size={32} className="animate-spin text-sf-text-muted" />
@@ -80,10 +80,10 @@ export default function CollectionDetailPage() {
     );
   }
 
-  if (!collection.data) {
+  if (!series.data) {
     return (
       <div className="text-center py-12">
-        <p className="text-sf-text-secondary">Collection not found</p>
+        <p className="text-sf-text-secondary">Series not found</p>
       </div>
     );
   }
@@ -92,10 +92,10 @@ export default function CollectionDetailPage() {
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <button
-          onClick={() => router.push(`/${workspace}/collections`)}
+          onClick={() => router.push(`/${workspace}/series`)}
           className="flex items-center gap-1 text-sf-text-secondary hover:text-sf-text-primary text-sm"
         >
-          <ArrowLeft size={16} /> Collections
+          <ArrowLeft size={16} /> Series
         </button>
         <button
           onClick={handleSave}
@@ -116,7 +116,7 @@ export default function CollectionDetailPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sf-text-primary focus:outline-none focus:border-sf-border-focus"
-              placeholder="Collection title..."
+              placeholder="Series title..."
             />
           </div>
 
@@ -127,7 +127,7 @@ export default function CollectionDetailPage() {
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sf-text-primary focus:outline-none focus:border-sf-border-focus resize-none"
-              placeholder="Brief description of this collection..."
+              placeholder="Brief description of this series..."
             />
           </div>
 
@@ -138,7 +138,7 @@ export default function CollectionDetailPage() {
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
               className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sf-text-primary focus:outline-none focus:border-sf-border-focus"
-              placeholder="collection-slug"
+              placeholder="series-slug"
             />
             <p className="text-xs text-sf-text-muted mt-1">
               Used in URLs and RSS feeds
@@ -154,7 +154,7 @@ export default function CollectionDetailPage() {
               className="rounded-sf"
             />
             <label htmlFor="isPublic" className="text-sm text-sf-text-secondary">
-              Make this collection public
+              Make this series public
             </label>
           </div>
         </div>
@@ -163,7 +163,7 @@ export default function CollectionDetailPage() {
       <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-sf-text-primary">
-            Posts in Collection ({postList.length})
+            Posts in Series ({postList.length})
           </h2>
           <p className="text-xs text-sf-text-muted">
             Drag to reorder
@@ -174,7 +174,7 @@ export default function CollectionDetailPage() {
           <div className="text-center py-12">
             <FileText size={40} className="mx-auto text-sf-text-muted mb-3" />
             <p className="text-sm text-sf-text-secondary">
-              No posts in this collection yet
+              No posts in this series yet
             </p>
             <p className="text-xs text-sf-text-muted mt-1">
               Add posts from the content page
@@ -198,6 +198,9 @@ export default function CollectionDetailPage() {
                 <div className="text-sf-text-muted">
                   <GripVertical size={16} />
                 </div>
+                <div className="flex-shrink-0 w-8 h-8 rounded-sf bg-sf-accent/10 flex items-center justify-center text-sf-accent font-semibold text-sm">
+                  {index + 1}
+                </div>
                 <div
                   className="flex-1 cursor-pointer"
                   onClick={() => router.push(`/${workspace}/content/${post.id}`)}
@@ -213,7 +216,7 @@ export default function CollectionDetailPage() {
                   onClick={(e) => handleRemovePost(post.id, e)}
                   disabled={removePost.isPending}
                   className="text-sf-text-muted hover:text-sf-danger transition-colors disabled:opacity-50"
-                  title="Remove from collection"
+                  title="Remove from series"
                 >
                   <X size={16} />
                 </button>
@@ -225,7 +228,7 @@ export default function CollectionDetailPage() {
 
       <div className="mt-4 text-xs text-sf-text-muted">
         <p>
-          Posts can be reordered by dragging. Collections are curated groups of related content.
+          Posts are displayed in order. Part 1 is at the top, followed by Part 2, etc.
         </p>
       </div>
     </div>

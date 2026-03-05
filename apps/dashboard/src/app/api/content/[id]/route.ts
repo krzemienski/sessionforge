@@ -19,7 +19,15 @@ export async function GET(
 
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, id),
-    with: { workspace: true, insight: true },
+    with: {
+      workspace: true,
+      insight: true,
+      seriesPosts: {
+        with: {
+          series: true,
+        },
+      },
+    },
   });
 
   if (!post) {
