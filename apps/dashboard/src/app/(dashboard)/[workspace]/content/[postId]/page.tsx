@@ -28,6 +28,7 @@ import { EvidenceExplorer } from "@/components/editor/evidence-explorer";
 import { SupplementaryPanel } from "@/components/editor/supplementary-panel";
 import { MediaPanel } from "@/components/editor/media-panel";
 import { RepositoryPanel } from "@/components/editor/repository-panel";
+import { SeriesNavLinks } from "@/components/series/series-nav-links";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -319,6 +320,10 @@ export default function ContentEditorPage() {
     return "text-red-500";
   }
 
+  // Extract series info if post is part of a series
+  const seriesInfo = post.data?.seriesPosts?.[0];
+  const seriesId = seriesInfo?.series?.id;
+
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
       {/* Header */}
@@ -460,6 +465,17 @@ export default function ContentEditorPage() {
         className="bg-transparent text-xl md:text-2xl font-bold font-display text-sf-text-primary border-none outline-none mb-3 md:mb-4 placeholder:text-sf-text-muted min-h-[44px] md:min-h-0 px-1"
         placeholder="Post title..."
       />
+
+      {/* Series navigation */}
+      {seriesId && (
+        <div className="mb-4">
+          <SeriesNavLinks
+            postId={postId}
+            seriesId={seriesId}
+            workspace={workspace}
+          />
+        </div>
+      )}
 
       <InlineEditControls
         currentWordCount={wordCount}
