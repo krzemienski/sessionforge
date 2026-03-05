@@ -8,6 +8,13 @@
       "when": 1772676172832,
       "tag": "0000_dark_yellowjacket",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772676533209,
+      "tag": "0001_aspiring_clea",
+      "breakpoints": true
     }
   ]
 }

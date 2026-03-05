@@ -266,6 +266,9 @@ export const posts = pgTable(
     styleProfileUsed: text("style_profile_used"),
     badgeEnabled: boolean("badge_enabled").default(false),
     platformFooterEnabled: boolean("platform_footer_enabled").default(false),
+    scheduledFor: timestamp("scheduled_for"),
+    timezone: text("timezone"),
+    qstashScheduleId: text("qstash_schedule_id"),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
