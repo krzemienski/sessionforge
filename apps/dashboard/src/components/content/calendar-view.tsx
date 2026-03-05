@@ -1,427 +1,440 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, X, CalendarDays, LayoutGrid } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, FileText, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useContentCalendar } from "@/hooks/use-content";
-import { useRouter } from "next/navigation";
-
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+import { useContent } from "@/hooks/use-content";
+import { useRecommendations, useAcceptRecommendation, useDismissRecommendation } from "@/hooks/use-recommendations";
+import { RecommendationCard, type Recommendation } from "@/components/content/recommendation-card";
 
 const STATUS_DOT: Record<string, string> = {
+  draft: "bg-sf-info",
   published: "bg-sf-success",
-  draft: "bg-sf-warning",
-  scheduled: "bg-sf-info",
-  missed: "bg-sf-danger",
-};
-
-const STATUS_BADGE: Record<string, string> = {
-  published: "text-sf-success bg-sf-success/10",
-  draft: "text-sf-warning bg-sf-warning/10",
-  scheduled: "text-sf-info bg-sf-info/10",
-  missed: "text-sf-danger bg-sf-danger/10",
+  archived: "bg-sf-text-muted",
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  blog_post: "Blog Post",
-  twitter_thread: "Twitter Thread",
-  linkedin_post: "LinkedIn Post",
+  blog_post: "Blog",
+  twitter_thread: "Thread",
+  linkedin_post: "LinkedIn",
   changelog: "Changelog",
   newsletter: "Newsletter",
-  devto_post: "Dev.to Post",
+  devto_post: "Dev.to",
   custom: "Custom",
 };
 
-interface CalendarEntry {
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+interface CalendarPost {
   id: string;
   title: string;
   status: string;
   contentType: string;
-  date: string;
+  date: Date;
 }
 
-function buildMonthGrid(year: number, month: number): (string | null)[] {
-  // month is 1-based
-  const firstDay = new Date(year, month - 1, 1).getDay();
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const cells: (string | null)[] = [];
-
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push(`${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
-  }
-  // Pad to complete last row
-  while (cells.length % 7 !== 0) cells.push(null);
-  return cells;
+interface CalendarSlot {
+  recommendation: Recommendation;
+  date: Date;
 }
 
-function buildWeekGrid(year: number, month: number, week: number): (string | null)[] {
-  // week is 0-based index within month grid
-  const monthCells = buildMonthGrid(year, month);
-  const start = week * 7;
-  return monthCells.slice(start, start + 7);
-}
-
-function isSameDay(dateStr: string, today: Date): boolean {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return y === today.getFullYear() && m === today.getMonth() + 1 && d === today.getDate();
-}
-
-interface DayPanelProps {
-  dateStr: string;
-  entries: CalendarEntry[];
-  onClose: () => void;
-  workspace: string;
-}
-
-function DayPanel({ dateStr, entries, onClose, workspace }: DayPanelProps) {
-  const router = useRouter();
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const label = new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    weekday: "long", month: "long", day: "numeric", year: "numeric",
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-sf-bg-secondary border-l border-sf-border h-full flex flex-col shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between p-4 border-b border-sf-border">
-          <h2 className="font-semibold text-sf-text-primary">{label}</h2>
-          <button
-            onClick={onClose}
-            className="text-sf-text-muted hover:text-sf-text-primary transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {entries.length === 0 && (
-            <p className="text-sm text-sf-text-muted text-center py-8">No content on this day.</p>
-          )}
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              onClick={() => router.push(`/${workspace}/content/${entry.id}`)}
-              className="bg-sf-bg-tertiary border border-sf-border hover:border-sf-border-focus rounded-sf p-3 cursor-pointer transition-colors"
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span
-                  className={cn(
-                    "px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize",
-                    STATUS_BADGE[entry.status] || "text-sf-text-muted bg-sf-bg-tertiary"
-                  )}
-                >
-                  {entry.status}
-                </span>
-                <span className="text-xs text-sf-text-muted">
-                  {TYPE_LABELS[entry.contentType] || entry.contentType}
-                </span>
-              </div>
-              <p className="text-sm font-medium text-sf-text-primary line-clamp-2">{entry.title}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+interface DayCell {
+  date: Date;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  posts: CalendarPost[];
+  slots: CalendarSlot[];
 }
 
 interface CalendarViewProps {
   workspace: string;
+  className?: string;
 }
 
-export function CalendarView({ workspace }: CalendarViewProps) {
-  const today = useMemo(() => new Date(), []);
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
-  const [viewMode, setViewMode] = useState<"month" | "week">("month");
-  const [weekIndex, setWeekIndex] = useState(0);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+function buildCalendarDays(year: number, month: number, posts: CalendarPost[], slots: CalendarSlot[]): DayCell[] {
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const calendar = useContentCalendar(workspace, year, month);
+  const startOffset = firstDay.getDay();
+  const cells: DayCell[] = [];
 
-  // Fix 2: API returns days as a Record<dateKey, { posts: [] }>, not an array.
-  const dayMap = useMemo(() => {
-    const map: Record<string, CalendarEntry[]> = {};
-    const daysRecord = (calendar.data?.days ?? {}) as Record<string, { posts: any[] }>;
-    for (const [dateKey, dayData] of Object.entries(daysRecord)) {
-      map[dateKey] = (dayData.posts ?? []).map((p: any) => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        contentType: p.contentType,
-        date: dateKey,
-      }));
-    }
-    return map;
-  }, [calendar.data?.days]);
+  // Fill leading days from previous month
+  for (let i = startOffset - 1; i >= 0; i--) {
+    const date = new Date(year, month, -i);
+    cells.push({ date, isCurrentMonth: false, isToday: false, posts: [], slots: [] });
+  }
 
-  // Fix 5: Build a Set of dates that have scheduled automation runs (blue dots).
-  const scheduledDates = useMemo(() => {
-    const dates = new Set<string>();
-    const nextRuns = (calendar.data?.nextRuns ?? {}) as Record<string, string>;
-    for (const iso of Object.values(nextRuns)) {
-      const d = new Date(iso);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      dates.add(key);
-    }
-    return dates;
-  }, [calendar.data?.nextRuns]);
+  // Fill current month
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    const date = new Date(year, month, d);
+    const dateStr = date.toDateString();
 
-  const monthCells = useMemo(() => buildMonthGrid(year, month), [year, month]);
-  const weekCount = Math.ceil(monthCells.length / 7);
+    const dayPosts = posts.filter((p) => p.date.toDateString() === dateStr);
+    const daySlots = slots.filter((s) => s.date.toDateString() === dateStr);
 
-  const displayCells = useMemo(() => {
-    if (viewMode === "month") return monthCells;
-    return buildWeekGrid(year, month, Math.min(weekIndex, weekCount - 1));
-  }, [viewMode, monthCells, year, month, weekIndex, weekCount]);
+    cells.push({
+      date,
+      isCurrentMonth: true,
+      isToday: date.toDateString() === today.toDateString(),
+      posts: dayPosts,
+      slots: daySlots,
+    });
+  }
 
-  function prevPeriod() {
-    if (viewMode === "month") {
-      if (month === 1) { setYear(y => y - 1); setMonth(12); }
-      else setMonth(m => m - 1);
-      setWeekIndex(0);
+  // Fill trailing days from next month to complete the grid (always 6 rows)
+  const remaining = 42 - cells.length;
+  for (let d = 1; d <= remaining; d++) {
+    const date = new Date(year, month + 1, d);
+    cells.push({ date, isCurrentMonth: false, isToday: false, posts: [], slots: [] });
+  }
+
+  return cells;
+}
+
+function formatMonthYear(year: number, month: number): string {
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(
+    new Date(year, month, 1)
+  );
+}
+
+export function CalendarView({ workspace, className }: CalendarViewProps) {
+  const now = new Date();
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [selectedDay, setSelectedDay] = useState<DayCell | null>(null);
+
+  const content = useContent(workspace, { limit: 200 });
+  const recommendations = useRecommendations(workspace, { status: "active", limit: 50 });
+  const acceptRecommendation = useAcceptRecommendation();
+  const dismissRecommendation = useDismissRecommendation();
+
+  const posts: CalendarPost[] = useMemo(() => {
+    const raw: any[] = content.data?.posts ?? [];
+    return raw
+      .map((p) => {
+        const dateVal = p.publishedAt ?? p.updatedAt ?? p.createdAt;
+        if (!dateVal) return null;
+        const date = new Date(dateVal);
+        if (isNaN(date.getTime())) return null;
+        return { id: p.id, title: p.title, status: p.status, contentType: p.contentType, date };
+      })
+      .filter(Boolean) as CalendarPost[];
+  }, [content.data]);
+
+  const slots: CalendarSlot[] = useMemo(() => {
+    const raw: any[] = recommendations.data?.recommendations ?? [];
+    return raw
+      .filter((r) => r.suggestedPublishTime)
+      .map((r) => {
+        const date = new Date(r.suggestedPublishTime);
+        if (isNaN(date.getTime())) return null;
+        const numericPriority: number = typeof r.priority === "number" ? r.priority : 0;
+        const priority: Recommendation["priority"] =
+          numericPriority >= 70 ? "high" : numericPriority >= 40 ? "medium" : "low";
+        const recommendation: Recommendation = {
+          id: r.id,
+          title: r.title,
+          reasoning: r.reasoning,
+          suggestedPublishTime: r.suggestedPublishTime,
+          contentType: r.suggestedContentType ?? r.contentType,
+          insightScore: r.insightScore,
+          priority,
+        };
+        return { recommendation, date };
+      })
+      .filter(Boolean) as CalendarSlot[];
+  }, [recommendations.data]);
+
+  const days = useMemo(
+    () => buildCalendarDays(viewYear, viewMonth, posts, slots),
+    [viewYear, viewMonth, posts, slots]
+  );
+
+  function prevMonth() {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
     } else {
-      if (weekIndex > 0) {
-        setWeekIndex(w => w - 1);
-      } else {
-        // Go to previous month, last week
-        let newYear = year;
-        let newMonth = month - 1;
-        if (newMonth < 1) { newMonth = 12; newYear = year - 1; }
-        setYear(newYear);
-        setMonth(newMonth);
-        const prevCells = buildMonthGrid(newYear, newMonth);
-        setWeekIndex(Math.ceil(prevCells.length / 7) - 1);
-      }
+      setViewMonth((m) => m - 1);
     }
+    setSelectedDay(null);
   }
 
-  function nextPeriod() {
-    if (viewMode === "month") {
-      if (month === 12) { setYear(y => y + 1); setMonth(1); }
-      else setMonth(m => m + 1);
-      setWeekIndex(0);
+  function nextMonth() {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
     } else {
-      if (weekIndex < weekCount - 1) {
-        setWeekIndex(w => w + 1);
-      } else {
-        // Go to next month
-        let newYear = year;
-        let newMonth = month + 1;
-        if (newMonth > 12) { newMonth = 1; newYear = year + 1; }
-        setYear(newYear);
-        setMonth(newMonth);
-        setWeekIndex(0);
-      }
+      setViewMonth((m) => m + 1);
+    }
+    setSelectedDay(null);
+  }
+
+  function handleDayClick(cell: DayCell) {
+    if (!cell.isCurrentMonth) return;
+    setSelectedDay((prev) =>
+      prev?.date.toDateString() === cell.date.toDateString() ? null : cell
+    );
+  }
+
+  function handleAccept(id: string) {
+    acceptRecommendation.mutate(id);
+    if (selectedDay) {
+      setSelectedDay((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          slots: prev.slots.filter((s) => s.recommendation.id !== id),
+        };
+      });
     }
   }
 
-  function goToday() {
-    setYear(today.getFullYear());
-    setMonth(today.getMonth() + 1);
-    setWeekIndex(0);
+  function handleDismiss(id: string) {
+    dismissRecommendation.mutate(id);
+    if (selectedDay) {
+      setSelectedDay((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          slots: prev.slots.filter((s) => s.recommendation.id !== id),
+        };
+      });
+    }
   }
 
-  const selectedEntries = selectedDate ? (dayMap[selectedDate] ?? []) : [];
-
-  const headerLabel = viewMode === "month"
-    ? `${MONTH_NAMES[month - 1]} ${year}`
-    : (() => {
-        const cells = buildWeekGrid(year, month, Math.min(weekIndex, weekCount - 1));
-        const first = cells.find(c => c !== null);
-        const last = [...cells].reverse().find(c => c !== null);
-        if (!first || !last) return `${MONTH_NAMES[month - 1]} ${year}`;
-        const [fy, fm, fd] = first.split("-").map(Number);
-        const [ly, lm, ld] = last.split("-").map(Number);
-        const start = new Date(fy, fm - 1, fd);
-        const end = new Date(ly, lm - 1, ld);
-        return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
-      })();
+  const totalSlots = slots.length;
+  const totalPosts = posts.filter((p) => {
+    const d = p.date;
+    return d.getFullYear() === viewYear && d.getMonth() === viewMonth;
+  }).length;
 
   return (
-    <div className="space-y-4">
-      {/* Header controls */}
+    <div className={cn("space-y-4", className)}>
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
-            onClick={prevPeriod}
-            className="p-1.5 rounded-sf text-sf-text-secondary hover:bg-sf-bg-hover transition-colors"
+            onClick={prevMonth}
+            className="p-1.5 rounded-sf text-sf-text-muted hover:text-sf-text-primary hover:bg-sf-bg-hover transition-colors"
+            aria-label="Previous month"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} />
           </button>
-          <h2 className="text-base font-semibold text-sf-text-primary min-w-[180px] text-center">
-            {headerLabel}
+          <h2 className="text-base font-semibold text-sf-text-primary min-w-[160px] text-center">
+            {formatMonthYear(viewYear, viewMonth)}
           </h2>
           <button
-            onClick={nextPeriod}
-            className="p-1.5 rounded-sf text-sf-text-secondary hover:bg-sf-bg-hover transition-colors"
+            onClick={nextMonth}
+            className="p-1.5 rounded-sf text-sf-text-muted hover:text-sf-text-primary hover:bg-sf-bg-hover transition-colors"
+            aria-label="Next month"
           >
-            <ChevronRight size={18} />
-          </button>
-          <button
-            onClick={goToday}
-            className="ml-2 text-xs px-2.5 py-1 rounded-sf border border-sf-border text-sf-text-secondary hover:bg-sf-bg-hover transition-colors"
-          >
-            Today
+            <ChevronRight size={16} />
           </button>
         </div>
 
-        <div className="flex items-center gap-1 bg-sf-bg-tertiary rounded-sf p-0.5">
-          <button
-            onClick={() => setViewMode("month")}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-sf transition-colors",
-              viewMode === "month"
-                ? "bg-sf-bg-secondary text-sf-text-primary shadow-sm"
-                : "text-sf-text-secondary hover:text-sf-text-primary"
-            )}
-          >
-            <LayoutGrid size={14} />
-            Month
-          </button>
-          <button
-            onClick={() => setViewMode("week")}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-sf transition-colors",
-              viewMode === "week"
-                ? "bg-sf-bg-secondary text-sf-text-primary shadow-sm"
-                : "text-sf-text-secondary hover:text-sf-text-primary"
-            )}
-          >
-            <CalendarDays size={14} />
-            Week
-          </button>
+        <div className="flex items-center gap-4 text-xs text-sf-text-muted">
+          <span className="flex items-center gap-1.5">
+            <FileText size={12} />
+            {totalPosts} post{totalPosts !== 1 ? "s" : ""} this month
+          </span>
+          {totalSlots > 0 && (
+            <span className="flex items-center gap-1.5 text-sf-accent">
+              <Sparkles size={12} />
+              {totalSlots} AI suggestion{totalSlots !== 1 ? "s" : ""}
+            </span>
+          )}
         </div>
-      </div>
-
-      {/* Fix 4: Streak banner removed — streak is already shown in the content page header.
-          The calendar API does not return a streak field, so the banner was always hidden. */}
-
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-sf-text-muted">
-        {Object.entries(STATUS_DOT).map(([status, cls]) => (
-          <div key={status} className="flex items-center gap-1.5">
-            <span className={cn("w-2 h-2 rounded-full inline-block", cls)} />
-            <span className="capitalize">{status}</span>
-          </div>
-        ))}
       </div>
 
       {/* Calendar grid */}
-      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden">
+      <div className="border border-sf-border rounded-sf-lg overflow-hidden">
         {/* Day name headers */}
-        <div className="grid grid-cols-7 border-b border-sf-border">
+        <div className="grid grid-cols-7 border-b border-sf-border bg-sf-bg-tertiary">
           {DAY_NAMES.map((name) => (
-            <div key={name} className="py-2 text-center text-xs font-medium text-sf-text-muted">
+            <div
+              key={name}
+              className="py-2 text-center text-xs font-medium text-sf-text-muted"
+            >
               {name}
             </div>
           ))}
         </div>
 
-        {/* Calendar cells */}
-        <div className={cn("grid grid-cols-7", viewMode === "month" ? "divide-y divide-sf-border" : "")}>
-          {displayCells.map((dateStr, idx) => {
-            const entries = dateStr ? (dayMap[dateStr] ?? []) : [];
-            const isToday = dateStr ? isSameDay(dateStr, today) : false;
-            const isSelected = dateStr === selectedDate;
-            const dayNum = dateStr ? parseInt(dateStr.split("-")[2], 10) : null;
-
-            // Group entries by status for dots
-            const statusCounts: Record<string, number> = {};
-            for (const e of entries) {
-              statusCounts[e.status] = (statusCounts[e.status] || 0) + 1;
-            }
-            // Fix 5: Add a blue "scheduled" dot if an automation run lands on this date
-            if (dateStr && scheduledDates.has(dateStr)) {
-              statusCounts["scheduled"] = (statusCounts["scheduled"] || 0) + 1;
-            }
+        {/* Day cells */}
+        <div className="grid grid-cols-7">
+          {days.map((cell, idx) => {
+            const isSelected =
+              selectedDay?.date.toDateString() === cell.date.toDateString();
+            const hasContent = cell.posts.length > 0 || cell.slots.length > 0;
 
             return (
-              <div
+              <button
                 key={idx}
-                onClick={() => dateStr && setSelectedDate(isSelected ? null : dateStr)}
+                type="button"
+                onClick={() => handleDayClick(cell)}
+                disabled={!cell.isCurrentMonth}
                 className={cn(
-                  "min-h-[80px] p-2 transition-colors",
-                  dateStr
-                    ? "cursor-pointer hover:bg-sf-bg-hover"
-                    : "bg-sf-bg-tertiary/30",
-                  isSelected && "bg-sf-accent-bg",
-                  viewMode === "month" && idx % 7 !== 6 && "border-r border-sf-border",
-                  viewMode === "week" && idx !== 6 && "border-r border-sf-border",
+                  "relative min-h-[80px] p-1.5 text-left border-b border-r border-sf-border transition-colors",
+                  // Remove right border from last column and bottom border from last row
+                  (idx + 1) % 7 === 0 && "border-r-0",
+                  idx >= 35 && "border-b-0",
+                  cell.isCurrentMonth
+                    ? "bg-sf-bg-primary hover:bg-sf-bg-hover cursor-pointer"
+                    : "bg-sf-bg-tertiary cursor-default",
+                  isSelected && "bg-sf-accent-bg border-sf-accent/30",
+                  cell.isToday && !isSelected && "bg-sf-bg-secondary"
                 )}
               >
-                {dayNum !== null && (
-                  <>
-                    <div className={cn(
-                      "w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium mb-1.5",
-                      isToday
-                        ? "bg-sf-accent text-sf-bg-primary"
-                        : "text-sf-text-secondary"
-                    )}>
-                      {dayNum}
-                    </div>
+                {/* Day number */}
+                <span
+                  className={cn(
+                    "inline-flex items-center justify-center w-6 h-6 text-xs font-medium rounded-full mb-1",
+                    cell.isToday
+                      ? "bg-sf-accent text-sf-bg-primary font-semibold"
+                      : cell.isCurrentMonth
+                      ? "text-sf-text-primary"
+                      : "text-sf-text-muted"
+                  )}
+                >
+                  {cell.date.getDate()}
+                </span>
 
-                    {/* Content dots */}
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(statusCounts).map(([status, count]) =>
-                        Array.from({ length: Math.min(count, 3) }).map((_, i) => (
-                          <span
-                            key={`${status}-${i}`}
-                            className={cn("w-1.5 h-1.5 rounded-full", STATUS_DOT[status] || "bg-sf-text-muted")}
-                          />
-                        ))
-                      )}
-                    </div>
-
-                    {/* Show title on week view */}
-                    {viewMode === "week" && entries.length > 0 && (
-                      <div className="mt-1.5 space-y-1">
-                        {entries.slice(0, 3).map((entry) => (
-                          <div
-                            key={entry.id}
-                            className={cn(
-                              "text-xs px-1.5 py-0.5 rounded truncate",
-                              STATUS_BADGE[entry.status] || "text-sf-text-muted bg-sf-bg-tertiary"
-                            )}
-                          >
-                            {entry.title}
-                          </div>
-                        ))}
-                        {entries.length > 3 && (
-                          <p className="text-xs text-sf-text-muted">+{entries.length - 3} more</p>
+                {/* Post indicators */}
+                <div className="space-y-0.5">
+                  {cell.posts.slice(0, 2).map((post) => (
+                    <div
+                      key={post.id}
+                      className="flex items-center gap-1 px-1 py-0.5 rounded bg-sf-bg-secondary border border-sf-border"
+                    >
+                      <span
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                          STATUS_DOT[post.status] ?? "bg-sf-text-muted"
                         )}
-                      </div>
-                    )}
-                  </>
+                      />
+                      <span className="text-xs text-sf-text-secondary truncate leading-none">
+                        {post.title || TYPE_LABELS[post.contentType] || "Untitled"}
+                      </span>
+                    </div>
+                  ))}
+                  {cell.posts.length > 2 && (
+                    <p className="text-xs text-sf-text-muted px-1">
+                      +{cell.posts.length - 2} more
+                    </p>
+                  )}
+
+                  {/* AI suggestion indicators */}
+                  {cell.slots.slice(0, 1).map((slot) => (
+                    <div
+                      key={slot.recommendation.id}
+                      className="flex items-center gap-1 px-1 py-0.5 rounded bg-sf-accent/5 border border-sf-accent/20"
+                    >
+                      <Sparkles size={10} className="text-sf-accent flex-shrink-0" />
+                      <span className="text-xs text-sf-accent truncate leading-none">
+                        {slot.recommendation.title}
+                      </span>
+                    </div>
+                  ))}
+                  {cell.slots.length > 1 && (
+                    <p className="text-xs text-sf-accent/70 px-1">
+                      +{cell.slots.length - 1} suggestion{cell.slots.length - 1 !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+
+                {/* Dot indicator for days with content (when truncated) */}
+                {hasContent && !cell.isCurrentMonth && (
+                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-sf-text-muted" />
                 )}
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
 
-      {/* Loading state */}
-      {calendar.isLoading && (
-        <div className="text-center py-4 text-sm text-sf-text-muted">Loading calendar...</div>
+      {/* Selected day detail panel */}
+      {selectedDay && (
+        <div className="border border-sf-border rounded-sf-lg bg-sf-bg-secondary p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-sf-text-muted" />
+            <h3 className="text-sm font-semibold text-sf-text-primary">
+              {new Intl.DateTimeFormat("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              }).format(selectedDay.date)}
+            </h3>
+          </div>
+
+          {selectedDay.posts.length === 0 && selectedDay.slots.length === 0 && (
+            <p className="text-sm text-sf-text-muted">No posts or suggestions for this day.</p>
+          )}
+
+          {selectedDay.posts.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-sf-text-muted uppercase tracking-wide">
+                Posts
+              </p>
+              {selectedDay.posts.map((post) => (
+                <div
+                  key={post.id}
+                  className="flex items-center gap-2 p-3 rounded-sf bg-sf-bg-tertiary border border-sf-border"
+                >
+                  <span
+                    className={cn(
+                      "w-2 h-2 rounded-full flex-shrink-0",
+                      STATUS_DOT[post.status] ?? "bg-sf-text-muted"
+                    )}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-sf-text-primary truncate">
+                      {post.title || "Untitled"}
+                    </p>
+                    <p className="text-xs text-sf-text-muted">
+                      {TYPE_LABELS[post.contentType] || post.contentType} · {post.status}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {selectedDay.slots.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-sf-text-muted uppercase tracking-wide">
+                AI Suggestions
+              </p>
+              {selectedDay.slots.map((slot) => (
+                <RecommendationCard
+                  key={slot.recommendation.id}
+                  recommendation={slot.recommendation}
+                  onAccept={handleAccept}
+                  onDismiss={handleDismiss}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Day detail slide-in panel */}
-      {selectedDate && (
-        <DayPanel
-          dateStr={selectedDate}
-          entries={selectedEntries}
-          onClose={() => setSelectedDate(null)}
-          workspace={workspace}
-        />
-      )}
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-sf-text-muted">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-sf-success" />
+          Published
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-sf-info" />
+          Draft
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Sparkles size={10} className="text-sf-accent" />
+          AI Suggested Slot
+        </span>
+      </div>
     </div>
   );
 }

@@ -1380,6 +1380,39 @@ export const postPerformanceMetrics = pgTable(
   ]
 );
 
+export const engagementMetrics = pgTable(
+  "engagement_metrics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    publishedAt: timestamp("published_at"),
+    views: integer("views").default(0),
+    clicks: integer("clicks").default(0),
+    shares: integer("shares").default(0),
+    likes: integer("likes").default(0),
+    comments: integer("comments").default(0),
+    engagementRate: real("engagement_rate").default(0),
+    platformSpecificMetrics: jsonb("platform_specific_metrics").$type<{
+      platform?: string;
+      metrics?: Record<string, number | string>;
+    }>(),
+    lastSyncedAt: timestamp("last_synced_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("engagementMetrics_workspaceId_idx").on(table.workspaceId),
+    index("engagementMetrics_postId_idx").on(table.postId),
+    index("engagementMetrics_publishedAt_idx").on(table.publishedAt),
+    uniqueIndex("engagementMetrics_postId_uidx").on(table.postId),
+  ]
+);
+
 export const contentRecommendations = pgTable(
   "content_recommendations",
   {
@@ -1387,18 +1420,53 @@ export const contentRecommendations = pgTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    recommendationType: recommendationTypeEnum("recommendation_type").notNull(),
+    recommendationType: text("recommendation_type").notNull(),
     title: text("title").notNull(),
-    description: text("description").notNull(),
+    description: text("description"),
     reasoning: text("reasoning").notNull(),
     supportingData: jsonb("supporting_data"),
-    confidenceScore: real("confidence_score").notNull(),
+    confidenceScore: real("confidence_score"),
     helpfulRating: boolean("helpful_rating"),
+    suggestedContentType: contentTypeEnum("suggested_content_type"),
+    suggestedPublishTime: timestamp("suggested_publish_time"),
+    insightId: text("insight_id").references(() => insights.id),
+    priority: integer("priority").default(0),
+    status: text("status").notNull().default("active"),
+    metadata: jsonb("metadata").$type<{
+      cadenceGap?: boolean;
+      engagementPrediction?: number;
+      relatedSessions?: string[];
+      contentTypeMatch?: string;
+      timezoneOptimized?: boolean;
+    }>(),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (table) => [
     index("contentRecommendations_workspaceId_idx").on(table.workspaceId),
     index("contentRecommendations_confidenceScore_idx").on(table.confidenceScore),
+  ]
+);
+
+export const feedbackActionEnum = pgEnum("feedback_action", [
+  "accepted",
+  "dismissed",
+]);
+
+export const recommendationFeedback = pgTable(
+  "recommendation_feedback",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    recommendationId: text("recommendation_id").notNull()
+      .references(() => contentRecommendations.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    action: feedbackActionEnum("action").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("recommendationFeedback_recommendationId_idx").on(table.recommendationId),
+    index("recommendationFeedback_userId_idx").on(table.userId),
+    index("recommendationFeedback_action_idx").on(table.action),
   ]
 );
 
@@ -1418,6 +1486,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   usageEvents: many(usageEvents),
   usageMonthlySummary: many(usageMonthlySummary),
   contentTemplates: many(contentTemplates),
+  recommendationFeedback: many(recommendationFeedback),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -1530,6 +1599,10 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   collectionPosts: many(collectionPosts),
   seriesPosts: many(seriesPosts),
   performanceMetrics: many(postPerformanceMetrics),
+  engagementMetrics: one(engagementMetrics, {
+    fields: [posts.id],
+    references: [engagementMetrics.postId],
+  }),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -1777,10 +1850,43 @@ export const contentAssets = pgTable("content_assets", {
 
 export const contentRecommendationsRelations = relations(
   contentRecommendations,
-  ({ one }) => ({
+  ({ one, many }) => ({
     workspace: one(workspaces, {
       fields: [contentRecommendations.workspaceId],
       references: [workspaces.id],
+    }),
+    insight: one(insights, {
+      fields: [contentRecommendations.insightId],
+      references: [insights.id],
+    }),
+    feedback: many(recommendationFeedback),
+  })
+);
+
+export const engagementMetricsRelations = relations(
+  engagementMetrics,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [engagementMetrics.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [engagementMetrics.postId],
+      references: [posts.id],
+    }),
+  })
+);
+
+export const recommendationFeedbackRelations = relations(
+  recommendationFeedback,
+  ({ one }) => ({
+    recommendation: one(contentRecommendations, {
+      fields: [recommendationFeedback.recommendationId],
+      references: [contentRecommendations.id],
+    }),
+    user: one(users, {
+      fields: [recommendationFeedback.userId],
+      references: [users.id],
     }),
   })
 );

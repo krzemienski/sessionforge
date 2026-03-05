@@ -9,6 +9,8 @@ import { insightTools } from "../tools/insight-tools";
 import { postManagerTools } from "../tools/post-manager";
 import { markdownEditorTools } from "../tools/markdown-editor";
 import { skillLoaderTools } from "../tools/skill-loader";
+import { analyticsTools } from "../tools/analytics-tools";
+import { recommendationTools } from "../tools/recommendation-tools";
 import { githubContextTools } from "../tools/github-context";
 
 /** Union of all recognised agent identifiers in the system. */
@@ -21,7 +23,8 @@ export type AgentType =
   | "newsletter-writer"
   | "evidence-writer"
   | "repurpose-writer"
-  | "supplementary-writer";
+  | "supplementary-writer"
+  | "content-strategist";
 
 /** Shape of an Anthropic tool definition passed to `client.messages.create`. */
 type AnthropicTool = {
@@ -47,6 +50,8 @@ const ALL_TOOLS: Record<string, AnthropicTool[]> = {
   post: postManagerTools as AnthropicTool[],
   markdown: markdownEditorTools as AnthropicTool[],
   skill: skillLoaderTools as AnthropicTool[],
+  analytics: analyticsTools as AnthropicTool[],
+  recommendation: recommendationTools as AnthropicTool[],
   github: githubContextTools as AnthropicTool[],
 };
 
@@ -55,7 +60,7 @@ const ALL_TOOLS: Record<string, AnthropicTool[]> = {
  * Agents receive only the tools listed here, limiting their capabilities
  * to what is appropriate for their task.
  */
-const AGENT_TOOL_SETS: Record<AgentType, (keyof typeof ALL_TOOLS)[]> = {
+const AGENT_TOOL_SETS: Partial<Record<AgentType, (keyof typeof ALL_TOOLS)[]>> = {
   "insight-extractor": ["session", "insight"],
   "blog-writer": ["session", "insight", "post", "skill", "github"],
   "social-writer": ["session", "insight", "post"],
@@ -65,6 +70,7 @@ const AGENT_TOOL_SETS: Record<AgentType, (keyof typeof ALL_TOOLS)[]> = {
   "evidence-writer": ["session", "insight", "post"],
   "repurpose-writer": ["post"],
   "supplementary-writer": ["post"],
+  "content-strategist": ["insight", "analytics", "recommendation"],
 };
 
 /**
@@ -77,6 +83,6 @@ const AGENT_TOOL_SETS: Record<AgentType, (keyof typeof ALL_TOOLS)[]> = {
  * @returns A flat array of tool definitions ready to pass to the Anthropic SDK.
  */
 export function getToolsForAgent(agentType: AgentType): AnthropicTool[] {
-  const toolSetKeys = AGENT_TOOL_SETS[agentType];
+  const toolSetKeys = AGENT_TOOL_SETS[agentType] ?? [];
   return toolSetKeys.flatMap((key) => ALL_TOOLS[key]);
 }
