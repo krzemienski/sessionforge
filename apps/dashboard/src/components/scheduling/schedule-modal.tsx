@@ -2,7 +2,42 @@
 
 import { useState, useEffect } from "react";
 import { Calendar, X, Clock, RefreshCw } from "lucide-react";
-import { useSchedulePost } from "@/hooks/use-schedule";
+import { useSchedulePost, useReschedulePost } from "@/hooks/use-schedule";
+
+// Convert a date/time in the selected timezone to a UTC ISO string
+function toUTCFromTimezone(date: string, time: string, tz: string): string {
+  // Treat the user's input as UTC to get a reference instant
+  const inputAsUTC = new Date(`${date}T${time}:00Z`);
+
+  // Find what the target timezone shows for this UTC instant
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(inputAsUTC);
+  const get = (type: string) => {
+    const v = parseInt(parts.find((p) => p.type === type)?.value ?? "0", 10);
+    return isNaN(v) ? 0 : v;
+  };
+
+  // Parse what the timezone shows as a UTC reference point
+  const h = get("hour") % 24; // guard against '24' returned for midnight in some Intl impls
+  const tzShownAsUTC = new Date(
+    `${String(get("year")).padStart(4, "0")}-${String(get("month")).padStart(2, "0")}-${String(get("day")).padStart(2, "0")}T${String(h).padStart(2, "0")}:${String(get("minute")).padStart(2, "0")}:${String(get("second")).padStart(2, "0")}Z`
+  );
+
+  // The offset between what the timezone shows and true UTC
+  const offsetMs = inputAsUTC.getTime() - tzShownAsUTC.getTime();
+
+  // Apply the offset to get the correct UTC instant
+  return new Date(inputAsUTC.getTime() + offsetMs).toISOString();
+}
 
 interface ScheduleModalProps {
   postId: string;
@@ -56,7 +91,9 @@ export function ScheduleModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const schedule = useSchedulePost();
-  const isPending = schedule.isPending;
+  const reschedule = useReschedulePost();
+  const isRescheduling = !!existingSchedule;
+  const isPending = isRescheduling ? reschedule.isPending : schedule.isPending;
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -107,27 +144,31 @@ export function ScheduleModal({
     }
 
     try {
-      // Combine date and time into UTC ISO string
-      // User inputs date/time in their selected timezone
-      const dateTimeString = `${date}T${time}:00`;
-      const scheduledDate = new Date(dateTimeString);
+      // Convert the user's input (date/time in the selected timezone) to UTC
+      const utcDateTime = toUTCFromTimezone(date, time, timezone);
 
-      // Convert to UTC for storage
-      const utcDateTime = scheduledDate.toISOString();
-
-      await schedule.mutateAsync({
-        postId,
-        workspaceSlug: workspace,
-        scheduledFor: utcDateTime,
-        timezone,
-        platforms,
-      });
+      if (isRescheduling) {
+        await reschedule.mutateAsync({
+          postId,
+          scheduledFor: utcDateTime,
+          timezone,
+          platforms,
+        });
+      } else {
+        await schedule.mutateAsync({
+          postId,
+          workspaceSlug: workspace,
+          scheduledFor: utcDateTime,
+          timezone,
+          platforms,
+        });
+      }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "An unexpected error occurred");
     }
   }
 
-  const isSuccess = schedule.isSuccess;
+  const isSuccess = isRescheduling ? reschedule.isSuccess : schedule.isSuccess;
   const minDate = new Date().toISOString().split("T")[0];
 
   return (
