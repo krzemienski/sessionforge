@@ -2,9 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { SeoMetadata } from "@/lib/seo";
 
-export function useContent(workspace: string, params?: { limit?: number; offset?: number; status?: string; type?: string; tone?: string; dateFrom?: string; dateTo?: string; search?: string }) {
+export function useContent(workspace: string, params?: { limit?: number; offset?: number; status?: string; type?: string }) {
   return useQuery({
     queryKey: ["content", workspace, params],
     queryFn: async () => {
@@ -13,10 +12,6 @@ export function useContent(workspace: string, params?: { limit?: number; offset?
       if (params?.offset) sp.set("offset", String(params.offset));
       if (params?.status) sp.set("status", params.status);
       if (params?.type) sp.set("type", params.type);
-      if (params?.tone) sp.set("toneUsed", params.tone);
-      if (params?.dateFrom) sp.set("dateFrom", params.dateFrom);
-      if (params?.dateTo) sp.set("dateTo", params.dateTo);
-      if (params?.search) sp.set("search", params.search);
       const res = await fetch(`/api/content?${sp}`);
       if (!res.ok) throw new Error("Failed to fetch content");
       return res.json();
@@ -40,16 +35,7 @@ export function usePost(id: string) {
 export function useUpdatePost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: {
-      id: string;
-      title?: string;
-      markdown?: string;
-      status?: string;
-      versionType?: string;
-      editType?: string;
-      badgeEnabled?: boolean;
-      platformFooterEnabled?: boolean;
-    }) => {
+    mutationFn: async ({ id, ...data }: { id: string; title?: string; markdown?: string; status?: string; badgeEnabled?: boolean; platformFooterEnabled?: boolean }) => {
       const res = await fetch(`/api/content/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -61,7 +47,6 @@ export function useUpdatePost() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["post", vars.id] });
       qc.invalidateQueries({ queryKey: ["content"] });
-      qc.invalidateQueries({ queryKey: ["revisions", vars.id] });
     },
   });
 }
@@ -75,125 +60,6 @@ export function useDeletePost() {
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["content"] }),
-  });
-}
-
-export function useSeoData(postId: string) {
-  return useQuery({
-    queryKey: ["seo", postId],
-    queryFn: async () => {
-      const res = await fetch(`/api/content/${postId}/seo`);
-      if (!res.ok) throw new Error("Failed to fetch SEO data");
-      return res.json();
-    },
-    enabled: !!postId,
-  });
-}
-
-export function useGenerateSeo() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ postId }: { postId: string }) => {
-      const res = await fetch(`/api/content/${postId}/seo`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId }),
-      });
-      if (!res.ok) throw new Error("SEO generation failed");
-      return res.json();
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["seo", vars.postId] });
-    },
-  });
-}
-
-export function useSaveSeo() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ postId, ...data }: { postId: string } & Partial<SeoMetadata>) => {
-      const res = await fetch(`/api/content/${postId}/seo`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("SEO save failed");
-      return res.json();
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["seo", vars.postId] });
-    },
-  });
-}
-
-export function useWordPressConnection(workspace: string) {
-  return useQuery({
-    queryKey: ["wordpress-connection", workspace],
-    queryFn: async () => {
-      const res = await fetch(`/api/workspace/${workspace}/wordpress`);
-      if (!res.ok) throw new Error("Failed to fetch WordPress connection");
-      return res.json() as Promise<{ connected: boolean; siteUrl: string | null; username: string | null } | null>;
-    },
-    enabled: !!workspace,
-  });
-}
-
-export function useContentCalendar(workspace: string, year: number, month: number) {
-  return useQuery({
-    queryKey: ["content-calendar", workspace, year, month],
-    queryFn: async () => {
-      const sp = new URLSearchParams({ workspace, year: String(year), month: String(month) });
-      const res = await fetch(`/api/content/calendar?${sp}`);
-      if (!res.ok) throw new Error("Failed to fetch calendar data");
-      return res.json();
-    },
-    enabled: !!workspace,
-  });
-}
-
-export function useWordPressPublish() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      id,
-      categories,
-      tags,
-      excerpt,
-      featuredImageUrl,
-      wpStatus,
-    }: {
-      id: string;
-      categories?: string[];
-      tags?: string[];
-      excerpt?: string;
-      featuredImageUrl?: string;
-      wpStatus?: string;
-    }) => {
-      const res = await fetch(`/api/content/${id}/wordpress/publish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categories, tags, excerpt, featuredImageUrl, wpStatus }),
-      });
-      if (!res.ok) throw new Error("WordPress publish failed");
-      return res.json();
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["post", vars.id] });
-      qc.invalidateQueries({ queryKey: ["content"] });
-    },
-  });
-}
-
-export function useContentStreak(workspace: string) {
-  return useQuery({
-    queryKey: ["content-streak", workspace],
-    queryFn: async () => {
-      const sp = new URLSearchParams({ workspace });
-      const res = await fetch(`/api/content/streak?${sp}`);
-      if (!res.ok) throw new Error("Failed to fetch streak data");
-      return res.json();
-    },
-    enabled: !!workspace,
   });
 }
 

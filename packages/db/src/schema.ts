@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm/relations";
+import { relations } from "drizzle-orm";
 
 // ── Enums (PRD §4.1) ──
 
@@ -60,24 +60,6 @@ export const triggerTypeEnum = pgEnum("trigger_type", [
   "manual",
   "scheduled",
   "file_watch",
-]);
-
-export const metricsPlatformEnum = pgEnum("metrics_platform", [
-  "devto",
-  "hashnode",
-  "manual",
-]);
-
-export const editTypeEnum = pgEnum("edit_type", [
-  "user_edit",
-  "ai_generated",
-  "auto_save",
-  "restore",
-]);
-
-export const versionTypeEnum = pgEnum("version_type", [
-  "major",
-  "minor",
 ]);
 
 export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
@@ -171,7 +153,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false),
-  onboardingCompleted: boolean("onboarding_completed").default(false).notNull(),
+  onboardingCompleted: boolean("onboarding_completed").default(false),
   image: text("image"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
@@ -264,24 +246,6 @@ export const styleSettings = pgTable(
   ]
 );
 
-export const integrationSettings = pgTable(
-  "integration_settings",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    hashnodeApiToken: text("hashnode_api_token"),
-    hashnodePublicationId: text("hashnode_publication_id"),
-    hashnodeDefaultCanonicalDomain: text("hashnode_default_canonical_domain"),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [
-    uniqueIndex("integrationSettings_workspaceId_uidx").on(table.workspaceId),
-  ]
-);
-
 export const claudeSessions = pgTable(
   "claude_sessions",
   {
@@ -346,43 +310,6 @@ export const insights = pgTable(
   ]
 );
 
-export const writingStyleProfiles = pgTable(
-  "writing_style_profiles",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    formality: real("formality"),
-    technicalDepth: real("technical_depth"),
-    humor: real("humor"),
-    headingStyle: jsonb("heading_style").$type<{
-      preferredLevels: string[];
-      capitalization: "title" | "sentence" | "all_caps";
-      includeEmoji: boolean;
-    }>(),
-    codeStyle: jsonb("code_style").$type<{
-      commentDensity: "minimal" | "moderate" | "heavy";
-      preferInlineComments: boolean;
-      explanationStyle: "before" | "after" | "inline";
-    }>(),
-    vocabularyPatterns: jsonb("vocabulary_patterns").$type<string[]>(),
-    sampleEdits: jsonb("sample_edits").$type<
-      { original: string; edited: string; postId: string }[]
-    >(),
-    publishedPostsAnalyzed: integer("published_posts_analyzed").default(0),
-    generationStatus: styleProfileGenerationStatusEnum(
-      "generation_status"
-    ).default("pending"),
-    lastGeneratedAt: timestamp("last_generated_at"),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [
-    uniqueIndex("writingStyleProfiles_workspaceId_uidx").on(table.workspaceId),
-  ]
-);
-
 export const posts = pgTable(
   "posts",
   {
@@ -396,40 +323,29 @@ export const posts = pgTable(
     contentType: contentTypeEnum("content_type").notNull(),
     status: postStatusEnum("status").default("draft"),
     insightId: text("insight_id").references(() => insights.id),
-    parentPostId: text("parent_post_id").references((): any => posts.id),
     sourceMetadata: jsonb("source_metadata").$type<{
       triggerId?: string;
-      sessionIds?: string[];
-      insightIds?: string[];
+      sessionIds: string[];
+      insightIds: string[];
       lookbackWindow?: string;
-      parentPostId?: string;
       generatedBy:
         | "blog_writer"
         | "social_writer"
         | "changelog_writer"
         | "editor_chat"
         | "manual"
-        | "repurpose_writer"
         | "newsletter_writer";
     }>(),
     toneUsed: toneProfileEnum("tone_used"),
     wordCount: integer("word_count"),
-    hashnodeUrl: text("hashnode_url"),
     aiDraftMarkdown: text("ai_draft_markdown"),
     editDistance: integer("edit_distance"),
-    styleProfileUsed: text("style_profile_used").references(
-      () => writingStyleProfiles.id,
-      { onDelete: "set null" }
-    ),
-    seoMetadata: jsonb("seo_metadata").$type<SeoMetadata>(),
+    styleProfileUsed: text("style_profile_used"),
     badgeEnabled: boolean("badge_enabled").default(false),
     platformFooterEnabled: boolean("platform_footer_enabled").default(false),
-    wordpressPublishedUrl: text("wordpress_published_url"),
-    wordpressPostId: integer("wordpress_post_id"),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
-    publishedAt: timestamp("published_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -482,127 +398,6 @@ export const apiKeys = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
   },
   (table) => [index("apiKeys_workspaceId_idx").on(table.workspaceId)]
-);
-
-export const sessionBookmarks = pgTable(
-  "session_bookmarks",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    sessionId: text("session_id")
-      .notNull()
-      .references(() => claudeSessions.id, { onDelete: "cascade" }),
-    messageIndex: integer("message_index").notNull(),
-    label: text("label").notNull(),
-    note: text("note"),
-    sentToInsights: boolean("sent_to_insights").default(false),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [
-    index("sessionBookmarks_workspaceId_idx").on(table.workspaceId),
-    index("sessionBookmarks_sessionId_idx").on(table.sessionId),
-  ]
-);
-
-// ── Analytics tables (from 018-content-performance-analytics-dashboard) ──
-
-export const contentMetrics = pgTable(
-  "content_metrics",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    postId: text("post_id").references(() => posts.id, { onDelete: "set null" }),
-    platform: metricsPlatformEnum("platform").notNull(),
-    externalId: text("external_id"),
-    title: text("title").notNull(),
-    url: text("url"),
-    views: integer("views").default(0),
-    reactions: integer("reactions").default(0),
-    comments: integer("comments").default(0),
-    likes: integer("likes").default(0),
-    publishedAt: timestamp("published_at"),
-    fetchedAt: timestamp("fetched_at").defaultNow(),
-  },
-  (table) => [
-    index("contentMetrics_workspaceId_idx").on(table.workspaceId),
-    index("contentMetrics_fetchedAt_idx").on(table.fetchedAt),
-    index("contentMetrics_platform_idx").on(table.platform),
-  ]
-);
-
-export const platformSettings = pgTable(
-  "platform_settings",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    devtoApiKey: text("devto_api_key"),
-    devtoUsername: text("devto_username"),
-    hashnodeApiKey: text("hashnode_api_key"),
-    hashnodeUsername: text("hashnode_username"),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [
-    uniqueIndex("platformSettings_workspaceId_uidx").on(table.workspaceId),
-  ]
-);
-
-// ── Revision History tables (from 027-content-revision-history-version-tracking) ──
-
-export const postRevisions = pgTable(
-  "post_revisions",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    postId: text("post_id")
-      .notNull()
-      .references(() => posts.id, { onDelete: "cascade" }),
-    versionNumber: integer("version_number").notNull(),
-    versionType: versionTypeEnum("version_type").notNull(),
-    editType: editTypeEnum("edit_type").notNull(),
-    contentSnapshot: text("content_snapshot"),
-    contentDiff: jsonb("content_diff").$type<
-      { count?: number; added?: boolean; removed?: boolean; value: string }[]
-    >(),
-    parentRevisionId: text("parent_revision_id"),
-    title: text("title").notNull(),
-    wordCount: integer("word_count").default(0),
-    wordCountDelta: integer("word_count_delta").default(0),
-    createdAt: timestamp("created_at").defaultNow(),
-    createdBy: text("created_by"),
-  },
-  (table) => [
-    index("postRevisions_postId_idx").on(table.postId),
-    index("postRevisions_postId_versionNumber_idx").on(
-      table.postId,
-      table.versionNumber
-    ),
-  ]
-);
-
-// ── Webhook Endpoints table (from 031-public-rest-api-webhook-events) ──
-
-export const webhookEndpoints = pgTable(
-  "webhook_endpoints",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    url: text("url").notNull(),
-    events: jsonb("events").$type<string[]>().notNull(),
-    secret: text("secret").notNull(),
-    enabled: boolean("enabled").default(true),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [index("webhookEndpoints_workspaceId_idx").on(table.workspaceId)]
 );
 
 // ── Team Workspaces tables (from 023-team-workspaces-collaboration) ──
@@ -886,206 +681,159 @@ export const ghostPublications = pgTable(
   ]
 );
 
-// ── Agent Runs (from 004-error-recovery) ──
+// ── GitHub Integration tables (from 012-github-repository-deep-integration) ──
 
-export const agentRuns = pgTable(
-  "agent_runs",
+export const githubIntegrations = pgTable(
+  "github_integrations",
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    agentType: agentTypeEnum("agent_type").notNull(),
-    status: agentRunStatusEnum("status").default("running"),
-    attemptCount: integer("attempt_count").default(0),
-    errorMessage: text("error_message"),
-    startedAt: timestamp("started_at").defaultNow(),
-    completedAt: timestamp("completed_at"),
-    inputMetadata: jsonb("input_metadata"),
-    resultMetadata: jsonb("result_metadata"),
-  },
-  (table) => [index("agentRuns_workspaceId_idx").on(table.workspaceId)]
-);
-
-// ── Writing Skills (from 021-skill-loader-ui-custom-writing-skills) ──
-
-export const writingSkills = pgTable(
-  "writing_skills",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    description: text("description"),
-    instructions: text("instructions").notNull(),
-    appliesTo: jsonb("applies_to").$type<string[]>(),
+    accessToken: text("access_token").notNull(),
+    githubUsername: text("github_username"),
     enabled: boolean("enabled").default(true),
-    source: text("source").notNull(),
-    filePath: text("file_path"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
   (table) => [
-    index("writingSkills_workspaceId_idx").on(table.workspaceId),
-    uniqueIndex("writingSkills_workspace_filePath_uidx").on(
+    uniqueIndex("githubIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const githubRepositories = pgTable(
+  "github_repositories",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => githubIntegrations.id, { onDelete: "cascade" }),
+    githubRepoId: integer("github_repo_id").notNull(),
+    repoName: text("repo_name").notNull(),
+    repoUrl: text("repo_url").notNull(),
+    defaultBranch: text("default_branch").default("main"),
+    lastSyncedAt: timestamp("last_synced_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubRepositories_workspaceId_idx").on(table.workspaceId),
+    index("githubRepositories_integrationId_idx").on(table.integrationId),
+    uniqueIndex("githubRepositories_workspaceId_githubRepoId_uidx").on(
       table.workspaceId,
-      table.filePath
+      table.githubRepoId
     ),
   ]
 );
 
-// ── Automation Runs (from 013-working-automation-pipeline) ──
-
-export const automationRuns = pgTable(
-  "automation_runs",
+export const githubCommits = pgTable(
+  "github_commits",
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    triggerId: text("trigger_id")
+    repositoryId: text("repository_id")
       .notNull()
-      .references(() => contentTriggers.id, { onDelete: "cascade" }),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    status: automationRunStatusEnum("status").notNull().default("pending"),
-    sessionsScanned: integer("sessions_scanned").notNull().default(0),
-    insightsExtracted: integer("insights_extracted").notNull().default(0),
-    postId: text("post_id").references(() => posts.id),
-    errorMessage: text("error_message"),
-    startedAt: timestamp("started_at").notNull().defaultNow(),
-    completedAt: timestamp("completed_at"),
-    durationMs: integer("duration_ms"),
-  },
-  (table) => [
-    index("automationRuns_workspaceId_idx").on(table.workspaceId),
-    index("automationRuns_triggerId_idx").on(table.triggerId),
-    index("automationRuns_startedAt_idx").on(table.startedAt),
-  ]
-);
-
-// ── WordPress Connections table (from 034-wordpress-publishing-integration) ──
-
-export const wordpressConnections = pgTable(
-  "wordpress_connections",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    siteUrl: text("site_url").notNull(),
-    username: text("username").notNull(),
-    encryptedAppPassword: text("encrypted_app_password").notNull(),
-    isActive: boolean("is_active").default(true),
-    createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [index("wordpressConnections_workspaceId_idx").on(table.workspaceId)]
-);
-
-// ── Post Conversations (chat persistence) ──
-
-export const postConversations = pgTable("post_conversations", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  postId: text("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
-  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
-  messages: jsonb("messages").$type<{ role: string; content: string; toolActions?: string[] }[]>().default([]),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-// ── Billing tables (from 035-free-tier-usage-metering-dashboard) ──
-
-export const subscriptions = pgTable(
-  "subscriptions",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    planTier: planTierEnum("plan_tier").notNull().default("free"),
-    stripeCustomerId: text("stripe_customer_id"),
-    stripeSubscriptionId: text("stripe_subscription_id"),
-    currentPeriodStart: timestamp("current_period_start"),
-    currentPeriodEnd: timestamp("current_period_end"),
-    status: subscriptionStatusEnum("status").notNull().default("active"),
+      .references(() => githubRepositories.id, { onDelete: "cascade" }),
+    commitSha: text("commit_sha").notNull(),
+    message: text("message").notNull(),
+    authorName: text("author_name"),
+    authorEmail: text("author_email"),
+    authorDate: timestamp("author_date").notNull(),
+    commitUrl: text("commit_url").notNull(),
+    additions: integer("additions"),
+    deletions: integer("deletions"),
+    filesChanged: jsonb("files_changed").$type<string[]>(),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
   (table) => [
-    index("subscriptions_userId_idx").on(table.userId),
-    index("subscriptions_stripeCustomerId_idx").on(table.stripeCustomerId),
-  ]
-);
-
-export const usageEvents = pgTable(
-  "usage_events",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
-    eventType: usageEventTypeEnum("event_type").notNull(),
-    costUsd: real("cost_usd").default(0),
-    createdAt: timestamp("created_at").defaultNow(),
-  },
-  (table) => [
-    index("usageEvents_userId_idx").on(table.userId),
-    index("usageEvents_workspaceId_idx").on(table.workspaceId),
-    index("usageEvents_createdAt_idx").on(table.createdAt),
-  ]
-);
-
-export const usageMonthlySummary = pgTable(
-  "usage_monthly_summary",
-  {
-    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    userId: text("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    month: text("month").notNull(),
-    sessionScans: integer("session_scans").notNull().default(0),
-    insightExtractions: integer("insight_extractions").notNull().default(0),
-    contentGenerations: integer("content_generations").notNull().default(0),
-    estimatedCostUsd: real("estimated_cost_usd").notNull().default(0),
-    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
-  },
-  (table) => [
-    uniqueIndex("usageMonthlySummary_userId_month_uidx").on(
-      table.userId,
-      table.month
+    index("githubCommits_repositoryId_idx").on(table.repositoryId),
+    index("githubCommits_authorDate_idx").on(table.authorDate),
+    uniqueIndex("githubCommits_repositoryId_commitSha_uidx").on(
+      table.repositoryId,
+      table.commitSha
     ),
-    index("usageMonthlySummary_userId_idx").on(table.userId),
   ]
 );
 
-// ── Content Assets (Phase 5 – Diagrams & Media) ──
+export const githubPullRequests = pgTable(
+  "github_pull_requests",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    repositoryId: text("repository_id")
+      .notNull()
+      .references(() => githubRepositories.id, { onDelete: "cascade" }),
+    prNumber: integer("pr_number").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    state: text("state").notNull(),
+    authorName: text("author_name"),
+    prUrl: text("pr_url").notNull(),
+    mergedAt: timestamp("merged_at"),
+    createdAtGithub: timestamp("created_at_github").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubPullRequests_repositoryId_idx").on(table.repositoryId),
+    index("githubPullRequests_createdAtGithub_idx").on(table.createdAtGithub),
+    uniqueIndex("githubPullRequests_repositoryId_prNumber_uidx").on(
+      table.repositoryId,
+      table.prNumber
+    ),
+  ]
+);
 
-export const contentAssetTypeEnum = pgEnum("content_asset_type", [
-  "diagram",
-  "hero_image",
-  "section_image",
-  "evidence_diagram",
-  "timeline_viz",
-]);
+export const githubIssues = pgTable(
+  "github_issues",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    repositoryId: text("repository_id")
+      .notNull()
+      .references(() => githubRepositories.id, { onDelete: "cascade" }),
+    issueNumber: integer("issue_number").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    state: text("state").notNull(),
+    authorName: text("author_name"),
+    issueUrl: text("issue_url").notNull(),
+    createdAtGithub: timestamp("created_at_github").notNull(),
+    closedAt: timestamp("closed_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubIssues_repositoryId_idx").on(table.repositoryId),
+    index("githubIssues_createdAtGithub_idx").on(table.createdAtGithub),
+    uniqueIndex("githubIssues_repositoryId_issueNumber_uidx").on(
+      table.repositoryId,
+      table.issueNumber
+    ),
+  ]
+);
 
-export const contentAssets = pgTable("content_assets", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  postId: text("post_id")
-    .notNull()
-    .references(() => posts.id, { onDelete: "cascade" }),
-  workspaceId: text("workspace_id")
-    .notNull()
-    .references(() => workspaces.id, { onDelete: "cascade" }),
-  assetType: contentAssetTypeEnum("asset_type").notNull(),
-  content: text("content").notNull(), // Mermaid markup or image URL
-  altText: text("alt_text"),
-  caption: text("caption"),
-  placement: jsonb("placement").$type<{ section?: string; position?: string }>().default({}),
-  metadata: jsonb("metadata").$type<{ generatedAt?: string; model?: string; diagramType?: string }>().default({}),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const githubPrivacySettings = pgTable(
+  "github_privacy_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    repositoryId: text("repository_id").references(() => githubRepositories.id, {
+      onDelete: "cascade",
+    }),
+    commitSha: text("commit_sha"),
+    excludeFromContent: boolean("exclude_from_content").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("githubPrivacySettings_workspaceId_idx").on(table.workspaceId),
+    index("githubPrivacySettings_repositoryId_idx").on(table.repositoryId),
+  ]
+);
 
 // ── Content Templates (from 007-content-templates-library) ──
 
@@ -1164,17 +912,11 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
     references: [users.id],
   }),
   styleSettings: one(styleSettings),
-  integrationSettings: one(integrationSettings),
-  writingStyleProfiles: many(writingStyleProfiles),
   claudeSessions: many(claudeSessions),
   insights: many(insights),
   posts: many(posts),
   contentTriggers: many(contentTriggers),
   apiKeys: many(apiKeys),
-  contentMetrics: many(contentMetrics),
-  platformSettings: one(platformSettings),
-  webhookEndpoints: many(webhookEndpoints),
-  wordpressConnections: many(wordpressConnections),
   members: many(workspaceMembers),
   invites: many(workspaceInvites),
   activity: many(workspaceActivity),
@@ -1191,6 +933,9 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   collections: many(collections),
   series: many(series),
   contentTemplates: many(contentTemplates),
+  githubIntegrations: many(githubIntegrations),
+  githubRepositories: many(githubRepositories),
+  githubPrivacySettings: many(githubPrivacySettings),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1200,27 +945,6 @@ export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
   }),
 }));
 
-export const integrationSettingsRelations = relations(
-  integrationSettings,
-  ({ one }) => ({
-    workspace: one(workspaces, {
-      fields: [integrationSettings.workspaceId],
-      references: [workspaces.id],
-    }),
-  })
-);
-
-export const writingStyleProfilesRelations = relations(
-  writingStyleProfiles,
-  ({ one, many }) => ({
-    workspace: one(workspaces, {
-      fields: [writingStyleProfiles.workspaceId],
-      references: [workspaces.id],
-    }),
-    posts: many(posts),
-  })
-);
-
 export const claudeSessionsRelations = relations(
   claudeSessions,
   ({ one, many }) => ({
@@ -1229,7 +953,6 @@ export const claudeSessionsRelations = relations(
       references: [workspaces.id],
     }),
     insights: many(insights),
-    sessionBookmarks: many(sessionBookmarks),
   })
 );
 
@@ -1245,7 +968,7 @@ export const insightsRelations = relations(insights, ({ one, many }) => ({
   posts: many(posts),
 }));
 
-export const postsRelations = relations(posts, ({ one, many }) => ({
+export const postsRelations = relations(posts, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [posts.workspaceId],
     references: [workspaces.id],
@@ -1254,15 +977,6 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.insightId],
     references: [insights.id],
   }),
-  parentPost: one(posts, {
-    fields: [posts.parentPostId],
-    references: [posts.id],
-    relationName: "post_repurposed_from",
-  }),
-  repurposedPosts: many(posts, {
-    relationName: "post_repurposed_from",
-  }),
-  contentMetrics: many(contentMetrics),
   author: one(users, {
     fields: [posts.createdBy],
     references: [users.id],
@@ -1291,12 +1005,11 @@ export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
 
 export const contentTriggersRelations = relations(
   contentTriggers,
-  ({ one, many }) => ({
+  ({ one }) => ({
     workspace: one(workspaces, {
       fields: [contentTriggers.workspaceId],
       references: [workspaces.id],
     }),
-    automationRuns: many(automationRuns),
   })
 );
 
@@ -1306,47 +1019,6 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
-
-export const contentMetricsRelations = relations(contentMetrics, ({ one }) => ({
-  workspace: one(workspaces, {
-    fields: [contentMetrics.workspaceId],
-    references: [workspaces.id],
-  }),
-  post: one(posts, {
-    fields: [contentMetrics.postId],
-    references: [posts.id],
-  }),
-}));
-
-export const platformSettingsRelations = relations(
-  platformSettings,
-  ({ one }) => ({
-    workspace: one(workspaces, {
-      fields: [platformSettings.workspaceId],
-      references: [workspaces.id],
-    }),
-  })
-);
-
-export const webhookEndpointsRelations = relations(
-  webhookEndpoints,
-  ({ one }) => ({
-    workspace: one(workspaces, {
-      fields: [webhookEndpoints.workspaceId],
-      references: [workspaces.id],
-    }),
-  })
-);
-
-export const wordpressConnectionsRelations = relations(
-  wordpressConnections,
-  ({ one }) => ({
-    workspace: one(workspaces, {
-      fields: [wordpressConnections.workspaceId],
-      references: [workspaces.id],
-    }),
-  })
-);
 
 export const workspaceMembersRelations = relations(
   workspaceMembers,
@@ -1377,34 +1049,6 @@ export const workspaceInvitesRelations = relations(
     }),
     inviter: one(users, {
       fields: [workspaceInvites.invitedBy],
-      references: [users.id],
-    }),
-  })
-);
-
-export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
-  user: one(users, {
-    fields: [subscriptions.userId],
-    references: [users.id],
-  }),
-}));
-
-export const usageEventsRelations = relations(usageEvents, ({ one }) => ({
-  user: one(users, {
-    fields: [usageEvents.userId],
-    references: [users.id],
-  }),
-  workspace: one(workspaces, {
-    fields: [usageEvents.workspaceId],
-    references: [workspaces.id],
-  }),
-}));
-
-export const usageMonthlySummaryRelations = relations(
-  usageMonthlySummary,
-  ({ one }) => ({
-    user: one(users, {
-      fields: [usageMonthlySummary.userId],
       references: [users.id],
     }),
   })
@@ -1453,48 +1097,69 @@ export const devtoPublicationsRelations = relations(
   })
 );
 
-export const agentRunsRelations = relations(agentRuns, ({ one }) => ({
-  workspace: one(workspaces, {
-    fields: [agentRuns.workspaceId],
-    references: [workspaces.id],
-  }),
-}));
-
-export const writingSkillsRelations = relations(writingSkills, ({ one }) => ({
-  workspace: one(workspaces, {
-    fields: [writingSkills.workspaceId],
-    references: [workspaces.id],
-  }),
-}));
-
-export const sessionBookmarksRelations = relations(
-  sessionBookmarks,
-  ({ one }) => ({
+export const githubIntegrationsRelations = relations(
+  githubIntegrations,
+  ({ one, many }) => ({
     workspace: one(workspaces, {
-      fields: [sessionBookmarks.workspaceId],
+      fields: [githubIntegrations.workspaceId],
       references: [workspaces.id],
     }),
-    session: one(claudeSessions, {
-      fields: [sessionBookmarks.sessionId],
-      references: [claudeSessions.id],
+    repositories: many(githubRepositories),
+  })
+);
+
+export const githubRepositoriesRelations = relations(
+  githubRepositories,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [githubRepositories.workspaceId],
+      references: [workspaces.id],
+    }),
+    integration: one(githubIntegrations, {
+      fields: [githubRepositories.integrationId],
+      references: [githubIntegrations.id],
+    }),
+    commits: many(githubCommits),
+    pullRequests: many(githubPullRequests),
+    issues: many(githubIssues),
+    privacySettings: many(githubPrivacySettings),
+  })
+);
+
+export const githubCommitsRelations = relations(githubCommits, ({ one }) => ({
+  repository: one(githubRepositories, {
+    fields: [githubCommits.repositoryId],
+    references: [githubRepositories.id],
+  }),
+}));
+
+export const githubPullRequestsRelations = relations(
+  githubPullRequests,
+  ({ one }) => ({
+    repository: one(githubRepositories, {
+      fields: [githubPullRequests.repositoryId],
+      references: [githubRepositories.id],
     }),
   })
 );
 
-export const automationRunsRelations = relations(
-  automationRuns,
+export const githubIssuesRelations = relations(githubIssues, ({ one }) => ({
+  repository: one(githubRepositories, {
+    fields: [githubIssues.repositoryId],
+    references: [githubRepositories.id],
+  }),
+}));
+
+export const githubPrivacySettingsRelations = relations(
+  githubPrivacySettings,
   ({ one }) => ({
-    trigger: one(contentTriggers, {
-      fields: [automationRuns.triggerId],
-      references: [contentTriggers.id],
-    }),
     workspace: one(workspaces, {
-      fields: [automationRuns.workspaceId],
+      fields: [githubPrivacySettings.workspaceId],
       references: [workspaces.id],
     }),
-    post: one(posts, {
-      fields: [automationRuns.postId],
-      references: [posts.id],
+    repository: one(githubRepositories, {
+      fields: [githubPrivacySettings.repositoryId],
+      references: [githubRepositories.id],
     }),
   })
 );

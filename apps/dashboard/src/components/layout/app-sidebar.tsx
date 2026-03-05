@@ -7,29 +7,24 @@ import {
   LayoutDashboard,
   ScrollText,
   Lightbulb,
-  CalendarDays,
+  FileText,
   Zap,
   BarChart3,
   FolderOpen,
   Settings,
   Palette,
   KeyRound,
-  Webhook,
   Link2,
-  Brain,
-  Globe,
   LogOut,
-  Search,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const mainNav = [
   { label: "Dashboard", icon: LayoutDashboard, href: "" },
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
   { label: "Insights", icon: Lightbulb, href: "/insights" },
-  { label: "Content", icon: CalendarDays, href: "/content" },
+  { label: "Content", icon: FileText, href: "/content" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Collections", icon: FolderOpen, href: "/collections" },
   { label: "Automation", icon: Zap, href: "/automation" },
@@ -38,21 +33,16 @@ const mainNav = [
 const settingsNav = [
   { label: "Settings", icon: Settings, href: "/settings" },
   { label: "Style", icon: Palette, href: "/settings/style" },
-  { label: "Writing Skills", icon: Brain, href: "/settings/skills" },
   { label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
   { label: "Integrations", icon: Link2, href: "/settings/integrations" },
-  { label: "Webhooks", icon: Webhook, href: "/settings/webhooks" },
-  { label: "WordPress", icon: Globe, href: "/settings/wordpress" },
 ];
 
 export function AppSidebar({
   workspace,
   userName,
-  onOpenSearch,
 }: {
   workspace: string;
   userName: string;
-  onOpenSearch: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -91,19 +81,6 @@ export function AppSidebar({
 
         <div className="h-px bg-sf-border my-3" />
 
-        <button
-          onClick={onOpenSearch}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-sf text-sm font-display transition-colors text-sf-text-secondary hover:bg-sf-bg-hover hover:text-sf-text-primary"
-        >
-          <Search size={18} />
-          <span className="flex-1 text-left">Search</span>
-          <kbd className="text-xs text-sf-text-muted bg-sf-bg-primary border border-sf-border rounded px-1.5 py-0.5 font-sans">
-            ⌘K
-          </kbd>
-        </button>
-
-        <div className="h-px bg-sf-border my-3" />
-
         {settingsNav.map((item) => (
           <Link
             key={item.href}
@@ -124,19 +101,15 @@ export function AppSidebar({
       <div className="p-3 border-t border-sf-border">
         <div className="flex items-center justify-between px-3 py-2">
           <span className="text-sf-text-primary text-sm truncate">{userName}</span>
-          <div className="flex items-center gap-1">
-            <ThemeToggle />
-            <button
-              onClick={async () => {
-                await signOut();
-                router.push("/login");
-              }}
-              className="flex items-center justify-center w-8 h-8 rounded-sf text-sf-text-muted hover:text-sf-danger hover:bg-sf-bg-hover transition-colors"
-              aria-label="Sign out"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
+          <button
+            onClick={async () => {
+              await signOut();
+              router.push("/login");
+            }}
+            className="text-sf-text-muted hover:text-sf-danger transition-colors"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </div>
     </aside>

@@ -6,12 +6,11 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   ScrollText,
-  FileText,
   Lightbulb,
   BarChart3,
   FolderOpen,
+  FileText,
   Settings,
-  Plug2,
 } from "lucide-react";
 
 const tabs = [
@@ -22,7 +21,6 @@ const tabs = [
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Collections", icon: FolderOpen, href: "/collections" },
   { label: "Settings", icon: Settings, href: "/settings" },
-  { label: "Integrations", icon: Plug2, href: "/settings/integrations" },
 ];
 
 export function MobileBottomNav({ workspace }: { workspace: string }) {
