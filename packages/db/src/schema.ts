@@ -27,6 +27,8 @@ export const postStatusEnum = pgEnum("post_status", [
   "draft",
   "published",
   "archived",
+  "idea",
+  "in_review",
   "scheduled",
 ]);
 
@@ -2169,6 +2171,20 @@ export const seriesPostsRelations = relations(seriesPosts, ({ one }) => ({
     references: [posts.id],
   }),
 }));
+
+export const scheduledPublicationsRelations = relations(
+  scheduledPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [scheduledPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [scheduledPublications.postId],
+      references: [posts.id],
+    }),
+  })
+);
 
 export const ghostIntegrationsRelations = relations(
   ghostIntegrations,
