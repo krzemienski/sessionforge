@@ -85,17 +85,14 @@ export default function InsightDetailPage() {
 
   return (
     <div>
-      <button
-        onClick={() => router.push(`/${workspace}/insights`)}
-        className="flex items-center gap-1 text-sf-text-secondary hover:text-sf-text-primary text-sm mb-4"
-      >
+      <button onClick={() => router.push(`/${workspace}/insights`)} className="flex items-center justify-center gap-1 text-sf-text-secondary hover:text-sf-text-primary text-sm mb-4 min-h-[44px] min-w-[44px]">
         <ArrowLeft size={16} /> Insights
       </button>
 
       <div className="mb-6">
         <h1 className="text-2xl font-bold font-display mb-2">{ins.title}</h1>
-        <div className="flex items-center gap-3">
-          <span className="px-3 py-1 bg-sf-accent-bg text-sf-accent rounded-sf-full text-lg font-bold font-display">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <span className="px-3 py-1 bg-sf-accent-bg text-sf-accent rounded-sf-full text-lg font-bold font-display inline-block w-fit">
             {ins.compositeScore?.toFixed(0) ?? 0}/65
           </span>
           <span className="text-sm text-sf-text-secondary capitalize">
@@ -208,7 +205,7 @@ export default function InsightDetailPage() {
           onClick={handleGenerate}
           disabled={!hasSelection || isAnyGenerating}
           className={cn(
-            "w-full py-2 rounded-sf font-medium text-sm transition-colors",
+            "w-full py-2.5 rounded-sf font-medium text-sm transition-colors min-h-[44px]",
             hasSelection && !isAnyGenerating
               ? "bg-sf-accent text-sf-bg-primary hover:bg-sf-accent-dim"
               : "bg-sf-bg-tertiary text-sf-text-muted cursor-not-allowed"

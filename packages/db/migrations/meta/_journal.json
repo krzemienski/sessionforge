@@ -26,8 +26,15 @@
     {
       "idx": 3,
       "version": "7",
+      "when": 1772685567678,
+      "tag": "0003_ghost_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
       "when": 1772685392301,
-      "tag": "0003_cuddly_unus",
+      "tag": "0004_cuddly_unus",
       "breakpoints": true
     }
   ]

@@ -3,8 +3,9 @@
 import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost, useSeoData } from "@/hooks/use-content";
 import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
+import { useGhostIntegration, useGhostPublication } from "@/hooks/use-ghost";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History } from "lucide-react";
+import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import type { Layout } from "react-resizable-panels";
@@ -15,6 +16,7 @@ import { HashnodePublishModal } from "@/components/publish/hashnode-publish-moda
 import { cn } from "@/lib/utils";
 import { computeSeoScore } from "@/lib/seo";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
+import { GhostPublishModal } from "@/components/publishing/ghost-publish-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
@@ -82,6 +84,8 @@ export default function ContentEditorPage() {
   const seoData = useSeoData(postId);
   const devtoIntegration = useDevtoIntegration(workspace);
   const devtoPublication = useDevtoPublication(postId, workspace);
+  const ghostIntegration = useGhostIntegration(workspace);
+  const ghostPublication = useGhostPublication(postId, workspace);
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
@@ -96,7 +100,9 @@ export default function ContentEditorPage() {
   const [badgeEnabled, setBadgeEnabled] = useState(false);
   const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
+  const [isGhostModalOpen, setIsGhostModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("edit");
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const initializedRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const lastSavedMarkdownRef = useRef("");
@@ -295,6 +301,8 @@ export default function ContentEditorPage() {
   const isBlogPost = post.data?.contentType === "blog_post";
   const isDevtoConnected = devtoIntegration.data?.connected && devtoIntegration.data?.enabled;
   const isAlreadyPublished = devtoPublication.data?.published === true;
+  const isGhostConnected = ghostIntegration.data?.connected && ghostIntegration.data?.enabled;
+  const isAlreadyPublishedOnGhost = ghostPublication.data?.published === true;
 
   const viewModeButtons: { mode: ViewMode; icon: React.ReactNode; label: string }[] = [
     { mode: "edit", icon: <Pencil size={14} />, label: "Edit" },
@@ -313,11 +321,15 @@ export default function ContentEditorPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => router.push(`/${workspace}/content`)} className="flex items-center gap-1 text-sf-text-secondary hover:text-sf-text-primary text-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3 md:mb-4 flex-wrap gap-2">
+        <button
+          onClick={() => router.push(`/${workspace}/content`)}
+          className="flex items-center gap-1 text-sf-text-secondary hover:text-sf-text-primary text-sm min-h-[44px] md:min-h-0"
+        >
           <ArrowLeft size={16} /> Content
         </button>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3 flex-wrap">
           {isBlogPost && (
             <button
               onClick={() => setHashnodeModalOpen(true)}
@@ -331,14 +343,29 @@ export default function ContentEditorPage() {
             <button
               onClick={() => setIsDevtoModalOpen(true)}
               disabled={devtoPublication.isLoading}
-              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-2 md:py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50 min-h-[44px] md:min-h-0"
             >
               {devtoPublication.isLoading ? (
                 <RefreshCw size={14} className="animate-spin" />
               ) : (
                 <Send size={14} />
               )}
-              {isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}
+              <span className="hidden sm:inline">{isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}</span>
+              <span className="sm:hidden">Dev.to</span>
+            </button>
+          )}
+          {isGhostConnected && (
+            <button
+              onClick={() => setIsGhostModalOpen(true)}
+              disabled={ghostPublication.isLoading}
+              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+            >
+              {ghostPublication.isLoading ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+              {isAlreadyPublishedOnGhost ? "Update on Ghost" : "Publish to Ghost"}
             </button>
           )}
 
@@ -364,7 +391,7 @@ export default function ContentEditorPage() {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2 py-1 text-sm text-sf-text-primary"
+            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 md:py-1 text-sm text-sf-text-primary min-h-[44px] md:min-h-0"
           >
             <option value="draft">Draft</option>
             <option value="published">Published</option>
@@ -417,7 +444,7 @@ export default function ContentEditorPage() {
           <button
             onClick={handleSave}
             disabled={update.isPending}
-            className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50 min-h-[44px] md:min-h-0"
           >
             <Save size={16} />
             {update.isPending ? "Saving..." : "Save"}
@@ -425,11 +452,12 @@ export default function ContentEditorPage() {
         </div>
       </div>
 
+      {/* Title Input */}
       <input
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="bg-transparent text-2xl font-bold font-display text-sf-text-primary border-none outline-none mb-4 placeholder:text-sf-text-muted"
+        className="bg-transparent text-xl md:text-2xl font-bold font-display text-sf-text-primary border-none outline-none mb-3 md:mb-4 placeholder:text-sf-text-muted min-h-[44px] md:min-h-0 px-1"
         placeholder="Post title..."
       />
 
@@ -567,6 +595,7 @@ export default function ContentEditorPage() {
         )}
       </div>
 
+      {/* Footer */}
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-sf-border">
         <span className="text-xs text-sf-text-muted">{wordCount} words</span>
         <div className="flex items-center gap-3">
@@ -604,6 +633,51 @@ export default function ContentEditorPage() {
         onSuccess={handleHashnodeSuccess}
       />
 
+      {/* Mobile AI Chat Button */}
+      <button
+        onClick={() => setIsMobileSidebarOpen(true)}
+        className="lg:hidden fixed bottom-20 right-4 bg-sf-accent text-sf-bg-primary p-4 rounded-full shadow-lg hover:bg-sf-accent-dim transition-colors z-40"
+        aria-label="Open AI Chat"
+      >
+        <MessageSquare size={24} />
+      </button>
+
+      {/* Mobile Sidebar Modal */}
+      {isMobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex flex-col bg-sf-bg-primary">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-4 border-b border-sf-border">
+            <h2 className="text-lg font-semibold text-sf-text-primary">AI Assistant</h2>
+            <button
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="p-2 hover:bg-sf-bg-hover rounded-sf transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label="Close AI Chat"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Modal Content */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 bg-sf-bg-secondary border-b border-sf-border overflow-hidden flex flex-col">
+              <AIChatSidebar chat={editorChat} />
+            </div>
+
+            {/* Mobile Sidebar Footer with Source and Badge */}
+            <div className="p-4 space-y-3 overflow-y-auto max-h-[40vh]">
+              {post.data?.insightId && <SourceCard postId={postId} />}
+              <AuthenticityBadge
+                postId={postId}
+                badgeEnabled={badgeEnabled}
+                platformFooterEnabled={platformFooterEnabled}
+                onBadgeToggle={handleBadgeToggle}
+                onFooterToggle={handleFooterToggle}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <DevtoPublishModal
         postId={postId}
         workspace={workspace}
@@ -611,6 +685,14 @@ export default function ContentEditorPage() {
         onClose={() => setIsDevtoModalOpen(false)}
         isAlreadyPublished={isAlreadyPublished}
         existingPublicationUrl={devtoPublication.data?.devtoUrl}
+      />
+      <GhostPublishModal
+        postId={postId}
+        workspace={workspace}
+        isOpen={isGhostModalOpen}
+        onClose={() => setIsGhostModalOpen(false)}
+        isAlreadyPublished={isAlreadyPublishedOnGhost}
+        existingPublicationUrl={ghostPublication.data?.ghostUrl}
       />
     </div>
   );

@@ -147,7 +147,7 @@ export default function SessionsPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold font-display">Sessions</h1>
           {lastScanAt && (
@@ -156,7 +156,7 @@ export default function SessionsPage() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 mt-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:mt-1">
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
@@ -177,7 +177,7 @@ export default function SessionsPage() {
           <button
             onClick={() => handleScan(true)}
             disabled={isBusy}
-            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary px-3 py-2 rounded-sf text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+            className="flex items-center justify-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary px-3 py-2.5 rounded-sf text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50 min-h-[44px]"
           >
             <RotateCcw size={14} />
             Full Rescan
@@ -185,7 +185,7 @@ export default function SessionsPage() {
           <button
             onClick={() => handleScan(false)}
             disabled={isBusy}
-            className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+            className="flex items-center justify-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50 min-h-[44px]"
           >
             <Zap size={16} />
             {isBusy ? "Scanning..." : "Scan Now"}
