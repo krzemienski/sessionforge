@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost, useSeoData } from "@/hooks/use-content";
 import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useGhostIntegration, useGhostPublication } from "@/hooks/use-ghost";
+import { useMediumIntegration, useMediumPublication } from "@/hooks/use-medium";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -18,6 +19,7 @@ import { computeSeoScore } from "@/lib/seo";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
 import { GhostPublishModal } from "@/components/publishing/ghost-publish-modal";
 import { CreateTemplateDialog } from "@/components/templates/create-template-dialog";
+import { MediumPublishModal } from "@/components/publishing/medium-publish-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
@@ -87,6 +89,8 @@ export default function ContentEditorPage() {
   const devtoPublication = useDevtoPublication(postId, workspace);
   const ghostIntegration = useGhostIntegration(workspace);
   const ghostPublication = useGhostPublication(postId, workspace);
+  const mediumIntegration = useMediumIntegration(workspace);
+  const mediumPublication = useMediumPublication(postId, workspace);
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
@@ -102,6 +106,7 @@ export default function ContentEditorPage() {
   const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
   const [isGhostModalOpen, setIsGhostModalOpen] = useState(false);
+  const [isMediumModalOpen, setIsMediumModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
@@ -305,6 +310,8 @@ export default function ContentEditorPage() {
   const isAlreadyPublished = devtoPublication.data?.published === true;
   const isGhostConnected = ghostIntegration.data?.connected && ghostIntegration.data?.enabled;
   const isAlreadyPublishedOnGhost = ghostPublication.data?.published === true;
+  const isMediumConnected = mediumIntegration.data?.connected && mediumIntegration.data?.enabled;
+  const isAlreadyPublishedMedium = mediumPublication.data?.published === true;
 
   const viewModeButtons: { mode: ViewMode; icon: React.ReactNode; label: string }[] = [
     { mode: "edit", icon: <Pencil size={14} />, label: "Edit" },
@@ -376,6 +383,18 @@ export default function ContentEditorPage() {
               {isAlreadyPublishedOnGhost ? "Update on Ghost" : "Publish to Ghost"}
             </button>
           )}
+          <button
+            onClick={() => setIsMediumModalOpen(true)}
+            disabled={!isMediumConnected || mediumPublication.isLoading}
+            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+          >
+            {mediumPublication.isLoading ? (
+              <RefreshCw size={14} className="animate-spin" />
+            ) : (
+              <Send size={14} />
+            )}
+            {isAlreadyPublishedMedium ? "Update on Medium" : "Publish to Medium"}
+          </button>
 
           {/* View mode toggle */}
           <div className="flex items-center bg-sf-bg-tertiary border border-sf-border rounded-sf overflow-hidden">
@@ -701,6 +720,14 @@ export default function ContentEditorPage() {
         onClose={() => setIsGhostModalOpen(false)}
         isAlreadyPublished={isAlreadyPublishedOnGhost}
         existingPublicationUrl={ghostPublication.data?.ghostUrl}
+      />
+      <MediumPublishModal
+        postId={postId}
+        workspace={workspace}
+        isOpen={isMediumModalOpen}
+        onClose={() => setIsMediumModalOpen(false)}
+        isAlreadyPublished={isAlreadyPublishedMedium}
+        existingPublicationUrl={mediumPublication.data?.mediumUrl}
       />
 
       <CreateTemplateDialog
