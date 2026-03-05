@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       const sessionIds = Array.isArray(metadata.sessionIds)
         ? (metadata.sessionIds as string[])
         : [];
-      processExtractInsights(jobId, job.workspaceId, sessionIds).catch(
+      processExtractInsights(jobId, job.workspaceId, job.createdBy ?? "", sessionIds).catch(
         () => undefined
       );
       break;
@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       processGenerateContent(
         jobId,
         job.workspaceId,
+        job.createdBy ?? "",
         insightIds,
         contentType
       ).catch(() => undefined);

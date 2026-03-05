@@ -36,8 +36,9 @@ export function useJobProgress(jobId: string | null) {
       const progressPercent = total > 0 ? Math.round((processed / total) * 100) : 0;
 
       let estimatedSecondsRemaining: number | null = null;
-      if (data.startedAt && data.status === "processing" && processed > 0) {
-        const elapsedMs = Date.now() - new Date(data.startedAt).getTime();
+      const startRef = data.startedAt ?? data.createdAt ?? null;
+      if (startRef && data.status === "processing" && processed > 0) {
+        const elapsedMs = Date.now() - new Date(startRef).getTime();
         const msPerItem = elapsedMs / processed;
         const remaining = total - processed;
         estimatedSecondsRemaining = Math.round((msPerItem * remaining) / 1000);
@@ -53,7 +54,7 @@ export function useJobProgress(jobId: string | null) {
         failedItems: data.errorCount ?? data.failedItems ?? 0,
         progressPercent,
         estimatedSecondsRemaining,
-        startedAt: data.startedAt ?? null,
+        startedAt: data.startedAt ?? data.createdAt ?? null,
         completedAt: data.completedAt ?? null,
         errorMessage: data.errorMessage ?? null,
         metadata: data.metadata ?? null,

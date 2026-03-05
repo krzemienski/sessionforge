@@ -14,6 +14,7 @@ import { createAgentMcpServer } from "@/lib/ai/mcp-server-factory";
 import { runAgent } from "@/lib/ai/agent-runner";
 import { BLOG_TECHNICAL_PROMPT } from "@/lib/ai/prompts/blog/technical";
 import { getJob, updateJobProgress, completeJob, failJob } from "./job-tracker";
+import { recordUsage } from "@/lib/billing/usage";
 
 /**
  * Records usage for a single batch operation item toward workspace plan limits.
@@ -131,6 +132,7 @@ async function generateContentFromInsight(
 export async function processExtractInsights(
   jobId: string,
   workspaceId: string,
+  userId: string,
   sessionIds: string[]
 ): Promise<void> {
   let processedItems = 0;
@@ -154,7 +156,9 @@ export async function processExtractInsights(
           try {
             await extractInsight({ workspaceId, sessionId });
             successCount++;
-            await recordBatchUsage(workspaceId, "extract_insights");
+            if (userId) {
+              await recordUsage(userId, workspaceId, "insight_extraction");
+            }
           } catch {
             errorCount++;
           }
@@ -188,6 +192,7 @@ export async function processExtractInsights(
 export async function processGenerateContent(
   jobId: string,
   workspaceId: string,
+  userId: string,
   insightIds: string[],
   contentType?: string
 ): Promise<void> {
@@ -212,7 +217,9 @@ export async function processGenerateContent(
           try {
             await generateContentFromInsight(workspaceId, insightId, contentType);
             successCount++;
-            await recordBatchUsage(workspaceId, "generate_content");
+            if (userId) {
+              await recordUsage(userId, workspaceId, "content_generation");
+            }
           } catch {
             errorCount++;
           }
