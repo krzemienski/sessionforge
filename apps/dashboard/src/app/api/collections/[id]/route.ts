@@ -63,7 +63,7 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { title, description, slug } = body;
+  const { title, description, slug, coverImage, isPublic } = body;
 
   try {
     const [updated] = await db
@@ -72,6 +72,8 @@ export async function PUT(
         ...(title !== undefined && { title }),
         ...(description !== undefined && { description }),
         ...(slug !== undefined && { slug }),
+        ...(isPublic !== undefined && { isPublic }),
+        ...(coverImage !== undefined && { coverImage }),
         updatedAt: new Date(),
       })
       .where(eq(collections.id, id))

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { posts, workspaces, series, seriesPosts, collections, collectionPosts } from "@sessionforge/db";
-import { eq, desc, and, inArray } from "drizzle-orm/sql";
+import { eq, desc, asc, and, inArray } from "drizzle-orm/sql";
 import { marked } from "marked";
 
 export const dynamic = "force-dynamic";
@@ -206,7 +206,7 @@ export async function GET(
     // Get all post IDs in this series
     const seriesPostsData = await db.query.seriesPosts.findMany({
       where: eq(seriesPosts.seriesId, seriesData.id),
-      orderBy: [desc(seriesPosts.order)],
+      orderBy: [asc(seriesPosts.order)],
     });
 
     const postIds = seriesPostsData.map((sp) => sp.postId);
@@ -241,7 +241,7 @@ export async function GET(
     // Get all post IDs in this collection
     const collectionPostsData = await db.query.collectionPosts.findMany({
       where: eq(collectionPosts.collectionId, collectionData.id),
-      orderBy: [desc(collectionPosts.order)],
+      orderBy: [asc(collectionPosts.order)],
     });
 
     const postIds = collectionPostsData.map((cp) => cp.postId);

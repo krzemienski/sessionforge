@@ -1006,6 +1006,8 @@ export const collections = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     slug: text("slug").notNull(),
+    coverImage: text("cover_image"),
+    isPublic: boolean("is_public").default(false),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -1031,6 +1033,7 @@ export const seriesPosts = pgTable(
   },
   (table) => [
     uniqueIndex("seriesPosts_seriesId_postId_uidx").on(table.seriesId, table.postId),
+    uniqueIndex("seriesPosts_postId_uidx").on(table.postId),
     index("seriesPosts_seriesId_idx").on(table.seriesId),
     index("seriesPosts_seriesId_order_idx").on(table.seriesId, table.order),
   ]

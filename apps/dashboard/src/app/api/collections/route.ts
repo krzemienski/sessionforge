@@ -63,7 +63,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { title, description, slug } = body;
+  const { title, description, slug, coverImage, isPublic } = body;
 
   if (!title || !slug) {
     return NextResponse.json(
@@ -88,6 +88,8 @@ export async function POST(request: Request) {
         title,
         description,
         slug,
+        coverImage,
+        isPublic: isPublic ?? false,
       })
       .returning();
 
