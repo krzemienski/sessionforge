@@ -32,6 +32,7 @@
     "../../packages/db/src/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "vitest.config.ts"
   ]
 }

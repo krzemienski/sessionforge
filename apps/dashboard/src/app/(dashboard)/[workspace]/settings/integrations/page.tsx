@@ -108,6 +108,11 @@ export default function IntegrationsPage() {
   const [apiKey, setApiKey] = useState("");
   const [connectError, setConnectError] = useState<string | null>(null);
 
+  // ── Ghost integration state ──
+  const [ghostUrl, setGhostUrl] = useState("");
+  const [ghostAdminKey, setGhostAdminKey] = useState("");
+  const [ghostConnectError, setGhostConnectError] = useState<string | null>(null);
+
   const devtoIntegration = useQuery({
     queryKey: ["devto-integration", workspace],
     queryFn: async () => {
@@ -155,6 +160,56 @@ export default function IntegrationsPage() {
   });
 
   const isDevtoConnected = devtoIntegration.data?.connected === true;
+
+  // ── Ghost integration queries and mutations ──
+  const ghostIntegration = useQuery({
+    queryKey: ["ghost-integration", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/integrations/ghost?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed to load Ghost integration status");
+      return res.json();
+    },
+  });
+
+  const ghostConnect = useMutation({
+    mutationFn: async ({ url, adminKey }: { url: string; adminKey: string }) => {
+      const res = await fetch("/api/integrations/ghost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceSlug: workspace, ghostUrl: url, adminApiKey: adminKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to connect");
+      return data;
+    },
+    onSuccess: () => {
+      setGhostUrl("");
+      setGhostAdminKey("");
+      setGhostConnectError(null);
+      qc.invalidateQueries({ queryKey: ["ghost-integration", workspace] });
+    },
+    onError: (err: Error) => {
+      setGhostConnectError(err.message);
+    },
+  });
+
+  const ghostDisconnect = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/integrations/ghost?workspace=${workspace}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to disconnect");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ghost-integration", workspace] });
+    },
+  });
+
+  const isGhostConnected = ghostIntegration.data?.connected === true;
 
   if (integrations.isLoading) {
     return (
@@ -471,6 +526,112 @@ export default function IntegrationsPage() {
             {devtoConnect.isSuccess && (
               <p className="text-sm text-sf-success mt-2">
                 Dev.to connected as @{devtoIntegration.data?.username}.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Ghost CMS Integration ── */}
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-sf bg-sf-bg-tertiary border border-sf-border flex items-center justify-center flex-shrink-0">
+            <span className="text-lg font-bold text-sf-text-primary">G</span>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-base font-semibold text-sf-text-primary">Ghost</h2>
+              {isGhostConnected ? (
+                <span className="inline-flex items-center gap-1 text-xs text-sf-success bg-sf-success/10 border border-sf-success/20 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 size={11} />
+                  Connected
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs text-sf-text-muted bg-sf-bg-tertiary border border-sf-border px-2 py-0.5 rounded-full">
+                  Not connected
+                </span>
+              )}
+            </div>
+
+            <p className="text-sm text-sf-text-secondary mb-4">
+              Publish blog posts directly to your self-hosted Ghost CMS instance.
+            </p>
+
+            {ghostIntegration.isLoading && (
+              <div className="animate-pulse h-8 bg-sf-bg-tertiary rounded w-1/3" />
+            )}
+
+            {!ghostIntegration.isLoading && isGhostConnected && (
+              <div className="space-y-3">
+                <div className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-4 py-3 text-sm space-y-1">
+                  <p className="text-sf-text-primary">
+                    <span className="text-sf-text-muted">Connected to: </span>
+                    {ghostIntegration.data?.ghostUrl}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => ghostDisconnect.mutate()}
+                    disabled={ghostDisconnect.isPending}
+                    className="flex items-center gap-2 text-sf-danger border border-sf-danger/30 px-3 py-1.5 rounded-sf text-sm hover:bg-sf-danger/10 transition-colors disabled:opacity-50"
+                  >
+                    <Link2Off size={13} />
+                    {ghostDisconnect.isPending ? "Disconnecting..." : "Disconnect Ghost"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!ghostIntegration.isLoading && !isGhostConnected && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-sf-text-muted mb-1">Ghost URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://your-ghost-site.com"
+                    value={ghostUrl}
+                    onChange={(e) => setGhostUrl(e.target.value)}
+                    className="w-full bg-sf-bg-primary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary placeholder:text-sf-text-muted focus:outline-none focus:ring-1 focus:ring-sf-accent/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-sf-text-muted mb-1">Admin API Key</label>
+                  <input
+                    type="password"
+                    placeholder="id:secret"
+                    value={ghostAdminKey}
+                    onChange={(e) => setGhostAdminKey(e.target.value)}
+                    className="w-full bg-sf-bg-primary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary placeholder:text-sf-text-muted focus:outline-none focus:ring-1 focus:ring-sf-accent/50"
+                  />
+                  <p className="text-xs text-sf-text-muted mt-1">
+                    Find your Admin API key in Ghost Admin → Settings → Integrations.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => ghostConnect.mutate({ url: ghostUrl, adminKey: ghostAdminKey })}
+                  disabled={ghostConnect.isPending || !ghostUrl.trim() || !ghostAdminKey.trim()}
+                  className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+                >
+                  <Link2 size={14} />
+                  {ghostConnect.isPending ? "Connecting..." : "Connect Ghost"}
+                </button>
+              </div>
+            )}
+
+            {ghostConnectError && (
+              <p className="text-sm text-sf-danger flex items-center gap-1 mt-2">
+                <AlertCircle size={13} />
+                {ghostConnectError}
+              </p>
+            )}
+
+            {ghostConnect.isSuccess && (
+              <p className="text-sm text-sf-success mt-2">
+                Ghost connected successfully.
               </p>
             )}
           </div>
