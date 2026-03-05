@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, workspaces, scheduledPublications } from "@sessionforge/db";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, or, desc } from "drizzle-orm";
 import { createPublishSchedule } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +35,20 @@ export async function GET(request: Request) {
     orderBy: [asc(posts.scheduledFor)],
   });
 
-  return NextResponse.json({ posts: results });
+  const recentActivity = await db.query.scheduledPublications.findMany({
+    where: and(
+      eq(scheduledPublications.workspaceId, workspace.id),
+      or(
+        eq(scheduledPublications.status, "published"),
+        eq(scheduledPublications.status, "failed")
+      )
+    ),
+    with: { post: true },
+    orderBy: [desc(scheduledPublications.updatedAt)],
+    limit: 10,
+  });
+
+  return NextResponse.json({ posts: results, recentActivity });
 }
 
 export async function POST(request: Request) {

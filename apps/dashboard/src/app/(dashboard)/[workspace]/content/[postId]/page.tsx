@@ -58,6 +58,10 @@ export default function ContentEditorPage() {
   }
 
   function handleSave() {
+    if (post.data?.status === "scheduled" && status !== "scheduled") {
+      alert("To remove this post from the schedule, please use 'Cancel Schedule' from the Publish Queue.");
+      return;
+    }
     update.mutate({ id: postId, title, markdown, status });
   }
 
@@ -117,6 +121,9 @@ export default function ContentEditorPage() {
             onChange={(e) => setStatus(e.target.value)}
             className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2 py-1 text-sm text-sf-text-primary"
           >
+            {isScheduled && (
+              <option value="scheduled" disabled>Scheduled</option>
+            )}
             <option value="draft">Draft</option>
             <option value="published">Published</option>
             <option value="archived">Archived</option>

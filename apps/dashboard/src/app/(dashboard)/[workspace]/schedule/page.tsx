@@ -2,9 +2,13 @@
 
 import { useParams } from "next/navigation";
 import { PublishQueue } from "@/components/scheduling/publish-queue";
+import { RecentActivity } from "@/components/scheduling/recent-activity";
+import { useScheduledPosts } from "@/hooks/use-schedule";
 
 export default function SchedulePage() {
   const { workspace } = useParams<{ workspace: string }>();
+  const { data } = useScheduledPosts(workspace);
+  const recentActivity = data?.recentActivity ?? [];
 
   return (
     <div>
@@ -16,6 +20,8 @@ export default function SchedulePage() {
       </div>
 
       <PublishQueue workspace={workspace} />
+
+      <RecentActivity items={recentActivity} />
     </div>
   );
 }
