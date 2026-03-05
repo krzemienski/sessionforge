@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { posts, workspaces, series, seriesPosts } from "@sessionforge/db";
+import { posts, workspaces, series, seriesPosts, collections, collectionPosts } from "@sessionforge/db";
 import { eq, desc, and, inArray } from "drizzle-orm/sql";
 import { marked } from "marked";
 
@@ -30,16 +30,26 @@ function buildRss(
   baseUrl: string,
   feedItems: { title: string; id: string; createdAt: Date | null; htmlContent: string }[],
   seriesTitle?: string,
-  seriesSlug?: string
+  seriesSlug?: string,
+  collectionTitle?: string,
+  collectionSlug?: string
 ): string {
   const channelLink = `${baseUrl}/${workspaceSlug}`;
   const selfLink = seriesSlug
     ? `${baseUrl}/api/feed/${workspaceSlug}/series/${seriesSlug}.xml`
+    : collectionSlug
+    ? `${baseUrl}/api/feed/${workspaceSlug}/collections/${collectionSlug}.xml`
     : `${baseUrl}/api/feed/${workspaceSlug}.xml`;
   const lastBuildDate = feedItems.length > 0 ? toRfc822(feedItems[0].createdAt) : toRfc822(new Date());
-  const feedTitle = seriesTitle ? `${workspaceName} - ${seriesTitle}` : workspaceName;
+  const feedTitle = seriesTitle
+    ? `${workspaceName} - ${seriesTitle}`
+    : collectionTitle
+    ? `${workspaceName} - ${collectionTitle}`
+    : workspaceName;
   const feedDescription = seriesTitle
     ? `Posts from the "${seriesTitle}" series on ${workspaceName}`
+    : collectionTitle
+    ? `Posts from the "${collectionTitle}" collection on ${workspaceName}`
     : `Published posts from ${workspaceName} on SessionForge`;
 
   const items = feedItems
@@ -79,16 +89,26 @@ function buildAtom(
   baseUrl: string,
   feedItems: { title: string; id: string; createdAt: Date | null; updatedAt: Date | null; htmlContent: string }[],
   seriesTitle?: string,
-  seriesSlug?: string
+  seriesSlug?: string,
+  collectionTitle?: string,
+  collectionSlug?: string
 ): string {
   const feedId = seriesSlug
     ? `${baseUrl}/api/feed/${workspaceSlug}/series/${seriesSlug}.atom`
+    : collectionSlug
+    ? `${baseUrl}/api/feed/${workspaceSlug}/collections/${collectionSlug}.atom`
     : `${baseUrl}/api/feed/${workspaceSlug}.atom`;
   const channelLink = `${baseUrl}/${workspaceSlug}`;
   const updated = feedItems.length > 0 ? toIso8601(feedItems[0].updatedAt ?? feedItems[0].createdAt) : toIso8601(new Date());
-  const feedTitle = seriesTitle ? `${workspaceName} - ${seriesTitle}` : workspaceName;
+  const feedTitle = seriesTitle
+    ? `${workspaceName} - ${seriesTitle}`
+    : collectionTitle
+    ? `${workspaceName} - ${collectionTitle}`
+    : workspaceName;
   const feedSubtitle = seriesTitle
     ? `Posts from the "${seriesTitle}" series on ${workspaceName}`
+    : collectionTitle
+    ? `Posts from the "${collectionTitle}" collection on ${workspaceName}`
     : `Published posts from ${workspaceName} on SessionForge`;
 
   const entries = feedItems
@@ -127,6 +147,7 @@ export async function GET(
 
   let workspaceSlug: string;
   let seriesSlug: string | undefined;
+  let collectionSlug: string | undefined;
   let format: "rss" | "atom";
 
   // Parse format (xml/atom)
@@ -149,6 +170,14 @@ export async function GET(
     seriesSlug = seriesMatch[2];
   }
 
+  // Parse collection slug if present
+  // Pattern: workspace/collections/collection-slug
+  const collectionMatch = workspaceSlug.match(/^([^/]+)\/collections\/(.+)$/);
+  if (collectionMatch) {
+    workspaceSlug = collectionMatch[1];
+    collectionSlug = collectionMatch[2];
+  }
+
   const workspace = await db.query.workspaces.findFirst({
     where: eq(workspaces.slug, workspaceSlug),
   });
@@ -158,6 +187,7 @@ export async function GET(
   }
 
   let seriesData: typeof series.$inferSelect | undefined;
+  let collectionData: typeof collections.$inferSelect | undefined;
   let publishedPosts: (typeof posts.$inferSelect)[];
 
   if (seriesSlug) {
@@ -185,6 +215,41 @@ export async function GET(
       publishedPosts = [];
     } else {
       // Get published posts from this series
+      publishedPosts = await db.query.posts.findMany({
+        where: and(
+          eq(posts.workspaceId, workspace.id),
+          eq(posts.status, "published"),
+          inArray(posts.id, postIds)
+        ),
+        orderBy: [desc(posts.createdAt)],
+        limit: 50,
+      });
+    }
+  } else if (collectionSlug) {
+    // Query for collection and filter posts
+    collectionData = await db.query.collections.findFirst({
+      where: and(
+        eq(collections.workspaceId, workspace.id),
+        eq(collections.slug, collectionSlug)
+      ),
+    });
+
+    if (!collectionData) {
+      return new Response("Collection not found", { status: 404 });
+    }
+
+    // Get all post IDs in this collection
+    const collectionPostsData = await db.query.collectionPosts.findMany({
+      where: eq(collectionPosts.collectionId, collectionData.id),
+      orderBy: [desc(collectionPosts.order)],
+    });
+
+    const postIds = collectionPostsData.map((cp) => cp.postId);
+
+    if (postIds.length === 0) {
+      publishedPosts = [];
+    } else {
+      // Get published posts from this collection
       publishedPosts = await db.query.posts.findMany({
         where: and(
           eq(posts.workspaceId, workspace.id),
@@ -227,7 +292,9 @@ export async function GET(
       baseUrl,
       feedItems,
       seriesData?.title,
-      seriesSlug
+      seriesSlug,
+      collectionData?.title,
+      collectionSlug
     );
     return new Response(xml, {
       status: 200,
@@ -241,7 +308,9 @@ export async function GET(
     baseUrl,
     feedItems,
     seriesData?.title,
-    seriesSlug
+    seriesSlug,
+    collectionData?.title,
+    collectionSlug
   );
   return new Response(xml, {
     status: 200,
