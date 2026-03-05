@@ -2,7 +2,10 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-export function useRecommendations(workspace: string, params?: { limit?: number; offset?: number; minScore?: number }) {
+export function useRecommendations(
+  workspace: string,
+  params?: { limit?: number; offset?: number; minScore?: number }
+) {
   return useQuery({
     queryKey: ["recommendations", workspace, params],
     queryFn: async () => {
@@ -28,8 +31,43 @@ export function useGenerateRecommendations(workspace: string) {
         body: JSON.stringify({ workspaceSlug: workspace, customInstructions }),
       });
       if (!res.ok) throw new Error("Generation failed");
-      return res.json();
+      // Drain the SSE stream to completion before resolving
+      const reader = res.body?.getReader();
+      if (reader) {
+        try {
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["recommendations"] }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["recommendations", workspace] }),
+  });
+}
+
+export function useRateRecommendation(workspace: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      helpful,
+    }: {
+      id: string;
+      helpful: boolean;
+    }) => {
+      const res = await fetch(`/api/recommendations/${id}/rate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ helpful }),
+      });
+      if (!res.ok) throw new Error("Rating failed");
+      return res.json() as Promise<{ rated: boolean; helpfulRating: boolean }>;
+    },
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["recommendations", workspace] }),
   });
 }
