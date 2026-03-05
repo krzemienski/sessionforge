@@ -3,7 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { Settings, Save, PlayCircle, Copy, Check } from "lucide-react";
+import { Settings, Save, PlayCircle, Copy, Check, Upload, Clock, FileCheck } from "lucide-react";
 
 export default function SettingsPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -17,6 +17,16 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
+  });
+
+  const uploadActivity = useQuery({
+    queryKey: ["workspace", workspace, "activity"],
+    queryFn: async () => {
+      const res = await fetch(`/api/workspace/${workspace}/activity`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!workspace,
   });
 
   const [name, setName] = useState("");
@@ -171,6 +181,80 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-4 mt-6">
+        <div>
+          <h2 className="text-base font-semibold text-sf-text-primary mb-1">Upload History</h2>
+          <p className="text-xs text-sf-text-muted">Recent session file uploads to this workspace.</p>
+        </div>
+
+        {uploadActivity.isLoading ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-12 bg-sf-bg-tertiary rounded" />
+            <div className="h-12 bg-sf-bg-tertiary rounded" />
+          </div>
+        ) : uploadActivity.data && uploadActivity.data.length > 0 ? (
+          <div className="space-y-2">
+            {uploadActivity.data.map((activity: any) => {
+              const metadata = activity.metadata || {};
+              const filesUploaded = metadata.filesUploaded || 0;
+              const sessionsNew = metadata.sessionsNew || 0;
+              const sessionsUpdated = metadata.sessionsUpdated || 0;
+              const hasErrors = metadata.errors && metadata.errors.length > 0;
+              const timestamp = new Date(activity.createdAt).toLocaleString();
+
+              return (
+                <div
+                  key={activity.id}
+                  className="flex items-start gap-3 p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf"
+                >
+                  <div className="flex-shrink-0 mt-0.5">
+                    <Upload size={16} className="text-sf-text-secondary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-sf-text-primary">
+                        {filesUploaded} {filesUploaded === 1 ? "file" : "files"} uploaded
+                      </span>
+                      <span className="text-xs text-sf-text-muted flex items-center gap-1">
+                        <Clock size={12} />
+                        {timestamp}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-sf-text-secondary">
+                      {sessionsNew > 0 && (
+                        <span className="flex items-center gap-1">
+                          <FileCheck size={12} className="text-sf-success" />
+                          {sessionsNew} new
+                        </span>
+                      )}
+                      {sessionsUpdated > 0 && (
+                        <span className="flex items-center gap-1">
+                          <FileCheck size={12} className="text-sf-accent" />
+                          {sessionsUpdated} updated
+                        </span>
+                      )}
+                      {hasErrors && (
+                        <span className="text-sf-error">
+                          {metadata.errors.length} {metadata.errors.length === 1 ? "error" : "errors"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Upload size={32} className="mx-auto text-sf-text-muted mb-2" />
+            <p className="text-sm text-sf-text-muted">No uploads yet</p>
+            <p className="text-xs text-sf-text-muted mt-1">
+              Upload session files from the Sessions page to see them here.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
