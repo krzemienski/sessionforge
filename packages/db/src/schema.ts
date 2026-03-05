@@ -911,6 +911,54 @@ export const ghostPublications = pgTable(
   ]
 );
 
+// ── Medium Integration tables (from 003-medium-publishing-integration) ──
+
+export const mediumIntegrations = pgTable(
+  "medium_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    apiKey: text("api_key").notNull(),
+    username: text("username"),
+    mediumUserId: text("medium_user_id"),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("mediumIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const mediumPublications = pgTable(
+  "medium_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => mediumIntegrations.id, { onDelete: "cascade" }),
+    mediumArticleId: text("medium_article_id").notNull(),
+    mediumUrl: text("medium_url"),
+    publishedAsDraft: boolean("published_as_draft").default(false),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("mediumPublications_workspaceId_idx").on(table.workspaceId),
+    index("mediumPublications_postId_idx").on(table.postId),
+    uniqueIndex("mediumPublications_postId_uidx").on(table.postId),
+  ]
+);
+
 // ── Agent Runs (from 004-error-recovery) ──
 
 export const agentRuns = pgTable(
@@ -1394,6 +1442,8 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   devtoPublications: many(devtoPublications),
   ghostIntegrations: many(ghostIntegrations),
   ghostPublications: many(ghostPublications),
+  mediumIntegrations: many(mediumIntegrations),
+  mediumPublications: many(mediumPublications),
   agentRuns: many(agentRuns),
   writingSkills: many(writingSkills),
   sessionBookmarks: many(sessionBookmarks),
@@ -1455,6 +1505,10 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   devtoPublication: one(devtoPublications, {
     fields: [posts.id],
     references: [devtoPublications.postId],
+  }),
+  mediumPublication: one(mediumPublications, {
+    fields: [posts.id],
+    references: [mediumPublications.postId],
   }),
   writingStyleProfile: one(writingStyleProfiles, {
     fields: [posts.styleProfileUsed],
@@ -1834,6 +1888,35 @@ export const contentTemplatesRelations = relations(
     creator: one(users, {
       fields: [contentTemplates.createdBy],
       references: [users.id],
+    }),
+  })
+);
+
+export const mediumIntegrationsRelations = relations(
+  mediumIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [mediumIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    publications: many(mediumPublications),
+  })
+);
+
+export const mediumPublicationsRelations = relations(
+  mediumPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [mediumPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [mediumPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(mediumIntegrations, {
+      fields: [mediumPublications.integrationId],
+      references: [mediumIntegrations.id],
     }),
   })
 );
