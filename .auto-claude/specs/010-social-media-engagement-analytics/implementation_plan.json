@@ -160,8 +160,9 @@
             "type": "manual",
             "instructions": "Complete OAuth flow end-to-end; verify tokens stored in twitterIntegrations table"
           },
-          "status": "pending",
-          "notes": "Exchange code for access token, fetch user info, store in DB"
+          "status": "completed",
+          "notes": "Created Twitter OAuth callback route at apps/dashboard/src/app/api/integrations/twitter/callback/route.ts. Handles PKCE OAuth 2.0 flow: validates state cookie, exchanges code for tokens, verifies Twitter user via API, stores credentials in twitterIntegrations table with upsert, clears OAuth cookies. TypeScript compiles cleanly.",
+          "updated_at": "2026-03-05T05:39:30.606009+00:00"
         },
         {
           "id": "subtask-2-4",
@@ -180,7 +181,9 @@
             "url": "http://localhost:3000/api/integrations/twitter?workspace=test",
             "expected_status": 200
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Created GET/DELETE route at apps/dashboard/src/app/api/integrations/twitter/route.ts following the devto pattern. GET returns connection status with username, twitterUserId, enabled, lastSyncAt, connectedAt. DELETE removes the integration. Both endpoints verify auth and workspace ownership.",
+          "updated_at": "2026-03-05T05:40:52.690210+00:00"
         },
         {
           "id": "subtask-2-5",
@@ -202,7 +205,9 @@
               "OAuth flow completes"
             ]
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Added Twitter/X integration card below the Dev.to card on the integrations settings page. Uses useQuery to fetch status from GET /api/integrations/twitter, renders connected state with username and connectedAt timestamp, provides OAuth redirect link to /api/integrations/twitter/oauth for connecting, and disconnect button using DELETE /api/integrations/twitter. Wrapped both cards in a space-y-4 div for clean layout.",
+          "updated_at": "2026-03-05T05:54:14.295657+00:00"
         }
       ]
     },
@@ -233,8 +238,9 @@
             "command": "cd apps/dashboard && bun run build",
             "expected": "Build succeeds without errors"
           },
-          "status": "pending",
-          "notes": "Implement: verifyLinkedInAuth, getLinkedInProfile, getPostAnalytics methods"
+          "status": "completed",
+          "notes": "Created apps/dashboard/src/lib/integrations/linkedin.ts following Twitter/devto patterns. Uses native fetch against LinkedIn API v2 with Bearer token auth and X-Restli-Protocol-Version header. Implements: verifyLinkedInAuth (via /userinfo endpoint), getLinkedInUser (alias), getLinkedInPostAnalytics (paginated posts with engagement stats, graceful fallback when analytics endpoint is inaccessible), getLinkedInPostById. Error handling with LinkedInApiError classifying unauthorized/forbidden/not_found/rate_limited/unknown. Build verified successfully.",
+          "updated_at": "2026-03-05T05:56:47.961883+00:00"
         },
         {
           "id": "subtask-3-2",
@@ -254,7 +260,9 @@
             "expected_status": 302,
             "notes": "Should redirect to LinkedIn OAuth"
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Created LinkedIn OAuth initiation route at apps/dashboard/src/app/api/integrations/linkedin/oauth/route.ts following the Twitter OAuth pattern. Uses state cookie for CSRF protection, redirects to LinkedIn authorization URL with openid/profile/email/w_member_social/r_basicprofile scopes.",
+          "updated_at": "2026-03-05T05:57:55.658793+00:00"
         },
         {
           "id": "subtask-3-3",
@@ -271,8 +279,9 @@
             "type": "manual",
             "instructions": "Complete OAuth flow end-to-end; verify tokens stored in linkedinIntegrations table"
           },
-          "status": "pending",
-          "notes": "Exchange code for access token, fetch profile, store in DB"
+          "status": "completed",
+          "notes": "Created LinkedIn OAuth callback route at apps/dashboard/src/app/api/integrations/linkedin/callback/route.ts. Follows Twitter callback pattern: validates state cookie, exchanges code for tokens (using client_secret in body per LinkedIn's OAuth spec, not PKCE), verifies LinkedIn user via verifyLinkedInAuth, and upserts into linkedinIntegrations table. Clears OAuth cookies on success.",
+          "updated_at": "2026-03-05T06:00:43.934070+00:00"
         },
         {
           "id": "subtask-3-4",
@@ -291,7 +300,9 @@
             "url": "http://localhost:3000/api/integrations/linkedin?workspace=test",
             "expected_status": 200
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Created LinkedIn integration management route following the Twitter pattern. GET returns connection status with username/linkedinUserId/enabled/lastSyncAt/connectedAt fields. DELETE removes the integration. Both handlers include auth check, workspace validation, and proper error responses.",
+          "updated_at": "2026-03-05T06:01:58.359945+00:00"
         },
         {
           "id": "subtask-3-5",
@@ -313,7 +324,9 @@
               "OAuth flow completes"
             ]
           },
-          "status": "pending"
+          "status": "completed",
+          "notes": "Added LinkedIn integration card to integrations settings page following the Twitter OAuth pattern. Includes useQuery for status, useMutation for disconnect, connected/not-connected states, OAuth redirect link, and error handling.",
+          "updated_at": "2026-03-05T06:03:16.990523+00:00"
         }
       ]
     },
@@ -348,8 +361,8 @@
             },
             "expected_status": 200
           },
-          "status": "pending",
-          "notes": "For each connected integration, fetch analytics for recent posts and store in socialAnalytics table"
+          "status": "completed",
+          "notes": "Created POST /api/analytics/social/sync route. Fetches tweet analytics from Twitter API and LinkedIn post analytics, matches them against twitterPublications/linkedinPublications to find postIds, upserts into socialAnalytics table, updates lastSyncAt on integrations. Build verified successfully."
         },
         {
           "id": "subtask-4-2",
@@ -759,8 +772,8 @@
   "executionPhase": "coding",
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-03-05T05:36:10.884Z",
+  "updated_at": "2026-03-05T06:03:46.592Z",
   "recoveryNote": "Task recovered from stuck state at 2026-03-05T04:32:16.973Z",
-  "xstateState": "backlog",
-  "last_updated": "2026-03-05T05:31:56.770956+00:00"
+  "xstateState": "coding",
+  "last_updated": "2026-03-05T06:03:16.990526+00:00"
 }
