@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{SITE_DESCRIPTION}}">
+  <meta name="author" content="{{AUTHOR_NAME}}">
+  <meta property="og:title" content="{{PAGE_TITLE}}">
+  <meta property="og:description" content="{{SITE_DESCRIPTION}}">
+  <meta property="og:type" content="{{OG_TYPE}}">
+  <meta property="og:url" content="{{CANONICAL_URL}}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{PAGE_TITLE}}">
+  <meta name="twitter:description" content="{{SITE_DESCRIPTION}}">
+  <link rel="canonical" href="{{CANONICAL_URL}}">
+  <link rel="alternate" type="application/rss+xml" title="{{SITE_TITLE}} RSS Feed" href="{{BASE_URL}}/rss.xml">
+  <link rel="sitemap" type="application/xml" href="{{BASE_URL}}/sitemap.xml">
+  <title>{{PAGE_TITLE}}</title>
+  <link rel="stylesheet" href="{{BASE_URL}}/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <div class="header-inner">
+        <div class="site-brand">
+          <a href="{{BASE_URL}}/" class="brand-link">
+            <span class="brand-name">{{SITE_TITLE}}</span>
+            <span class="brand-tagline">Changelog</span>
+          </a>
+        </div>
+        <nav class="site-nav" aria-label="Primary navigation">
+          <ul class="nav-list">
+            <li><a href="{{BASE_URL}}/" class="nav-link {{NAV_HOME_ACTIVE}}">Releases</a></li>
+            {{#if SHOW_RSS}}<li><a href="{{BASE_URL}}/rss.xml" class="nav-link" aria-label="RSS Feed">RSS</a></li>{{/if SHOW_RSS}}
+          </ul>
+        </nav>
+        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
+          <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content" class="site-main">
+    <div class="container">
+
+      {{#if IS_INDEX}}
+      <section class="releases-section">
+        <header class="releases-header">
+          <h1 class="releases-title">{{COLLECTION_NAME}}</h1>
+          {{#if COLLECTION_DESCRIPTION}}<p class="releases-description">{{COLLECTION_DESCRIPTION}}</p>{{/if COLLECTION_DESCRIPTION}}
+        </header>
+        <ol class="releases-list" reversed>
+          {{POSTS_LIST}}
+        </ol>
+      </section>
+      {{/if IS_INDEX}}
+
+      {{#if IS_POST}}
+      <article class="release-article" itemscope itemtype="https://schema.org/BlogPosting">
+        <header class="release-header">
+          <div class="release-meta">
+            <time class="release-date" datetime="{{POST_DATE_ISO}}" itemprop="datePublished">{{POST_DATE_FORMATTED}}</time>
+            {{#if POST_TAGS}}<ul class="release-tags" aria-label="Change categories">{{POST_TAGS}}</ul>{{/if POST_TAGS}}
+          </div>
+          <h1 class="release-version" itemprop="headline">{{POST_TITLE}}</h1>
+        </header>
+        <div class="release-body prose" itemprop="articleBody">
+          {{POST_CONTENT}}
+        </div>
+        <footer class="release-footer">
+          <a href="{{BASE_URL}}/" class="back-link">&larr; All releases</a>
+        </footer>
+      </article>
+      {{/if IS_POST}}
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-inner">
+        <p class="footer-copy">&copy; {{CURRENT_YEAR}} {{AUTHOR_NAME}}</p>
+        {{#if SHOW_ATTRIBUTION}}
+        <p class="footer-attribution">
+          Published with <a href="https://sessionforge.ai" rel="noopener" target="_blank">SessionForge</a>
+        </p>
+        {{/if SHOW_ATTRIBUTION}}
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="{{BASE_URL}}/script.js" defer></script>
+</body>
+</html>
