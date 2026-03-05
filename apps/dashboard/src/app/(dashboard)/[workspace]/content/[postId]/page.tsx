@@ -4,10 +4,11 @@ import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost } from "@/hooks/use-content";
 import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, Send, RefreshCw } from "lucide-react";
+import { ArrowLeft, Save, Send, RefreshCw, Calendar, Clock } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
+import { ScheduleModal } from "@/components/scheduling/schedule-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
 import { SourceCard } from "@/components/content/source-card";
@@ -32,6 +33,7 @@ export default function ContentEditorPage() {
   const [badgeEnabled, setBadgeEnabled] = useState(false);
   const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -77,6 +79,8 @@ export default function ContentEditorPage() {
   const wordCount = markdown.split(/\s+/).filter(Boolean).length;
   const isDevtoConnected = devtoIntegration.data?.connected && devtoIntegration.data?.enabled;
   const isAlreadyPublished = devtoPublication.data?.published === true;
+  const isScheduled = post.data?.status === "scheduled";
+  const isDraft = post.data?.status === "draft";
 
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
@@ -97,6 +101,15 @@ export default function ContentEditorPage() {
                 <Send size={14} />
               )}
               {isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}
+            </button>
+          )}
+          {(isDraft || isScheduled) && (
+            <button
+              onClick={() => setIsScheduleModalOpen(true)}
+              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors"
+            >
+              <Calendar size={14} />
+              {isScheduled ? "Reschedule" : "Schedule"}
             </button>
           )}
           <select
@@ -127,6 +140,25 @@ export default function ContentEditorPage() {
         className="bg-transparent text-2xl font-bold font-display text-sf-text-primary border-none outline-none mb-4 placeholder:text-sf-text-muted"
         placeholder="Post title..."
       />
+
+      {isScheduled && post.data?.scheduledFor && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-sf-bg-tertiary border border-sf-border rounded-sf w-fit">
+          <Clock size={14} className="text-sf-accent" />
+          <span className="text-sm text-sf-text-secondary">
+            Scheduled for{" "}
+            <span className="font-medium text-sf-text-primary">
+              {new Date(post.data.scheduledFor).toLocaleString(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: post.data.timezone || undefined,
+              })}
+            </span>
+            {post.data.timezone && (
+              <span className="text-sf-text-muted ml-1">({post.data.timezone})</span>
+            )}
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 flex gap-4 min-h-0">
         <div className="flex-1 flex flex-col min-h-0">
@@ -178,6 +210,21 @@ export default function ContentEditorPage() {
         onClose={() => setIsDevtoModalOpen(false)}
         isAlreadyPublished={isAlreadyPublished}
         existingPublicationUrl={devtoPublication.data?.devtoUrl}
+      />
+
+      <ScheduleModal
+        postId={postId}
+        workspace={workspace}
+        isOpen={isScheduleModalOpen}
+        onClose={() => setIsScheduleModalOpen(false)}
+        existingSchedule={
+          isScheduled && post.data?.scheduledFor && post.data?.timezone
+            ? {
+                scheduledFor: post.data.scheduledFor,
+                timezone: post.data.timezone,
+              }
+            : undefined
+        }
       />
     </div>
   );
