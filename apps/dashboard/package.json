@@ -31,12 +31,17 @@
   "devDependencies": {
     "@sessionforge/tsconfig": "workspace:*",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.2",
     "@types/jszip": "^3.4.1",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "happy-dom": "^15.0.0",
+    "msw": "^2.7.0",
     "postcss": "^8",
     "tailwindcss": "^4",
-    "typescript": "^5.7"
+    "typescript": "^5.7",
+    "vitest": "^2.0.0"
   }
 }
