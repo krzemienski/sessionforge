@@ -124,6 +124,39 @@ This script specifically tests rescheduling and cancellation flows:
 
 Includes database verification (if DATABASE_URL is set) for comprehensive testing.
 
+### Error Handling & Retry Test
+
+```bash
+# Make script executable
+chmod +x tests/error-handling-test.sh
+
+# Basic run
+export SESSION_TOKEN="your-session-token"
+./tests/error-handling-test.sh
+
+# Full test with database verification and Dev.to reconnect
+export SESSION_TOKEN="your-session-token"
+export DATABASE_URL="postgresql://..."
+export DEVTO_API_KEY="your-devto-api-key"
+./tests/error-handling-test.sh
+```
+
+This script tests error handling when the Dev.to integration is disabled:
+1. Check Dev.to integration is connected
+2. Create draft post
+3. Schedule post for future time
+4. Disconnect Dev.to integration (simulate integration failure)
+5. Simulate/document QStash webhook behavior with disconnected integration
+6. Verify error captured in scheduledPublications.error
+7. Verify QStash retry behavior (HTTP 500 triggers retries)
+8. Reconnect Dev.to integration
+9. Verify retry would succeed with integration reconnected
+
+Optional environment variables:
+- `DATABASE_URL` - enables database verification and automatic retry reset
+- `DEVTO_API_KEY` - enables automatic Dev.to reconnection
+- `QSTASH_CURRENT_SIGNING_KEY` - enables webhook simulation
+
 ### Database Verification Helper
 
 ```bash
