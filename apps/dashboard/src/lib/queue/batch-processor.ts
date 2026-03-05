@@ -22,6 +22,31 @@ import { getJob, updateJobProgress, completeJob, failJob } from "./job-tracker";
 
 const client = new Anthropic();
 
+/**
+ * Records usage for a single batch operation item toward workspace plan limits.
+ *
+ * TODO: Wire this to the usage metering system when one is implemented.
+ * Each item in a batch operation should count individually toward the workspace's
+ * plan limits (e.g., AI insight extractions per month, content generations per month).
+ * The metering system should:
+ *   1. Look up the workspace's active subscription/plan
+ *   2. Increment the usage counter for the given operation type
+ *   3. Throw or return false if the workspace has exceeded its plan limits
+ *
+ * @param _workspaceId - The workspace to record usage for.
+ * @param _operationType - The type of operation being metered (e.g. 'extract_insights', 'generate_content').
+ * @param _itemCount - The number of items to count toward usage (defaults to 1).
+ */
+async function recordBatchUsage(
+  _workspaceId: string,
+  _operationType: "extract_insights" | "generate_content" | "batch_archive" | "batch_delete",
+  _itemCount = 1
+): Promise<void> {
+  // TODO: Implement usage metering integration.
+  // Example integration point:
+  //   await usageMeter.increment(workspaceId, operationType, itemCount);
+}
+
 /** Maximum number of concurrent Anthropic API calls allowed at once. */
 const MAX_CONCURRENT_AI_CALLS = 5;
 
@@ -233,6 +258,7 @@ export async function processExtractInsights(
           try {
             await extractInsight({ workspaceId, sessionId });
             successCount++;
+            await recordBatchUsage(workspaceId, "extract_insights");
           } catch {
             errorCount++;
           }
@@ -290,6 +316,7 @@ export async function processGenerateContent(
           try {
             await generateContentFromInsight(workspaceId, insightId, contentType);
             successCount++;
+            await recordBatchUsage(workspaceId, "generate_content");
           } catch {
             errorCount++;
           }
@@ -355,6 +382,8 @@ export async function processPostBatch(
             .where(and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId)));
         }
         successCount++;
+        const usageType = operation === "delete" ? "batch_delete" : "batch_archive";
+        await recordBatchUsage(workspaceId, usageType);
       } catch {
         errorCount++;
       }
