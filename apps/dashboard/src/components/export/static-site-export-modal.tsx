@@ -3,26 +3,9 @@
 import { useState, useEffect } from "react";
 import { Download, X, RefreshCw, Check, Globe, Palette } from "lucide-react";
 import { useExportCollection } from "@/hooks/use-collections";
+import { ThemeSelector, type ExportThemeId } from "./theme-selector";
 
-const THEMES = [
-  {
-    id: "minimal-portfolio",
-    label: "Minimal Portfolio",
-    description: "Clean, developer-focused portfolio with dark mode support",
-  },
-  {
-    id: "technical-blog",
-    label: "Technical Blog",
-    description: "Reading-optimized layout with table of contents and syntax highlighting",
-  },
-  {
-    id: "changelog",
-    label: "Changelog",
-    description: "Timeline-based release notes with version grouping and badges",
-  },
-] as const;
-
-type ThemeId = (typeof THEMES)[number]["id"];
+type ThemeId = ExportThemeId;
 
 interface StaticSiteExportModalProps {
   collectionId: string;
@@ -143,39 +126,7 @@ export function StaticSiteExportModal({
                 <Palette size={13} />
                 Theme
               </label>
-              <div className="space-y-2">
-                {THEMES.map((theme) => (
-                  <button
-                    key={theme.id}
-                    onClick={() => setSelectedTheme(theme.id)}
-                    className={`w-full flex items-start gap-3 text-left px-3 py-2.5 rounded-sf border transition-colors ${
-                      selectedTheme === theme.id
-                        ? "border-sf-accent bg-sf-accent/5"
-                        : "border-sf-border bg-sf-bg-tertiary hover:border-sf-border-focus"
-                    }`}
-                  >
-                    <div
-                      className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                        selectedTheme === theme.id
-                          ? "border-sf-accent bg-sf-accent"
-                          : "border-sf-border-focus"
-                      }`}
-                    >
-                      {selectedTheme === theme.id && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-sf-bg-primary" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-sf-text-primary">
-                        {theme.label}
-                      </p>
-                      <p className="text-xs text-sf-text-muted mt-0.5">
-                        {theme.description}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <ThemeSelector value={selectedTheme} onChange={setSelectedTheme} />
             </div>
 
             {/* Custom domain */}
