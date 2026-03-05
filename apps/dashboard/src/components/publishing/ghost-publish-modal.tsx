@@ -73,12 +73,10 @@ export function GhostPublishModal({
 
     try {
       if (isAlreadyPublished) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await update.mutateAsync(payload as any);
+        await update.mutateAsync(payload as Parameters<typeof update.mutateAsync>[0]);
         setSuccessUrl(existingPublicationUrl ?? null);
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = await publish.mutateAsync(payload as any);
+        const result = await publish.mutateAsync(payload as Parameters<typeof publish.mutateAsync>[0]);
         setSuccessUrl(result.ghostUrl ?? null);
       }
     } catch (err) {
