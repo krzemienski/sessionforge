@@ -4,6 +4,20 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentRecommendations, recommendationFeedback } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
+import { createPost } from "@/lib/ai/tools/post-manager";
+import type { contentTypeEnum } from "@sessionforge/db";
+
+type ContentType = (typeof contentTypeEnum.enumValues)[number];
+
+const VALID_CONTENT_TYPES = new Set<string>([
+  "blog_post",
+  "twitter_thread",
+  "linkedin_post",
+  "changelog",
+  "newsletter",
+  "devto_post",
+  "custom",
+]);
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +96,47 @@ export async function POST(
       action: normalizedAction,
     });
 
-    return NextResponse.json({ success: true, action: normalizedAction });
+    // When accepting, create a draft post from the recommendation so the user
+    // has a starting point to write from (satisfies the "creates a draft post"
+    // acceptance criterion).
+    let draftPostId: string | undefined;
+    if (normalizedAction === "accepted") {
+      const rawContentType = recommendation.suggestedContentType;
+      const contentType: ContentType =
+        rawContentType && VALID_CONTENT_TYPES.has(rawContentType)
+          ? (rawContentType as ContentType)
+          : "blog_post";
+
+      const placeholderMarkdown = [
+        `# ${recommendation.title}`,
+        "",
+        `> **AI Recommendation:** ${recommendation.reasoning}`,
+        "",
+        "<!-- Start writing your post here. Replace this placeholder with your content. -->",
+      ].join("\n");
+
+      const draftPost = await createPost({
+        workspaceId: recommendation.workspaceId,
+        title: recommendation.title,
+        markdown: placeholderMarkdown,
+        contentType,
+        insightId: recommendation.insightId ?? undefined,
+        status: "draft",
+        sourceMetadata: {
+          sessionIds: [],
+          insightIds: recommendation.insightId ? [recommendation.insightId] : [],
+          generatedBy: "manual",
+        },
+      });
+
+      draftPostId = draftPost?.id;
+    }
+
+    return NextResponse.json({
+      success: true,
+      action: normalizedAction,
+      ...(draftPostId ? { draftPostId } : {}),
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Feedback recording failed" },

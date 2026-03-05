@@ -63,7 +63,7 @@ export async function GET(request: Request) {
     };
 
     publishedPosts.forEach((post) => {
-      const postDate = new Date(post.createdAt);
+      const postDate = new Date(post.createdAt ?? Date.now());
       const weekKey = getWeekKey(postDate);
       const dayOfWeek = postDate.getDay().toString();
 

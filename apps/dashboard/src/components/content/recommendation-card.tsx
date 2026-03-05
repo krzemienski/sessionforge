@@ -166,7 +166,7 @@ export function RecommendationCard({
       ) : (
         <p className="flex items-center gap-1.5 text-xs text-green-400">
           <Check size={12} />
-          Accepted — added to your calendar
+          Accepted — draft post created in your calendar
         </p>
       )}
     </div>

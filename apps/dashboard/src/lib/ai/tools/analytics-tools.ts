@@ -82,7 +82,7 @@ export async function getPublishingCadence(
   };
 
   publishedPosts.forEach((post) => {
-    const postDate = new Date(post.createdAt);
+    const postDate = new Date(post.createdAt ?? Date.now());
     const weekKey = getWeekKey(postDate);
     const dayOfWeek = postDate.getDay().toString();
 
@@ -129,7 +129,7 @@ export async function getCadenceGaps(
   const weeklyPostCount: Record<string, number> = {};
 
   publishedPosts.forEach((post) => {
-    const postDate = new Date(post.createdAt);
+    const postDate = new Date(post.createdAt ?? Date.now());
     const weekKey = getWeekKey(postDate);
     weeklyPostCount[weekKey] = (weeklyPostCount[weekKey] || 0) + 1;
   });
