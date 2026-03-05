@@ -145,3 +145,70 @@ export async function publishToMediumPublication(
 
   return response.data;
 }
+
+export interface OAuthConfig {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}
+
+export function getOAuthUrl(config: OAuthConfig, state: string): string {
+  const params = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: config.redirectUri,
+    response_type: "code",
+    scope: "basicProfile,publishPost",
+    state,
+  });
+
+  return `https://medium.com/m/oauth/authorize?${params.toString()}`;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_at: number;
+  scope: string;
+}
+
+export async function exchangeCodeForToken(
+  config: OAuthConfig,
+  code: string
+): Promise<TokenResponse> {
+  const response = await fetch("https://api.medium.com/v1/tokens", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Accept": "application/json",
+    },
+    body: new URLSearchParams({
+      code,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      grant_type: "authorization_code",
+      redirect_uri: config.redirectUri,
+    }).toString(),
+  });
+
+  if (!response.ok) {
+    const code = classifyError(response.status);
+    let message: string;
+
+    switch (code) {
+      case "validation_error":
+        message = "Invalid authorization code or OAuth configuration.";
+        break;
+      case "forbidden":
+        message = "OAuth access denied. Please check your Medium app credentials.";
+        break;
+      default:
+        message = `Medium OAuth error (${response.status})`;
+    }
+
+    throw new MediumApiError(message, response.status, code);
+  }
+
+  const data = await response.json();
+  return data as TokenResponse;
+}
