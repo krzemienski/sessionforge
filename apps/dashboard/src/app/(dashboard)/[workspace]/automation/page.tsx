@@ -81,9 +81,32 @@ export default function AutomationPage() {
               <option value="blog_post">Blog Post</option>
               <option value="twitter_thread">Twitter Thread</option>
               <option value="changelog">Changelog</option>
+              <option value="social_analytics_sync">Social Analytics Sync</option>
             </select>
           </div>
-          {triggerType === "scheduled" && (
+          {triggerType === "scheduled" && contentType === "social_analytics_sync" && (
+            <div className="space-y-2">
+              <p className="text-xs text-sf-text-secondary">Sync schedule preset</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCron("0 * * * *")}
+                  className={cn("px-3 py-1.5 rounded-sf text-xs font-medium border transition-colors", cron === "0 * * * *" ? "bg-sf-accent text-sf-bg-primary border-sf-accent" : "bg-sf-bg-tertiary text-sf-text-secondary border-sf-border hover:border-sf-accent")}
+                >
+                  Hourly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCron("0 0 * * *")}
+                  className={cn("px-3 py-1.5 rounded-sf text-xs font-medium border transition-colors", cron === "0 0 * * *" ? "bg-sf-accent text-sf-bg-primary border-sf-accent" : "bg-sf-bg-tertiary text-sf-text-secondary border-sf-border hover:border-sf-accent")}
+                >
+                  Daily
+                </button>
+              </div>
+              <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="Cron expression" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code" />
+            </div>
+          )}
+          {triggerType === "scheduled" && contentType !== "social_analytics_sync" && (
             <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="Cron expression" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code" />
           )}
           {triggerType === "file_watch" && (
