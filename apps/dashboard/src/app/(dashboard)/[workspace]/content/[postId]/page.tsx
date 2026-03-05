@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { usePost, useUpdatePost, useSeoData } from "@/hooks/use-content";
 import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
+import { useGhostIntegration, useGhostPublication } from "@/hooks/use-ghost";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -15,6 +16,7 @@ import { HashnodePublishModal } from "@/components/publish/hashnode-publish-moda
 import { cn } from "@/lib/utils";
 import { computeSeoScore } from "@/lib/seo";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
+import { GhostPublishModal } from "@/components/publishing/ghost-publish-modal";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
@@ -82,6 +84,8 @@ export default function ContentEditorPage() {
   const seoData = useSeoData(postId);
   const devtoIntegration = useDevtoIntegration(workspace);
   const devtoPublication = useDevtoPublication(postId, workspace);
+  const ghostIntegration = useGhostIntegration(workspace);
+  const ghostPublication = useGhostPublication(postId, workspace);
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
@@ -96,6 +100,7 @@ export default function ContentEditorPage() {
   const [badgeEnabled, setBadgeEnabled] = useState(false);
   const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
+  const [isGhostModalOpen, setIsGhostModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const initializedRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -295,6 +300,8 @@ export default function ContentEditorPage() {
   const isBlogPost = post.data?.contentType === "blog_post";
   const isDevtoConnected = devtoIntegration.data?.connected && devtoIntegration.data?.enabled;
   const isAlreadyPublished = devtoPublication.data?.published === true;
+  const isGhostConnected = ghostIntegration.data?.connected && ghostIntegration.data?.enabled;
+  const isAlreadyPublishedOnGhost = ghostPublication.data?.published === true;
 
   const viewModeButtons: { mode: ViewMode; icon: React.ReactNode; label: string }[] = [
     { mode: "edit", icon: <Pencil size={14} />, label: "Edit" },
@@ -339,6 +346,20 @@ export default function ContentEditorPage() {
                 <Send size={14} />
               )}
               {isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}
+            </button>
+          )}
+          {isGhostConnected && (
+            <button
+              onClick={() => setIsGhostModalOpen(true)}
+              disabled={ghostPublication.isLoading}
+              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+            >
+              {ghostPublication.isLoading ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+              {isAlreadyPublishedOnGhost ? "Update on Ghost" : "Publish to Ghost"}
             </button>
           )}
 
@@ -611,6 +632,14 @@ export default function ContentEditorPage() {
         onClose={() => setIsDevtoModalOpen(false)}
         isAlreadyPublished={isAlreadyPublished}
         existingPublicationUrl={devtoPublication.data?.devtoUrl}
+      />
+      <GhostPublishModal
+        postId={postId}
+        workspace={workspace}
+        isOpen={isGhostModalOpen}
+        onClose={() => setIsGhostModalOpen(false)}
+        isAlreadyPublished={isAlreadyPublishedOnGhost}
+        existingPublicationUrl={ghostPublication.data?.ghostUrl}
       />
     </div>
   );
