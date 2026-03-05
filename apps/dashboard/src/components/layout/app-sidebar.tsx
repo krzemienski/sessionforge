@@ -19,6 +19,8 @@ import {
   Globe,
   LogOut,
   Search,
+  List,
+  Folders,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -29,6 +31,8 @@ const mainNav = [
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: CalendarDays, href: "/content" },
+  { label: "Series", icon: List, href: "/series" },
+  { label: "Collections", icon: Folders, href: "/collections" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Automation", icon: Zap, href: "/automation" },
 ];
