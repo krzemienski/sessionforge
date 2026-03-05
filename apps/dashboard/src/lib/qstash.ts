@@ -52,6 +52,29 @@ export async function createFileWatchSchedule(
   return scheduleId;
 }
 
+export async function createPublishSchedule(
+  postId: string,
+  scheduledFor: Date
+): Promise<string> {
+  const destination = `${process.env.NEXT_PUBLIC_APP_URL}/api/schedule/publish`;
+
+  // Calculate delay in seconds from now
+  const delaySeconds = Math.floor((scheduledFor.getTime() - Date.now()) / 1000);
+
+  if (delaySeconds <= 0) {
+    throw new Error("Scheduled time must be in the future");
+  }
+
+  const { scheduleId } = await client.schedules.create({
+    destination,
+    body: JSON.stringify({ postId }),
+    headers: { "Content-Type": "application/json" },
+    delay: delaySeconds,
+  });
+
+  return scheduleId;
+}
+
 export async function deleteTriggerSchedule(scheduleId: string): Promise<void> {
   await client.schedules.delete(scheduleId);
 }
