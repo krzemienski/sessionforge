@@ -102,23 +102,55 @@ export async function POST(
     );
   }
 
-  // Verify the template exists
+  // Verify the template exists and belongs to this workspace
   const templateRows = await db
     .select()
     .from(contentTemplates)
-    .where(eq(contentTemplates.id, templateId))
+    .where(
+      and(
+        eq(contentTemplates.id, templateId),
+        eq(contentTemplates.workspaceId, workspace.id)
+      )
+    )
     .limit(1);
 
   if (!templateRows.length) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
   }
 
-  // Note: Full implementation of setting workspace defaults will be completed in subtask-6-1
-  // For now, return success with the template info
+  const template = templateRows[0];
+
+  // Verify the template's content type matches the requested content type
+  if (template.contentType !== contentType) {
+    return NextResponse.json(
+      { error: "Template content type does not match requested content type" },
+      { status: 400 }
+    );
+  }
+
+  // Clear any existing workspace_default for this content type
+  // There should only be one default per content type
+  await db
+    .update(contentTemplates)
+    .set({ templateType: "custom" })
+    .where(
+      and(
+        eq(contentTemplates.workspaceId, workspace.id),
+        eq(contentTemplates.contentType, contentType),
+        eq(contentTemplates.templateType, "workspace_default")
+      )
+    );
+
+  // Set the new template as workspace_default
+  await db
+    .update(contentTemplates)
+    .set({ templateType: "workspace_default" })
+    .where(eq(contentTemplates.id, templateId));
+
   return NextResponse.json({
     success: true,
     contentType,
-    template: templateRows[0],
+    template: { ...template, templateType: "workspace_default" },
     message: "Template default set successfully"
   });
 }
