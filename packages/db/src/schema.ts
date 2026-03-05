@@ -136,6 +136,11 @@ export const usageEventTypeEnum = pgEnum("usage_event_type", [
   "content_generation",
 ]);
 
+export const feedbackActionEnum = pgEnum("feedback_action", [
+  "accepted",
+  "dismissed",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -156,8 +161,6 @@ export interface SeoMetadata {
   suggestedKeywords?: string[] | null;
   generatedAt?: string | null;
 }
-
-
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -995,6 +998,28 @@ export const contentRecommendations = pgTable(
   ]
 );
 
+export const recommendationFeedback = pgTable(
+  "recommendation_feedback",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    recommendationId: text("recommendation_id")
+      .notNull()
+      .references(() => contentRecommendations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    action: feedbackActionEnum("action").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("recommendationFeedback_recommendationId_idx").on(
+      table.recommendationId
+    ),
+    index("recommendationFeedback_userId_idx").on(table.userId),
+    index("recommendationFeedback_action_idx").on(table.action),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1010,6 +1035,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   subscriptions: many(subscriptions),
   usageEvents: many(usageEvents),
   usageMonthlySummary: many(usageMonthlySummary),
+  recommendationFeedback: many(recommendationFeedback),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -1394,7 +1420,7 @@ export const postConversationsRelations = relations(postConversations, ({ one })
 
 export const contentRecommendationsRelations = relations(
   contentRecommendations,
-  ({ one }) => ({
+  ({ one, many }) => ({
     workspace: one(workspaces, {
       fields: [contentRecommendations.workspaceId],
       references: [workspaces.id],
@@ -1402,6 +1428,21 @@ export const contentRecommendationsRelations = relations(
     insight: one(insights, {
       fields: [contentRecommendations.insightId],
       references: [insights.id],
+    }),
+    feedback: many(recommendationFeedback),
+  })
+);
+
+export const recommendationFeedbackRelations = relations(
+  recommendationFeedback,
+  ({ one }) => ({
+    recommendation: one(contentRecommendations, {
+      fields: [recommendationFeedback.recommendationId],
+      references: [contentRecommendations.id],
+    }),
+    user: one(users, {
+      fields: [recommendationFeedback.userId],
+      references: [users.id],
     }),
   })
 );
