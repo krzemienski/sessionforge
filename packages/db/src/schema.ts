@@ -925,6 +925,41 @@ export const contentAssets = pgTable("content_assets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ── Engagement Metrics table (from 008-ai-powered-content-calendar-intelligence) ──
+
+export const engagementMetrics = pgTable(
+  "engagement_metrics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    publishedAt: timestamp("published_at"),
+    views: integer("views").default(0),
+    clicks: integer("clicks").default(0),
+    shares: integer("shares").default(0),
+    likes: integer("likes").default(0),
+    comments: integer("comments").default(0),
+    engagementRate: real("engagement_rate").default(0),
+    platformSpecificMetrics: jsonb("platform_specific_metrics").$type<{
+      platform?: string;
+      metrics?: Record<string, number | string>;
+    }>(),
+    lastSyncedAt: timestamp("last_synced_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("engagementMetrics_workspaceId_idx").on(table.workspaceId),
+    index("engagementMetrics_postId_idx").on(table.postId),
+    index("engagementMetrics_publishedAt_idx").on(table.publishedAt),
+    uniqueIndex("engagementMetrics_postId_uidx").on(table.postId),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -984,6 +1019,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   automationRuns: many(automationRuns),
   usageEvents: many(usageEvents),
   postConversations: many(postConversations),
+  engagementMetrics: many(engagementMetrics),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1071,6 +1107,10 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   automationRuns: many(automationRuns),
   revisions: many(postRevisions),
   conversations: many(postConversations),
+  engagementMetrics: one(engagementMetrics, {
+    fields: [posts.id],
+    references: [engagementMetrics.postId],
+  }),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -1285,6 +1325,20 @@ export const automationRunsRelations = relations(
     }),
     post: one(posts, {
       fields: [automationRuns.postId],
+      references: [posts.id],
+    }),
+  })
+);
+
+export const engagementMetricsRelations = relations(
+  engagementMetrics,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [engagementMetrics.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [engagementMetrics.postId],
       references: [posts.id],
     }),
   })
