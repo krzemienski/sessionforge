@@ -85,6 +85,58 @@ The script will guide you through two testing modes:
 1. **Wait mode**: Schedules post for 2 minutes, waits, and verifies automatic execution
 2. **Immediate mode**: Simulates QStash webhook immediately for faster testing
 
+### Quick API Test
+
+```bash
+# Make script executable
+chmod +x tests/quick-api-test.sh
+
+# Run the test
+./tests/quick-api-test.sh
+```
+
+This script tests all API endpoints without waiting:
+- Create draft post
+- Schedule post
+- List scheduled posts
+- Reschedule post
+- Cancel scheduled post
+- Verify draft status
+
+### Reschedule & Cancel Test
+
+```bash
+# Make script executable
+chmod +x tests/reschedule-cancel-test.sh
+
+# Run the test
+./tests/reschedule-cancel-test.sh
+```
+
+This script specifically tests rescheduling and cancellation flows:
+1. Schedule a post for future time
+2. Reschedule to different time
+3. Verify old QStash schedule deleted
+4. Verify new QStash schedule created
+5. Cancel the scheduled post
+6. Verify QStash schedule deleted
+7. Verify post reverted to 'draft' status
+
+Includes database verification (if DATABASE_URL is set) for comprehensive testing.
+
+### Database Verification Helper
+
+```bash
+# Make script executable
+chmod +x tests/verify-database.sh
+
+# Check specific post
+./tests/verify-database.sh POST_ID
+
+# Check all scheduled posts
+./tests/verify-database.sh
+```
+
 ### Manual UI Testing
 
 Follow these steps to verify the UI components:
