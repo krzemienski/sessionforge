@@ -124,7 +124,7 @@ export function MarkdownEditor({
       <div className="flex-1 flex flex-col bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden">
         <RichTextPlugin
           contentEditable={
-            <ContentEditable className="flex-1 p-4 text-sm text-sf-text-primary outline-none overflow-y-auto min-h-0" />
+            <ContentEditable className="flex-1 p-6 md:p-4 text-sm text-sf-text-primary outline-none overflow-y-auto min-h-[200px] sf-editor-content" />
           }
           ErrorBoundary={LexicalErrorBoundary}
         />
