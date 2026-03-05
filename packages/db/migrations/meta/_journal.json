@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1772474686496,
-      "tag": "0000_brave_blink",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1772476429318,
-      "tag": "0001_slippery_dreadnoughts",
+      "when": 1772674233752,
+      "tag": "0000_demonic_cassandra_nova",
       "breakpoints": true
     },
     {
