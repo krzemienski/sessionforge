@@ -1,0 +1,699 @@
+{
+  "feature": "Batch Operations for Sessions & Insights",
+  "workflow_type": "feature",
+  "workflow_rationale": "This is a multi-service feature that adds batch operation capabilities across the frontend UI, API layer, database schema, and background job processing. It follows the FEATURE workflow: Database → Backend API → Worker/Queue → Frontend UI → Integration.",
+  "phases": [
+    {
+      "id": "phase-1-database",
+      "name": "Database Schema for Batch Jobs",
+      "type": "implementation",
+      "description": "Add batch_jobs table to track background operations with status, progress, and result metadata",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add batch_jobs table schema to Drizzle",
+          "service": "database",
+          "files_to_modify": [],
+          "files_to_create": [
+            "packages/db/src/schema.ts"
+          ],
+          "patterns_from": [
+            "packages/db/src/schema.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd packages/db && bunx drizzle-kit generate",
+            "expected": "Migration files generated successfully"
+          },
+          "status": "completed",
+          "notes": "Added batchJobTypeEnum, batchJobStatusEnum, and batchJobs table to schema.ts. Also resolved a pre-existing merge conflict in 0000_snapshot.json. Migration 0002_cuddly_unus.sql generated successfully with correct CREATE TABLE, enums, indexes, and foreign keys.",
+          "updated_at": "2026-03-05T04:36:55.350309+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Generate and apply database migration",
+          "service": "database",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd packages/db && bunx drizzle-kit push",
+            "expected": "Migration applied successfully"
+          },
+          "status": "completed",
+          "notes": "Applied migration via psql. Created batch_job_status enum ('pending','processing','completed','failed','cancelled'), batch_job_type enum ('extract_insights','generate_content','batch_archive','batch_delete'), and batch_jobs table with all columns, indexes, and foreign keys. drizzle-kit push has interactive prompts in this environment so SQL was applied directly.",
+          "updated_at": "2026-03-05T04:50:00.000000+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-backend-api",
+      "name": "Batch Operation API Endpoints",
+      "type": "implementation",
+      "description": "Create API routes for batch operations on sessions, insights, and posts with authentication and workspace access control",
+      "depends_on": [
+        "phase-1-database"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create batch extract insights API endpoint",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/sessions/batch/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/insights/extract/route.ts",
+            "apps/dashboard/src/app/api/insights/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "POST",
+            "url": "http://localhost:3000/api/sessions/batch",
+            "body": {
+              "operation": "extract_insights",
+              "sessionIds": [
+                "test-id"
+              ],
+              "workspaceSlug": "test"
+            },
+            "expected_status": 202
+          },
+          "status": "pending",
+          "notes": "POST /api/sessions/batch - Accept operation type and sessionIds array. Create batch_job record, enqueue to QStash, return jobId. Operations: extract_insights."
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create batch generate content API endpoint",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/insights/batch/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/insights/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "POST",
+            "url": "http://localhost:3000/api/insights/batch",
+            "body": {
+              "operation": "generate_content",
+              "insightIds": [
+                "test-id"
+              ],
+              "contentType": "blog_post",
+              "workspaceSlug": "test"
+            },
+            "expected_status": 202
+          },
+          "status": "pending",
+          "notes": "POST /api/insights/batch - Accept operation type, insightIds array, and content generation params. Create batch_job, enqueue to QStash, return jobId."
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Create batch post operations API endpoint",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/posts/batch/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/insights/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "POST",
+            "url": "http://localhost:3000/api/posts/batch",
+            "body": {
+              "operation": "archive",
+              "postIds": [
+                "test-id"
+              ],
+              "workspaceSlug": "test"
+            },
+            "expected_status": 202
+          },
+          "status": "pending",
+          "notes": "POST /api/posts/batch - Accept operation (archive|delete|publish|unpublish) and postIds array. Create batch_job for non-AI operations, execute directly for simple operations like status changes."
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Create job status API endpoint",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/jobs/[jobId]/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/sessions/[id]/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "GET",
+            "url": "http://localhost:3000/api/jobs/test-job-id",
+            "expected_status": 200
+          },
+          "status": "pending",
+          "notes": "GET /api/jobs/[jobId] - Return job status, progress (processedItems/totalItems), successCount, errorCount. DELETE /api/jobs/[jobId] - Cancel job (update status to cancelled)."
+        }
+      ]
+    },
+    {
+      "id": "phase-3-background-worker",
+      "name": "QStash Background Job Processor",
+      "type": "implementation",
+      "description": "Implement QStash-based background job processor for long-running batch operations with progress tracking",
+      "depends_on": [
+        "phase-2-backend-api"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create job tracker utility",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/lib/queue/job-tracker.ts"
+          ],
+          "patterns_from": [
+            "packages/db/src/schema.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd apps/dashboard && bun run build",
+            "expected": "Build succeeds without errors"
+          },
+          "status": "pending",
+          "notes": "Utility functions: createJob(), updateJobProgress(), completeJob(), failJob(), cancelJob(). Uses Drizzle to update batch_jobs table."
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Create batch processor with QStash integration",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/lib/queue/batch-processor.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/lib/ai/agents/insight-extractor.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd apps/dashboard && bun run build",
+            "expected": "Build succeeds without errors"
+          },
+          "status": "pending",
+          "notes": "Main processor: processExtractInsights(), processGenerateContent(), processPostBatch(). Each function processes items one-by-one, updates progress, respects rate limits, handles errors. Uses QStash for job queue."
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Create QStash webhook handler for job execution",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/app/api/jobs/process/route.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/app/api/sessions/scan/route.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "POST",
+            "url": "http://localhost:3000/api/jobs/process",
+            "body": {
+              "jobId": "test-job-id"
+            },
+            "expected_status": 200
+          },
+          "status": "pending",
+          "notes": "POST /api/jobs/process - QStash webhook endpoint. Receives jobId, loads job from DB, calls appropriate batch processor function, handles retries."
+        }
+      ]
+    },
+    {
+      "id": "phase-4-frontend-hooks",
+      "name": "React Hooks for Batch Operations",
+      "type": "implementation",
+      "description": "Create reusable React Query hooks for triggering batch operations and polling job progress",
+      "depends_on": [
+        "phase-2-backend-api"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create useBatchOperations hook",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/hooks/use-batch-operations.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/hooks/use-sessions.ts",
+            "apps/dashboard/src/hooks/use-insights.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd apps/dashboard && bun run build",
+            "expected": "Build succeeds without errors"
+          },
+          "status": "pending",
+          "notes": "Exports: useExtractInsightsBatch(workspace), useGenerateContentBatch(workspace), useArchivePostsBatch(workspace), useDeletePostsBatch(workspace). Each returns mutation function that calls batch API and returns jobId."
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Create useJobProgress hook",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/hooks/use-job-progress.ts"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/hooks/use-sessions.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd apps/dashboard && bun run build",
+            "expected": "Build succeeds without errors"
+          },
+          "status": "pending",
+          "notes": "useJobProgress(jobId) - Polls /api/jobs/[jobId] every 2 seconds while job is pending/processing. Returns job status, progress percentage, estimated time remaining. Stops polling when job completes/fails/cancelled."
+        }
+      ]
+    },
+    {
+      "id": "phase-5-frontend-ui",
+      "name": "Multi-Select UI Components",
+      "type": "implementation",
+      "description": "Add multi-select checkboxes, shift-click range selection, and batch operation toolbars to sessions, insights, and posts pages",
+      "depends_on": [
+        "phase-4-frontend-hooks"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Create multi-select toolbar component",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/components/batch/multi-select-toolbar.tsx"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/components/content/export-dropdown.tsx"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd apps/dashboard && bun run build",
+            "expected": "Build succeeds without errors"
+          },
+          "status": "pending",
+          "notes": "Toolbar component that appears when items are selected. Shows: '5 selected', 'Select All', 'Clear Selection', action buttons (operation-specific). Accepts props: selectedCount, totalCount, onSelectAll, onClearSelection, children (action buttons)."
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Create job progress modal component",
+          "service": "dashboard",
+          "files_to_modify": [],
+          "files_to_create": [
+            "apps/dashboard/src/components/batch/job-progress-modal.tsx"
+          ],
+          "patterns_from": [
+            "apps/dashboard/src/hooks/use-sessions.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd apps/dashboard && bun run build",
+            "expected": "Build succeeds without errors"
+          },
+          "status": "pending",
+          "notes": "Modal that displays job progress: progress bar, processed/total items, success/error counts, estimated time remaining, cancel button. Uses useJobProgress hook. Auto-closes on completion."
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Add multi-select to sessions page",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/sessions/page.tsx"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/content/page.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/sessions",
+            "checks": [
+              "Checkboxes appear on session items",
+              "Shift-click selects range",
+              "'Extract Insights' button appears when items selected"
+            ]
+          },
+          "status": "pending",
+          "notes": "Add useState for selected session IDs. Add checkbox to each session card. Implement shift-click range selection. Show MultiSelectToolbar when selections exist. Add 'Extract Insights' button that triggers batch operation."
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Add multi-select to insights page",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/insights/page.tsx"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/sessions/page.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/insights",
+            "checks": [
+              "Checkboxes appear on insight items",
+              "Shift-click selects range",
+              "'Generate Content' button appears when items selected"
+            ]
+          },
+          "status": "pending",
+          "notes": "Similar to sessions page. Add multi-select with 'Generate Blog Post', 'Generate Twitter Thread', etc. buttons in toolbar."
+        },
+        {
+          "id": "subtask-5-5",
+          "description": "Add multi-select to posts/content page",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/content/page.tsx"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "apps/dashboard/src/app/(dashboard)/[workspace]/sessions/page.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:3000/test-workspace/content",
+            "checks": [
+              "Checkboxes appear on post items",
+              "Shift-click selects range",
+              "'Archive', 'Delete', 'Publish' buttons appear when items selected"
+            ]
+          },
+          "status": "pending",
+          "notes": "Add multi-select with 'Archive', 'Delete', 'Publish', 'Unpublish' buttons. Post operations are simpler (no AI required), so they can show immediate feedback without job progress modal for simple operations."
+        }
+      ]
+    },
+    {
+      "id": "phase-6-integration",
+      "name": "End-to-End Integration & Polish",
+      "type": "integration",
+      "description": "Wire all pieces together, test complete batch operation flows, add rate limiting, usage metering, and error handling",
+      "depends_on": [
+        "phase-3-background-worker",
+        "phase-5-frontend-ui"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Add rate limiting to batch operations",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/lib/queue/batch-processor.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Trigger batch operation with 20+ items. Verify that Anthropic API calls are rate-limited (e.g., max 5 concurrent requests) and don't hit rate limit errors."
+          },
+          "status": "pending",
+          "notes": "Add rate limiting for Anthropic API calls (insight extraction, content generation). Use a simple queue or delay between requests to avoid hitting rate limits."
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Add usage metering for batch operations",
+          "service": "dashboard",
+          "files_to_modify": [
+            "apps/dashboard/src/lib/queue/batch-processor.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Trigger batch operation with 10 items. Verify that each item counts toward usage limits (if usage metering system exists)."
+          },
+          "status": "pending",
+          "notes": "If usage metering system exists, ensure each batch item is tracked individually. If not, add TODO comment for future implementation."
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "End-to-end test: Extract insights from multiple sessions",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Navigate to sessions page",
+              "Select 5 sessions using checkboxes",
+              "Click 'Extract Insights' button",
+              "Job progress modal appears",
+              "Progress bar updates as items are processed",
+              "Modal shows completion with success/error counts",
+              "Navigate to insights page and verify new insights were created"
+            ]
+          },
+          "status": "pending",
+          "notes": "Full flow test for batch insight extraction"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "End-to-end test: Generate content from multiple insights",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Navigate to insights page",
+              "Select 3 insights using checkboxes",
+              "Click 'Generate Blog Post' button",
+              "Job progress modal appears",
+              "Progress updates as posts are generated",
+              "Modal shows completion",
+              "Navigate to content page and verify new blog posts were created"
+            ]
+          },
+          "status": "pending",
+          "notes": "Full flow test for batch content generation"
+        },
+        {
+          "id": "subtask-6-5",
+          "description": "End-to-end test: Batch archive posts",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Navigate to content page",
+              "Select 4 published posts using checkboxes",
+              "Click 'Archive' button",
+              "Posts are archived immediately (or progress modal if async)",
+              "Archived posts appear in 'Archived' tab",
+              "Can undo/restore if needed"
+            ]
+          },
+          "status": "pending",
+          "notes": "Full flow test for batch post operations"
+        },
+        {
+          "id": "subtask-6-6",
+          "description": "Test job cancellation",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Trigger batch operation with many items (20+)",
+              "Click 'Cancel' button in progress modal while job is processing",
+              "Job status updates to 'cancelled'",
+              "No new items are processed after cancellation",
+              "Progress modal shows cancellation message"
+            ]
+          },
+          "status": "pending",
+          "notes": "Verify job cancellation works correctly"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 6,
+    "total_subtasks": 21,
+    "services_involved": [
+      "dashboard",
+      "database"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-2-backend-api",
+            "phase-1-database"
+          ],
+          "reason": "Backend API can be developed in parallel with database schema after phase 1 completes"
+        },
+        {
+          "phases": [
+            "phase-4-frontend-hooks",
+            "phase-3-background-worker"
+          ],
+          "reason": "Frontend hooks can be developed in parallel with background worker, both depend on phase-2-backend-api"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "1.4x faster than sequential execution"
+    },
+    "startup_command": "cd apps/dashboard && bun run dev"
+  },
+  "verification_strategy": {
+    "risk_level": "high",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "unit",
+      "integration",
+      "e2e"
+    ],
+    "security_scanning_required": true,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "Users can multi-select sessions, insights, and posts using checkboxes and shift-click",
+      "Batch operations create background jobs tracked in database",
+      "Job progress is displayed in real-time with accurate progress bars",
+      "Batch operations can be cancelled mid-execution",
+      "All batch operations respect rate limits and don't cause API errors",
+      "Each item in batch operation is tracked for usage metering",
+      "Error handling works correctly - failed items don't block successful ones"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests",
+        "command": "cd apps/dashboard && bun test",
+        "expected_outcome": "All unit tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Integration Tests",
+        "command": "cd apps/dashboard && bun test:integration",
+        "expected_outcome": "All integration tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Build Check",
+        "command": "bun run build",
+        "expected_outcome": "Build succeeds without errors",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Secrets Scan",
+        "command": "python auto-claude/scan_secrets.py --all-files --json",
+        "expected_outcome": "No secrets detected",
+        "type": "security",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "High risk due to: (1) Background job processing with potential for data inconsistency, (2) Rate limiting complexity with external APIs, (3) Multi-user concurrent batch operations, (4) Database transactions for batch updates. Requires comprehensive testing including E2E tests to verify complete flows."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": [
+        "cd apps/dashboard && bun test"
+      ],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": [
+        "cd apps/dashboard && bun test:integration"
+      ],
+      "services_to_test": [
+        "dashboard"
+      ]
+    },
+    "e2e_tests": {
+      "required": true,
+      "commands": [
+        "cd apps/dashboard && bun test:e2e"
+      ],
+      "flows": [
+        "batch-extract-insights",
+        "batch-generate-content",
+        "batch-archive-posts",
+        "job-cancellation"
+      ]
+    },
+    "browser_verification": {
+      "required": true,
+      "pages": [
+        {
+          "url": "http://localhost:3000/test-workspace/sessions",
+          "checks": [
+            "multi-select checkboxes render",
+            "shift-click range selection works",
+            "batch toolbar appears"
+          ]
+        },
+        {
+          "url": "http://localhost:3000/test-workspace/insights",
+          "checks": [
+            "multi-select checkboxes render",
+            "generate content button works"
+          ]
+        },
+        {
+          "url": "http://localhost:3000/test-workspace/content",
+          "checks": [
+            "multi-select checkboxes render",
+            "batch archive/delete buttons work"
+          ]
+        }
+      ]
+    },
+    "database_verification": {
+      "required": true,
+      "checks": [
+        "batch_jobs table exists with correct schema",
+        "migrations applied successfully",
+        "foreign key constraints work correctly"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "executionPhase": "coding",
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "updated_at": "2026-03-05T04:37:30.149Z",
+  "xstateState": "backlog",
+  "last_updated": "2026-03-05T04:36:55.350315+00:00"
+}
