@@ -1016,7 +1016,28 @@ export const contentTemplates = pgTable(
   ]
 );
 
+// ── Content Performance tables (from 011-content-performance-recommendations-engine) ──
 
+export const postPerformanceMetrics = pgTable(
+  "post_performance_metrics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    views: integer("views").notNull().default(0),
+    likes: integer("likes").notNull().default(0),
+    comments: integer("comments").notNull().default(0),
+    shares: integer("shares").notNull().default(0),
+    engagementRate: real("engagement_rate").notNull().default(0),
+    platform: text("platform").notNull(),
+    recordedAt: timestamp("recorded_at").defaultNow(),
+  },
+  (table) => [
+    index("postPerformanceMetrics_postId_idx").on(table.postId),
+    index("postPerformanceMetrics_recordedAt_idx").on(table.recordedAt),
+  ]
+);
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1167,6 +1188,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   automationRuns: many(automationRuns),
   revisions: many(postRevisions),
   conversations: many(postConversations),
+  performanceMetrics: many(postPerformanceMetrics),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -1381,6 +1403,16 @@ export const automationRunsRelations = relations(
     }),
     post: one(posts, {
       fields: [automationRuns.postId],
+      references: [posts.id],
+    }),
+  })
+);
+
+export const postPerformanceMetricsRelations = relations(
+  postPerformanceMetrics,
+  ({ one }) => ({
+    post: one(posts, {
+      fields: [postPerformanceMetrics.postId],
       references: [posts.id],
     }),
   })
