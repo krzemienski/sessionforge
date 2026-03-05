@@ -1,38 +1,26 @@
 import { db } from "@/lib/db";
-import { getRedis } from "@/lib/redis";
-import { sql } from "drizzle-orm/sql";
+import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   let dbOk = false;
-  let redisOk = false;
 
   try {
     await db.execute(sql`SELECT 1`);
     dbOk = true;
-  } catch (err) {
-    console.error("[healthcheck] DB error:", err instanceof Error ? err.message : err);
+  } catch {
+    // db unreachable
   }
 
-  const redis = await getRedis();
-  if (redis) {
-    try {
-      await redis.ping();
-      redisOk = true;
-    } catch {
-      // redis unreachable
-    }
-  }
-
-  const status = dbOk ? (redisOk ? "ok" : "degraded") : "degraded";
+  const status = dbOk ? "ok" : "degraded";
 
   return NextResponse.json(
     {
       status,
       db: dbOk,
-      redis: redisOk,
+      redis: false,
       timestamp: new Date().toISOString(),
     },
     { status: dbOk ? 200 : 503 }

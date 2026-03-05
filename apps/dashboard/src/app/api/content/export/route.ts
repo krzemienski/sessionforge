@@ -1,83 +1,85 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, workspaces } from "@sessionforge/db";
-import { eq, desc, and, gte, lte } from "drizzle-orm/sql";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { buildExportZip, type ExportablePost } from "@/lib/export/markdown-export";
-import { withApiHandler } from "@/lib/api-handler";
-import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+export async function GET(request: Request) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { searchParams } = new URL(req.url);
-    const workspaceSlug = searchParams.get("workspace");
-    const contentType = searchParams.get("type");
-    const status = searchParams.get("status");
-    const dateFrom = searchParams.get("dateFrom");
-    const dateTo = searchParams.get("dateTo");
+  const { searchParams } = new URL(request.url);
+  const workspaceSlug = searchParams.get("workspace");
+  const contentType = searchParams.get("type");
+  const status = searchParams.get("status");
+  const dateFrom = searchParams.get("dateFrom");
+  const dateTo = searchParams.get("dateTo");
 
-    if (!workspaceSlug)
-      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
+  if (!workspaceSlug) {
+    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
+  }
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
+  const workspace = await db.query.workspaces.findFirst({
+    where: eq(workspaces.slug, workspaceSlug),
+  });
 
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+  if (!workspace || workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
 
-    const conditions = [eq(posts.workspaceId, workspace.id)];
+  const conditions = [eq(posts.workspaceId, workspace.id)];
 
-    if (contentType) {
-      conditions.push(
-        eq(posts.contentType, contentType as typeof posts.contentType.enumValues[number])
-      );
-    }
+  if (contentType) {
+    conditions.push(
+      eq(posts.contentType, contentType as typeof posts.contentType.enumValues[number])
+    );
+  }
 
-    if (status) {
-      conditions.push(
-        eq(posts.status, status as typeof posts.status.enumValues[number])
-      );
-    }
+  if (status) {
+    conditions.push(
+      eq(posts.status, status as typeof posts.status.enumValues[number])
+    );
+  }
 
-    if (dateFrom) {
-      conditions.push(gte(posts.createdAt, new Date(dateFrom)));
-    }
+  if (dateFrom) {
+    conditions.push(gte(posts.createdAt, new Date(dateFrom)));
+  }
 
-    if (dateTo) {
-      conditions.push(lte(posts.createdAt, new Date(dateTo)));
-    }
+  if (dateTo) {
+    conditions.push(lte(posts.createdAt, new Date(dateTo)));
+  }
 
-    const results = await db.query.posts.findMany({
-      where: and(...conditions),
-      orderBy: [desc(posts.createdAt)],
-      with: {
-        insight: {
-          with: {
-            session: true,
-          },
+  const results = await db.query.posts.findMany({
+    where: and(...conditions),
+    orderBy: [desc(posts.createdAt)],
+    with: {
+      insight: {
+        with: {
+          session: true,
         },
       },
-    });
+    },
+  });
 
-    const exportablePosts: ExportablePost[] = results.map((post) => ({
-      id: post.id,
-      title: post.title,
-      markdown: post.markdown,
-      contentType: post.contentType,
-      status: post.status,
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
-      platformFooterEnabled: post.platformFooterEnabled ?? false,
-      durationMinutes: post.insight?.session?.durationSeconds
-        ? Math.round(post.insight.session.durationSeconds / 60)
-        : null,
-    }));
+  const exportablePosts: ExportablePost[] = results.map((post) => ({
+    id: post.id,
+    title: post.title,
+    markdown: post.markdown,
+    contentType: post.contentType,
+    status: post.status,
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+    platformFooterEnabled: post.platformFooterEnabled ?? false,
+    durationMinutes: post.insight?.session?.durationSeconds
+      ? Math.round(post.insight.session.durationSeconds / 60)
+      : null,
+  }));
+
+  try {
     const zipBuffer = await buildExportZip(exportablePosts);
 
     const filename = `sessionforge-export-${new Date().toISOString().slice(0, 10)}.zip`;
@@ -88,8 +90,13 @@ export async function GET(req: Request) {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Content-Length": String(zipBuffer.length),
-        "X-Export-Count": String(exportablePosts.length),
+        "X-Export-Count": String(results.length),
       },
     });
-  })(req);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Export failed" },
+      { status: 500 }
+    );
+  }
 }

@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { computeSeoScore } from "@/lib/seo";
 import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
 import { GhostPublishModal } from "@/components/publishing/ghost-publish-modal";
+import { CreateTemplateDialog } from "@/components/templates/create-template-dialog";
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
@@ -103,6 +104,7 @@ export default function ContentEditorPage() {
   const [isGhostModalOpen, setIsGhostModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const initializedRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const lastSavedMarkdownRef = useRef("");
@@ -330,6 +332,12 @@ export default function ContentEditorPage() {
           <ArrowLeft size={16} /> Content
         </button>
         <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+          <button
+            onClick={() => setIsTemplateDialogOpen(true)}
+            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors"
+          >
+            Create Template from Post
+          </button>
           {isBlogPost && (
             <button
               onClick={() => setHashnodeModalOpen(true)}
@@ -693,6 +701,16 @@ export default function ContentEditorPage() {
         onClose={() => setIsGhostModalOpen(false)}
         isAlreadyPublished={isAlreadyPublishedOnGhost}
         existingPublicationUrl={ghostPublication.data?.ghostUrl}
+      />
+
+      <CreateTemplateDialog
+        postId={postId}
+        workspace={workspace}
+        title={title}
+        markdown={markdown}
+        contentType={post.data?.contentType as any || "blog_post"}
+        isOpen={isTemplateDialogOpen}
+        onClose={() => setIsTemplateDialogOpen(false)}
       />
     </div>
   );

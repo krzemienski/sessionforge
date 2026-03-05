@@ -5,7 +5,6 @@
  */
 
 import fs from "fs/promises";
-import fsSync from "fs";
 import { type Dirent } from "fs";
 import path from "path";
 import os from "os";
@@ -25,73 +24,16 @@ export interface SessionFileMeta {
 /**
  * Converts a Claude-encoded project directory name back to a filesystem path.
  *
- * Claude encodes paths by replacing `/` with `-` and `.` with `-`, making
- * the encoding lossy: `--` unambiguously means `/.` (dot-prefixed dir),
- * but single `-` is ambiguous between `/` separator and literal hyphen.
- *
- * We handle known OS prefixes first, then greedily resolve each remaining
- * `-` by checking whether the path-so-far exists on disk when interpreted
- * as `/` or kept as `-`. When neither interpretation exists on disk (e.g.
- * non-existent or deleted projects), we default to `/` which produces the
- * most likely original path structure.
+ * Claude stores project paths as directory names where the leading `/` is
+ * replaced by `-` and all subsequent `/` separators are also `-`.
+ * For example, `-Users-nick-projects-my-app` decodes to `/Users/nick/projects/my-app`.
  *
  * @param encoded - The encoded directory name as found under `~/.claude/projects/`.
  * @returns The decoded absolute filesystem path.
  */
 function decodeProjectPath(encoded: string): string {
-  // Step 1: Handle -- as /. (dot-prefixed dirs like .claude, .zenflow)
-  let working = encoded.replace(/--/g, '/.');
-
-  // Step 2: Handle known OS path prefixes
-  if (working.startsWith('-Users-')) {
-    working = '/Users/' + working.slice(7);
-  } else if (working.startsWith('-home-')) {
-    working = '/home/' + working.slice(6);
-  } else if (working.startsWith('-')) {
-    working = '/' + working.slice(1);
-  }
-
-  // Step 3: For each remaining `-`, check if interpreting it as `/` yields
-  // a real directory. If so, use `/`; otherwise keep the literal `-`.
-  // When neither exists on disk, default to `/`.
-  const segments = working.split('-');
-  let resolved = segments[0];
-
-  for (let i = 1; i < segments.length; i++) {
-    const withSlash = resolved + '/' + segments[i];
-    const withDash = resolved + '-' + segments[i];
-
-    // Prefer `/` if that directory exists on disk
-    try {
-      if (
-        fsSync.existsSync(withSlash) &&
-        fsSync.statSync(withSlash).isDirectory()
-      ) {
-        resolved = withSlash;
-        continue;
-      }
-    } catch {
-      // stat failed — fall through
-    }
-
-    // Prefer `-` if that directory exists on disk
-    try {
-      if (
-        fsSync.existsSync(withDash) &&
-        fsSync.statSync(withDash).isDirectory()
-      ) {
-        resolved = withDash;
-        continue;
-      }
-    } catch {
-      // stat failed — fall through
-    }
-
-    // Neither exists — default to `/` (most likely for project paths)
-    resolved = withSlash;
-  }
-
-  return resolved;
+  // e.g. "-Users-nick-projects-my-app" → "/Users/nick/projects/my-app"
+  return encoded.replace(/^-/, "/").replace(/-/g, "/");
 }
 
 /**
@@ -152,15 +94,8 @@ export async function scanSessionFiles(
     if (!entry.isDirectory()) continue;
     const encodedProject = entry.name;
     const projectPath = decodeProjectPath(encodedProject);
-    const projectDir = path.join(projectsDir, encodedProject);
-
-    // Claude Code stores JSONL files directly in the project directory
-    const directFiles = await globJsonl(projectDir);
-    // Also check a sessions/ subdirectory for forward-compatibility
-    const sessionsDir = path.join(projectDir, "sessions");
-    const sessionsFiles = await globJsonl(sessionsDir);
-    const files = [...directFiles, ...sessionsFiles];
-
+    const sessionsDir = path.join(projectsDir, encodedProject, "sessions");
+    const files = await globJsonl(sessionsDir);
     for (const filePath of files) {
       try {
         const stat = await fs.stat(filePath);
