@@ -102,7 +102,7 @@ function CompositeScore({ readability, geo }: { readability: number | null; geo:
         </div>
         <div className="flex flex-col items-center p-2 rounded bg-sf-bg-tertiary">
           <span className="text-xs text-sf-text-muted mb-0.5">GEO</span>
-          <ScoreBadge score={geo !== null ? geo * 100 : null} />
+          <ScoreBadge score={geo} />
         </div>
       </div>
     </div>
@@ -277,7 +277,12 @@ function PreviewTab({ data }: { data: SeoData }) {
 
 function GeoTab({ data }: { data: SeoData }) {
   const geoScore = data.geoScore;
-  const checklist = data.geoChecklist as Record<string, { passed: boolean; suggestions?: string[] }> | null;
+  const checklist = data.geoChecklist as Array<{
+    id: string;
+    label: string;
+    passed: boolean;
+    suggestion?: string;
+  }> | null;
 
   return (
     <div className="space-y-3">
@@ -285,7 +290,7 @@ function GeoTab({ data }: { data: SeoData }) {
         <h4 className="text-xs font-semibold text-sf-text-muted uppercase tracking-wider">
           GEO Score
         </h4>
-        <ScoreBadge score={geoScore !== null ? geoScore * 100 : null} />
+        <ScoreBadge score={geoScore} />
       </div>
 
       {geoScore === null && (
@@ -294,8 +299,8 @@ function GeoTab({ data }: { data: SeoData }) {
         </p>
       )}
 
-      {checklist && Object.entries(checklist).map(([key, check]) => (
-        <div key={key} className="flex items-start gap-2">
+      {Array.isArray(checklist) && checklist.map((check) => (
+        <div key={check.id} className="flex items-start gap-2">
           <span
             className={cn(
               "mt-0.5 h-4 w-4 flex-shrink-0 rounded-full flex items-center justify-center text-xs",
@@ -307,12 +312,10 @@ function GeoTab({ data }: { data: SeoData }) {
             {check.passed ? "✓" : "✗"}
           </span>
           <div className="min-w-0">
-            <p className="text-sm text-sf-text-secondary capitalize">
-              {key.replace(/([A-Z])/g, " $1").trim()}
-            </p>
-            {!check.passed && check.suggestions && check.suggestions.length > 0 && (
+            <p className="text-sm text-sf-text-secondary">{check.label}</p>
+            {!check.passed && check.suggestion && (
               <p className="text-xs text-sf-text-muted mt-0.5">
-                {check.suggestions[0]}
+                {check.suggestion}
               </p>
             )}
           </div>
