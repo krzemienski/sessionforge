@@ -138,3 +138,50 @@ export function useExportCollection() {
 
   return { exportCollection, isExporting };
 }
+
+export function useCollectionPosts(collectionId: string) {
+  return useQuery({
+    queryKey: ["collection-posts", collectionId],
+    queryFn: async () => {
+      const res = await fetch(`/api/collections/${collectionId}/posts`);
+      if (!res.ok) throw new Error("Failed to fetch collection posts");
+      return res.json();
+    },
+    enabled: !!collectionId,
+  });
+}
+
+export function useAddPostToCollection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ collectionId, postId }: { collectionId: string; postId: string }) => {
+      const res = await fetch(`/api/collections/${collectionId}/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId }),
+      });
+      if (!res.ok) throw new Error("Failed to add post to collection");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["collection-posts", vars.collectionId] });
+    },
+  });
+}
+
+export function useRemovePostFromCollection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ collectionId, postId }: { collectionId: string; postId: string }) => {
+      const res = await fetch(
+        `/api/collections/${collectionId}/posts?postId=${postId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error("Failed to remove post from collection");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["collection-posts", vars.collectionId] });
+    },
+  });
+}
