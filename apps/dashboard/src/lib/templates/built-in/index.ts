@@ -10,6 +10,8 @@ import { howIBuiltXTemplate } from "./how-i-built-x";
 import { debuggingStoryTemplate } from "./debugging-story";
 import { toolComparisonTemplate } from "./tool-comparison";
 import { architectureDecisionTemplate } from "./architecture-decision";
+import { tilTemplate } from "./til";
+import { devLogTemplate } from "./dev-log";
 
 /**
  * All built-in templates available in SessionForge
@@ -19,8 +21,8 @@ import { architectureDecisionTemplate } from "./architecture-decision";
  * - Debugging Story ✓
  * - Tool Comparison ✓
  * - Architecture Decision ✓
- * - TIL (Today I Learned)
- * - Dev Log
+ * - TIL (Today I Learned) ✓
+ * - Dev Log ✓
  * - Release Notes
  * - Tutorial
  */
@@ -29,6 +31,8 @@ export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
   debuggingStoryTemplate,
   toolComparisonTemplate,
   architectureDecisionTemplate,
+  tilTemplate,
+  devLogTemplate,
   // Additional templates will be added here in subsequent subtasks
 ];
 
