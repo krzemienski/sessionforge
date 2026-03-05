@@ -109,3 +109,68 @@ export async function PUT(
     );
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+
+  // Verify ownership
+  const existing = await db.query.posts.findFirst({
+    where: eq(posts.id, id),
+    with: { workspace: true },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
+  if (existing.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  if (existing.status !== "scheduled") {
+    return NextResponse.json(
+      { error: "Only scheduled posts can be cancelled" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // Delete the QStash schedule if it exists
+    if (existing.qstashScheduleId) {
+      try {
+        await deleteTriggerSchedule(existing.qstashScheduleId);
+      } catch (error) {
+        // Log but continue - we still want to update the database
+      }
+    }
+
+    // Update post status to draft and clear scheduling fields
+    await db
+      .update(posts)
+      .set({
+        status: "draft",
+        scheduledFor: null,
+        qstashScheduleId: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(posts.id, id));
+
+    // Delete the scheduledPublications record
+    await db
+      .delete(scheduledPublications)
+      .where(eq(scheduledPublications.postId, id));
+
+    return NextResponse.json({ success: true, cancelled: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to cancel scheduled post" },
+      { status: 500 }
+    );
+  }
+}
