@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { useSessions, useScanSessions } from "@/hooks/use-sessions";
 import { useInsights } from "@/hooks/use-insights";
 import { useContent } from "@/hooks/use-content";
@@ -35,12 +36,12 @@ export default function DashboardHome() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold font-display">Dashboard</h1>
         <button
           onClick={() => scan.mutate(30)}
           disabled={scan.isPending}
-          className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+          className="flex items-center justify-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50 w-full sm:w-auto min-h-[44px]"
         >
           <Zap size={16} />
           {scan.isPending ? "Scanning..." : "Scan Now"}
@@ -59,14 +60,22 @@ export default function DashboardHome() {
           <ScrollText size={48} className="mx-auto text-sf-text-muted mb-4" />
           <h2 className="text-lg font-semibold text-sf-text-primary mb-2">No sessions found</h2>
           <p className="text-sf-text-secondary mb-6">Scan your Claude Code sessions to get started</p>
-          <button
-            onClick={() => scan.mutate(30)}
-            disabled={scan.isPending}
-            className="bg-sf-accent text-sf-bg-primary px-6 py-2.5 rounded-sf font-medium hover:bg-sf-accent-dim transition-colors"
-          >
-            <Zap size={16} className="inline mr-2" />
-            Scan Sessions
-          </button>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => scan.mutate(30)}
+              disabled={scan.isPending}
+              className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+            >
+              <Zap size={16} />
+              {scan.isPending ? "Scanning..." : "Scan Sessions"}
+            </button>
+            <Link
+              href="/onboarding"
+              className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
+            >
+              View setup guide →
+            </Link>
+          </div>
         </div>
       )}
 

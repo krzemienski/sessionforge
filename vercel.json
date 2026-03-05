@@ -1,0 +1,30 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "bun install",
+  "buildCommand": "cd apps/dashboard && bun run build",
+  "outputDirectory": "apps/dashboard/.next",
+  "functions": {
+    "apps/dashboard/src/app/api/agents/**/*.ts": {
+      "maxDuration": 300
+    },
+    "apps/dashboard/src/app/api/content/mine-sessions/**/*.ts": {
+      "maxDuration": 300
+    },
+    "apps/dashboard/src/app/api/sessions/scan/**/*.ts": {
+      "maxDuration": 300
+    },
+    "apps/dashboard/src/app/api/insights/extract/**/*.ts": {
+      "maxDuration": 300
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    }
+  ],
+  "regions": ["iad1"]
+}

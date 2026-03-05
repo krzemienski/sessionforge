@@ -1,17 +1,16 @@
 /**
  * Changelog writer agent that summarizes recent sessions into a changelog post.
- * Uses tool-calling to list sessions, fetch summaries, and create a published post.
+ * Uses the Agent SDK with MCP tools to list sessions, fetch summaries, and create a published post.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-import { getModelForAgent } from "../orchestration/model-selector";
-import { getToolsForAgent } from "../orchestration/tool-registry";
-import { handleSessionReaderTool } from "../tools/session-reader";
-import { handlePostManagerTool } from "../tools/post-manager";
+import { getActiveSkillsForAgentType, buildSkillSystemPromptSuffix } from "../tools/skill-loader";
 import { CHANGELOG_PROMPT } from "../prompts/changelog";
-import { createSSEStream, sseResponse } from "../orchestration/streaming";
-
-const client = new Anthropic();
+import { injectStyleProfile } from "@/lib/style/profile-injector";
+import { createAgentMcpServer } from "../mcp-server-factory";
+import { runAgentStreaming } from "../agent-runner";
+import { getTemplateBySlug } from "@/lib/templates";
+import { getTemplateById, incrementTemplateUsage } from "@/lib/templates/db-operations";
+import type { ContentTemplate, BuiltInTemplate } from "@/types/templates";
 
 /** Input parameters for the changelog writer agent. */
 interface ChangelogWriterInput {
@@ -23,122 +22,102 @@ interface ChangelogWriterInput {
   projectFilter?: string;
   /** Optional extra instructions appended to the agent prompt. */
   customInstructions?: string;
+  /** Optional template slug to use as scaffolding for the changelog post. */
+  templateId?: string;
+}
+
+
+export async function streamChangelogWriter(input: ChangelogWriterInput): Promise<Response> {
+  const activeSkills = await getActiveSkillsForAgentType(input.workspaceId, "changelog");
+  const styleInjectedPrompt = await injectStyleProfile(CHANGELOG_PROMPT, input.workspaceId);
+  let systemPrompt = styleInjectedPrompt + buildSkillSystemPromptSuffix(activeSkills);
+
+  // Fetch and apply template if provided
+  // Try database template first (by ID), then fall back to built-in (by slug)
+  if (input.templateId) {
+    let template: ContentTemplate | BuiltInTemplate | null = null;
+    const dbTemplate = await getTemplateById(input.templateId);
+    if (dbTemplate) {
+      template = dbTemplate;
+      // Fire-and-forget usage tracking
+      void incrementTemplateUsage(dbTemplate.id);
+    } else {
+      template = getTemplateBySlug(input.templateId) ?? null;
+    }
+    if (template) {
+      const templateInstructions = buildTemplateInstructions(template);
+      systemPrompt = `${systemPrompt}\n\n${templateInstructions}`;
+    }
+  }
+
+  const userMessage = input.customInstructions
+    ? `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First list sessions in the timeframe, then get summaries for each, then create a changelog post. When calling create_post, set aiDraftMarkdown equal to the markdown content.\n\nAdditional instructions: ${input.customInstructions}`
+    : `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First use list_sessions_by_timeframe, then get_session_summary for notable sessions, then create a changelog post with create_post. When calling create_post, set aiDraftMarkdown equal to the markdown content.`;
+
+  const mcpServer = createAgentMcpServer("changelog-writer", input.workspaceId);
+
+  return runAgentStreaming(
+    {
+      agentType: "changelog-writer",
+      workspaceId: input.workspaceId,
+      systemPrompt,
+      userMessage,
+      mcpServer,
+    },
+    {
+      lookbackDays: input.lookbackDays,
+      projectFilter: input.projectFilter,
+    },
+  );
 }
 
 /**
- * Starts a streaming changelog generation run and returns an SSE response.
- * The agent lists sessions in the lookback window, fetches their summaries,
- * and creates a changelog post via tool calls.
+ * Builds template-specific instructions from a template definition.
+ * Converts template structure and tone guidance into prompt instructions
+ * that guide the AI in following the template format.
  *
- * @param input - Configuration for the changelog run.
- * @returns A streaming SSE {@link Response} with status, tool, and text events.
+ * @param template - The template to build instructions from (database or built-in).
+ * @returns Formatted instructions string to append to the system prompt.
  */
-export function streamChangelogWriter(input: ChangelogWriterInput): Response {
-  const { stream, send, close } = createSSEStream();
+function buildTemplateInstructions(
+  template: ContentTemplate | BuiltInTemplate | null
+): string {
+  if (!template) return "";
 
-  const run = async () => {
-    try {
-      const model = getModelForAgent("changelog-writer");
-      const tools = getToolsForAgent("changelog-writer");
+  const instructions: string[] = [];
 
-      const userMessage = input.customInstructions
-        ? `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First list sessions in the timeframe, then get summaries for each, then create a changelog post.\n\nAdditional instructions: ${input.customInstructions}`
-        : `Generate a changelog for the last ${input.lookbackDays} days${input.projectFilter ? ` for project "${input.projectFilter}"` : ""}. First use list_sessions_by_timeframe, then get_session_summary for notable sessions, then create a changelog post with create_post.`;
-
-      const messages: Anthropic.MessageParam[] = [
-        { role: "user", content: userMessage },
-      ];
-
-      send("status", { phase: "starting", message: "Generating changelog..." });
-
-      let response = await client.messages.create({
-        model,
-        max_tokens: 8192,
-        system: CHANGELOG_PROMPT,
-        tools: tools as Anthropic.Tool[],
-        messages,
-      });
-
-      while (response.stop_reason === "tool_use") {
-        const toolUseBlocks = response.content.filter(
-          (b): b is Anthropic.ContentBlock & { type: "tool_use" } =>
-            b.type === "tool_use"
-        );
-
-        for (const toolUse of toolUseBlocks) {
-          send("tool_use", { tool: toolUse.name, input: toolUse.input });
-        }
-
-        const toolResults: Anthropic.MessageParam = {
-          role: "user",
-          content: await Promise.all(
-            toolUseBlocks.map(async (toolUse) => {
-              try {
-                const result = await dispatchTool(
-                  input.workspaceId,
-                  toolUse.name,
-                  toolUse.input as Record<string, unknown>
-                );
-                send("tool_result", { tool: toolUse.name, success: true });
-                return {
-                  type: "tool_result" as const,
-                  tool_use_id: toolUse.id,
-                  content: JSON.stringify(result),
-                };
-              } catch (error) {
-                const errMsg = error instanceof Error ? error.message : String(error);
-                send("tool_result", { tool: toolUse.name, success: false, error: errMsg });
-                return {
-                  type: "tool_result" as const,
-                  tool_use_id: toolUse.id,
-                  content: `Error: ${errMsg}`,
-                  is_error: true,
-                };
-              }
-            })
-          ),
-        };
-
-        messages.push({ role: "assistant", content: response.content });
-        messages.push(toolResults);
-
-        response = await client.messages.create({
-          model,
-          max_tokens: 8192,
-          system: CHANGELOG_PROMPT,
-          tools: tools as Anthropic.Tool[],
-          messages,
-        });
-      }
-
-      for (const block of response.content) {
-        if (block.type === "text") {
-          send("text", { content: block.text });
-        }
-      }
-
-      send("complete", { usage: response.usage });
-    } catch (error) {
-      send("error", { message: error instanceof Error ? error.message : String(error) });
-    } finally {
-      close();
-    }
-  };
-
-  run();
-  return sseResponse(stream);
-}
-
-async function dispatchTool(
-  workspaceId: string,
-  toolName: string,
-  toolInput: Record<string, unknown>
-): Promise<unknown> {
-  if (toolName.startsWith("get_session") || toolName === "list_sessions_by_timeframe") {
-    return handleSessionReaderTool(workspaceId, toolName, toolInput);
+  instructions.push(`## Content Template: ${template.name}`);
+  const description = template.description ?? '';
+  if (description) {
+    instructions.push(`\n${description}\n`);
   }
-  if (toolName === "create_post" || toolName === "update_post" || toolName === "get_post" || toolName === "get_markdown") {
-    return handlePostManagerTool(workspaceId, toolName, toolInput);
+
+  if (template.structure?.sections && template.structure.sections.length > 0) {
+    instructions.push("### Required Structure");
+    instructions.push("\nYour changelog post MUST follow this structure:\n");
+
+    template.structure.sections.forEach((section, index) => {
+      const requiredLabel = section.required ? "(REQUIRED)" : "(OPTIONAL)";
+      instructions.push(`${index + 1}. **${section.heading}** ${requiredLabel}`);
+      instructions.push(`   ${section.description}`);
+      instructions.push("");
+    });
   }
-  throw new Error(`Unknown tool: ${toolName}`);
+
+  if (template.toneGuidance) {
+    instructions.push("### Tone and Style Guidance");
+    instructions.push(`\n${template.toneGuidance}\n`);
+  }
+
+  if (template.exampleContent) {
+    instructions.push("### Example Format");
+    instructions.push("\nHere's an example of how this template should look:\n");
+    instructions.push("```markdown");
+    instructions.push(template.exampleContent.substring(0, 500) + "...");
+    instructions.push("```\n");
+  }
+
+  instructions.push("**Important:** Use the template structure as scaffolding, but fill it with content based on the actual session data you fetch. The template provides the format and guidance, not the content itself.");
+
+  return instructions.join("\n");
 }

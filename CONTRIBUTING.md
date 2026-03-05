@@ -50,8 +50,9 @@ cp .env.example apps/dashboard/.env.local
 # 4. Push database schema
 bun db:push
 
-# 5. Start development server (all apps, with Turbopack)
+# 5. Start development server
 bun dev
+# Or with Docker: docker compose up -d
 ```
 
 The dashboard is available at [http://localhost:3000](http://localhost:3000).
@@ -77,8 +78,7 @@ return a `NextResponse.json({ error: message }, { status: 500 })`.
 
 **No `any` types.**
 Use `unknown` for truly unknown values, then narrow with `instanceof` or type guards.
-The only acceptable `any` is a typed assertion (`as Anthropic.Tool[]`) where the SDK
-demands it — comment it.
+The only acceptable `any` is a typed assertion where an SDK demands it — comment it.
 
 **Prefer explicit return types on exported functions.**
 
@@ -286,155 +286,79 @@ to add, for example, a `newsletter-writer` agent.
 
 ### 1. Create the agent file
 
-`apps/dashboard/src/lib/ai/agents/newsletter-writer.ts`
+`apps/dashboard/src/lib/ai/agents/your-agent.ts`
 
-Follow the exact structure from `blog-writer.ts`:
+All agents use the Agent SDK's `runAgentStreaming()` or `runAgent()` from `agent-runner.ts`.
+**Never import `@anthropic-ai/sdk` directly** — the project uses `@anthropic-ai/claude-agent-sdk`
+which inherits auth from the Claude CLI (zero API keys).
 
 ```typescript
-import Anthropic from "@anthropic-ai/sdk";
-import { getModelForAgent } from "../orchestration/model-selector";
-import { getToolsForAgent } from "../orchestration/tool-registry";
-import { handleInsightTool } from "../tools/insight-tools";
-import { handlePostManagerTool } from "../tools/post-manager";
-import { createSSEStream, sseResponse } from "../orchestration/streaming";
-import { NEWSLETTER_PROMPT } from "../prompts/newsletter";
+import { runAgentStreaming } from "../agent-runner";
+import { createMcpServer } from "../mcp-server-factory";
+import { YOUR_AGENT_PROMPT } from "../prompts/your-agent";
+import type { AgentRunOptions } from "../agent-runner";
 
-const client = new Anthropic();
-
-interface NewsletterWriterInput {
+interface YourAgentInput {
   workspaceId: string;
-  insightIds: string[];       // newsletters aggregate multiple insights
-  lookbackDays?: number;
+  // ... typed fields
 }
 
-export function streamNewsletterWriter(input: NewsletterWriterInput): Response {
-  const { stream, send, close } = createSSEStream();
+export function streamYourAgent(input: YourAgentInput): Response {
+  const mcpServer = createMcpServer(input.workspaceId, ["insight", "post"]);
 
-  const run = async () => {
-    try {
-      const model = getModelForAgent("newsletter-writer");
-      const tools = getToolsForAgent("newsletter-writer");
-
-      const messages: Anthropic.MessageParam[] = [
-        { role: "user", content: `Create a newsletter from insights: ${input.insightIds.join(", ")}` },
-      ];
-
-      send("status", { phase: "starting", message: "Initializing newsletter writer..." });
-
-      let response = await client.messages.create({
-        model,
-        max_tokens: 8192,
-        system: NEWSLETTER_PROMPT,
-        tools: tools as Anthropic.Tool[],
-        messages,
-      });
-
-      while (response.stop_reason === "tool_use") {
-        const toolUseBlocks = response.content.filter(
-          (b): b is Anthropic.ContentBlock & { type: "tool_use" } =>
-            b.type === "tool_use"
-        );
-
-        for (const toolUse of toolUseBlocks) {
-          send("tool_use", { tool: toolUse.name, input: toolUse.input });
-        }
-
-        const toolResults: Anthropic.MessageParam = {
-          role: "user",
-          content: await Promise.all(
-            toolUseBlocks.map(async (toolUse) => {
-              try {
-                const result = await dispatchTool(input.workspaceId, toolUse.name, toolUse.input as Record<string, unknown>);
-                send("tool_result", { tool: toolUse.name, success: true });
-                return { type: "tool_result" as const, tool_use_id: toolUse.id, content: JSON.stringify(result) };
-              } catch (error) {
-                const errMsg = error instanceof Error ? error.message : String(error);
-                send("tool_result", { tool: toolUse.name, success: false, error: errMsg });
-                return { type: "tool_result" as const, tool_use_id: toolUse.id, content: `Error: ${errMsg}`, is_error: true };
-              }
-            })
-          ),
-        };
-
-        messages.push({ role: "assistant", content: response.content });
-        messages.push(toolResults);
-
-        response = await client.messages.create({ model, max_tokens: 8192, system: NEWSLETTER_PROMPT, tools: tools as Anthropic.Tool[], messages });
-      }
-
-      for (const block of response.content) {
-        if (block.type === "text") send("text", { content: block.text });
-      }
-
-      send("complete", { usage: response.usage });
-    } catch (error) {
-      send("error", { message: error instanceof Error ? error.message : String(error) });
-    } finally {
-      close();
-    }
-  };
-
-  run();
-  return sseResponse(stream);
-}
-
-async function dispatchTool(workspaceId: string, toolName: string, toolInput: Record<string, unknown>): Promise<unknown> {
-  if (toolName.startsWith("get_insight") || toolName === "get_top_insights") {
-    return handleInsightTool(workspaceId, toolName, toolInput);
-  }
-  if (toolName === "create_post" || toolName === "update_post") {
-    return handlePostManagerTool(workspaceId, toolName, toolInput);
-  }
-  throw new Error(`Unknown tool: ${toolName}`);
+  return runAgentStreaming({
+    agentType: "your-agent",
+    workspaceId: input.workspaceId,
+    systemPrompt: YOUR_AGENT_PROMPT,
+    userMessage: `Your instruction here`,
+    mcpServer,
+  });
 }
 ```
 
 ### 2. Register in `model-selector.ts`
 
 Open `apps/dashboard/src/lib/ai/orchestration/model-selector.ts` and add
-`"newsletter-writer"` to the `AgentName` type and its model mapping. Newsletter
-writers are high-quality output, so use `claude-opus-4-5-20250514`.
+your agent to the `AgentType` type and its model mapping.
 
 ### 3. Register in `tool-registry.ts`
 
-Open `apps/dashboard/src/lib/ai/orchestration/tool-registry.ts` and add the
-`"newsletter-writer"` entry to `AGENT_TOOL_SETS`. Choose the minimal set of tool
+Open `apps/dashboard/src/lib/ai/orchestration/tool-registry.ts` and add
+your agent entry to `AGENT_TOOL_SETS`. Choose the minimal set of tool
 groups the agent needs (e.g., `["insight", "post"]`).
 
 ### 4. Create the system prompt
 
-`apps/dashboard/src/lib/ai/prompts/newsletter.ts`
+`apps/dashboard/src/lib/ai/prompts/your-agent.ts`
 
 ```typescript
-export const NEWSLETTER_PROMPT = `You are a newsletter writer...`;
+export const YOUR_AGENT_PROMPT = `You are a ...`;
 ```
 
 ### 5. Create the API route
 
-`apps/dashboard/src/app/api/agents/newsletter/route.ts`
+`apps/dashboard/src/app/api/agents/your-agent/route.ts`
 
 ```typescript
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { streamNewsletterWriter } from "@/lib/ai/agents/newsletter-writer";
+import { streamYourAgent } from "@/lib/ai/agents/your-agent";
 
 export async function POST(req: NextRequest): Promise<Response> {
   const session = await auth.api.getSession({ headers: req.headers });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  return streamNewsletterWriter({
+  return streamYourAgent({
     workspaceId: body.workspaceId,
-    insightIds: body.insightIds,
-    lookbackDays: body.lookbackDays,
+    // ... map fields from body
   });
 }
 ```
 
 ### 6. Wire up the frontend
 
-Add a `generateNewsletter` mutation in the relevant TanStack Query hook
-(`apps/dashboard/src/hooks/use-content.ts`) that streams from the new route.
+Add a mutation in the relevant TanStack Query hook that streams from the new route.
 
 ---
 

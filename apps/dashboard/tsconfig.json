@@ -8,6 +8,12 @@
       ],
       "@sessionforge/db": [
         "../../packages/db/src/index"
+      ],
+      "drizzle-orm": [
+        "./node_modules/drizzle-orm/index.d.ts"
+      ],
+      "drizzle-orm/*": [
+        "./node_modules/drizzle-orm/*"
       ]
     },
     "plugins": [
@@ -22,9 +28,11 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "../../packages/db/src/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "vitest.config.ts"
   ]
 }

@@ -1,48 +1,44 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces, posts } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { streamEditorChat } from "@/lib/ai/agents/editor-chat";
+import { withApiHandler } from "@/lib/api-handler";
+import { parseBody, agentChatSchema } from "@/lib/validation";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: Request) {
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const body = await request.json();
-  const { workspaceSlug, postId, message, conversationHistory } = body;
+    const rawBody = await req.json().catch(() => ({}));
+    const { workspaceSlug, postId, message } = parseBody(agentChatSchema, rawBody);
 
-  if (!workspaceSlug || !postId || !message) {
-    return NextResponse.json(
-      { error: "workspaceSlug, postId, and message are required" },
-      { status: 400 }
-    );
-  }
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.slug, workspaceSlug),
+    });
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
+    if (!workspace || workspace.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    // Verify post belongs to workspace
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, postId),
+    });
 
-  // Verify post belongs to workspace
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-  });
+    if (!post || post.workspaceId !== workspace.id) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (!post || post.workspaceId !== workspace.id) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
-
-  return streamEditorChat({
-    workspaceId: workspace.id,
-    postId,
-    userMessage: message,
-    conversationHistory,
-  });
+    return await streamEditorChat({
+      workspaceId: workspace.id,
+      postId,
+      userMessage: message,
+    });
+  })(req);
 }

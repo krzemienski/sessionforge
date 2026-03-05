@@ -1,177 +1,28 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { Bot, User, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  toolActions?: string[];
-}
+import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
+import { SHORTCUTS } from "@/lib/keyboard-shortcuts";
+import type { EditorChatState } from "@/hooks/use-editor-chat";
 
 interface AIChatSidebarProps {
-  postId: string;
-  workspace: string;
-  onEditsApplied: (newMarkdown: string) => void;
+  chat: EditorChatState;
 }
 
-export function AIChatSidebar({ postId, workspace, onEditsApplied }: AIChatSidebarProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [statusText, setStatusText] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+export function AIChatSidebar({ chat }: AIChatSidebarProps) {
+  const {
+    messages,
+    input,
+    isStreaming,
+    statusText,
+    conversationLoaded,
+    bottomRef,
+    setInput,
+    handleSend,
+  } = chat;
 
-  const scrollToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
-
-  async function handleSend() {
-    const trimmed = input.trim();
-    if (!trimmed || isStreaming) return;
-
-    const userMsg: ChatMessage = { role: "user", content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setIsStreaming(true);
-    setStatusText("Connecting...");
-
-    const conversationHistory = messages.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    }));
-
-    try {
-      const res = await fetch("/api/agents/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceSlug: workspace,
-          postId,
-          message: trimmed,
-          conversationHistory,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Request failed" }));
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: `Error: ${err.error || res.statusText}` },
-        ]);
-        setIsStreaming(false);
-        setStatusText("");
-        return;
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) return;
-
-      const decoder = new TextDecoder();
-      let assistantText = "";
-      const toolActions: string[] = [];
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            const event = line.slice(7).trim();
-            const nextLine = lines[lines.indexOf(line) + 1];
-            if (!nextLine?.startsWith("data: ")) continue;
-
-            const dataStr = nextLine.slice(6);
-            if (dataStr === "[DONE]") continue;
-
-            try {
-              const data = JSON.parse(dataStr);
-
-              switch (event) {
-                case "status":
-                  setStatusText(data.message || "Processing...");
-                  break;
-                case "text":
-                  assistantText += data.content || "";
-                  setMessages((prev) => {
-                    const updated = [...prev];
-                    const lastIdx = updated.length - 1;
-                    if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
-                      updated[lastIdx] = { ...updated[lastIdx], content: assistantText, toolActions };
-                    } else {
-                      updated.push({ role: "assistant", content: assistantText, toolActions });
-                    }
-                    return updated;
-                  });
-                  break;
-                case "tool_use":
-                  toolActions.push(`Using ${data.tool}...`);
-                  setStatusText(`Using ${data.tool}...`);
-                  break;
-                case "tool_result":
-                  if (data.tool === "edit_markdown" && data.success) {
-                    // Fetch updated markdown from the post
-                    fetchUpdatedMarkdown();
-                  }
-                  break;
-                case "error":
-                  assistantText += `\n\nError: ${data.message}`;
-                  break;
-              }
-            } catch {
-              // Skip malformed JSON
-            }
-          }
-        }
-      }
-
-      // Ensure final message is set
-      if (assistantText) {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
-            updated[lastIdx] = { ...updated[lastIdx], content: assistantText, toolActions };
-          } else {
-            updated.push({ role: "assistant", content: assistantText, toolActions });
-          }
-          return updated;
-        });
-      }
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Connection error: ${error instanceof Error ? error.message : "Unknown"}` },
-      ]);
-    } finally {
-      setIsStreaming(false);
-      setStatusText("");
-    }
-  }
-
-  async function fetchUpdatedMarkdown() {
-    try {
-      const res = await fetch(`/api/content/${postId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.markdown) {
-          onEditsApplied(data.markdown);
-        }
-      }
-    } catch {
-      // Silent fail — user can manually refresh
-    }
-  }
+  useKeyboardShortcut(SHORTCUTS.Actions[1], handleSend, { captureInInputs: true });
 
   return (
     <div className="flex flex-col h-full">
@@ -186,11 +37,11 @@ export function AIChatSidebar({ postId, workspace, onEditsApplied }: AIChatSideb
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-        {messages.length === 0 && (
+        {conversationLoaded && messages.length === 0 && (
           <div className="text-center py-8">
             <Bot size={32} className="mx-auto text-sf-text-muted mb-2" />
             <p className="text-sm text-sf-text-muted">Ask the AI to edit your content.</p>
-            <p className="text-xs text-sf-text-muted mt-1">Try: "Make the intro more engaging"</p>
+            <p className="text-xs text-sf-text-muted mt-1">Try: &quot;Make the intro more engaging&quot;</p>
           </div>
         )}
 
@@ -246,7 +97,7 @@ export function AIChatSidebar({ postId, workspace, onEditsApplied }: AIChatSideb
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && !e.metaKey && handleSend()}
             placeholder="Ask AI to edit..."
             disabled={isStreaming}
             className="flex-1 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary placeholder:text-sf-text-muted focus:outline-none focus:border-sf-border-focus disabled:opacity-50"

@@ -1,19 +1,15 @@
 /**
  * Newsletter writer agent that generates email digest posts from recent sessions.
- * Uses tool-calling to list sessions by timeframe, aggregate top insights, and
- * create a newsletter post, streaming progress events over SSE as it works.
+ * Uses the Agent SDK with MCP tools to list sessions by timeframe, aggregate top
+ * insights, and create a newsletter post, streaming progress events over SSE.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-import { getModelForAgent } from "../orchestration/model-selector";
-import { getToolsForAgent } from "../orchestration/tool-registry";
-import { handleSessionReaderTool } from "../tools/session-reader";
-import { handleInsightTool } from "../tools/insight-tools";
-import { handlePostManagerTool } from "../tools/post-manager";
 import { NEWSLETTER_PROMPT } from "../prompts/newsletter";
-import { createSSEStream, sseResponse } from "../orchestration/streaming";
-
-const client = new Anthropic();
+import { createAgentMcpServer } from "../mcp-server-factory";
+import { runAgentStreaming } from "../agent-runner";
+import { getTemplateBySlug } from "@/lib/templates";
+import { getTemplateById, incrementTemplateUsage } from "@/lib/templates/db-operations";
+import type { ContentTemplate, BuiltInTemplate } from "@/types/templates";
 
 /** Input parameters for the newsletter writer agent. */
 interface NewsletterWriterInput {
@@ -23,157 +19,101 @@ interface NewsletterWriterInput {
   lookbackDays: number;
   /** Optional extra instructions appended to the agent prompt. */
   customInstructions?: string;
+  /** Optional template slug to use as scaffolding for the newsletter post. */
+  templateId?: string;
 }
 
 /**
  * Starts a streaming newsletter generation run and returns an SSE response.
- * The agent lists sessions in the lookback window, fetches top insights,
- * and creates a newsletter post via tool calls.
  *
  * @param input - Configuration for the newsletter run.
  * @returns A streaming SSE {@link Response} with status, tool, and text events.
  */
-export function streamNewsletterWriter(input: NewsletterWriterInput): Response {
-  const { stream, send, close } = createSSEStream();
+export async function streamNewsletterWriter(input: NewsletterWriterInput): Promise<Response> {
+  const userMessage = input.customInstructions
+    ? `Generate a newsletter email digest for the last ${input.lookbackDays} day${input.lookbackDays === 1 ? "" : "s"}. First use list_sessions_by_timeframe to find sessions in the window, then use get_top_insights to surface the most interesting technical moments, then create a newsletter post with create_post using contentType "newsletter".\n\nAdditional instructions: ${input.customInstructions}`
+    : `Generate a newsletter email digest for the last ${input.lookbackDays} day${input.lookbackDays === 1 ? "" : "s"}. First use list_sessions_by_timeframe to find sessions in the window, then use get_top_insights to surface the most interesting technical moments, then create a newsletter post with create_post using contentType "newsletter".`;
 
-  const run = async () => {
-    try {
-      const model = getModelForAgent("newsletter-writer");
-      const tools = getToolsForAgent("newsletter-writer");
-
-      const userMessage = input.customInstructions
-        ? `Generate a newsletter email digest for the last ${input.lookbackDays} day${input.lookbackDays === 1 ? "" : "s"}. First use list_sessions_by_timeframe to find sessions in the window, then use get_top_insights to surface the most interesting technical moments, then create a newsletter post with create_post using contentType "newsletter".\n\nAdditional instructions: ${input.customInstructions}`
-        : `Generate a newsletter email digest for the last ${input.lookbackDays} day${input.lookbackDays === 1 ? "" : "s"}. First use list_sessions_by_timeframe to find sessions in the window, then use get_top_insights to surface the most interesting technical moments, then create a newsletter post with create_post using contentType "newsletter".`;
-
-      const messages: Anthropic.MessageParam[] = [
-        { role: "user", content: userMessage },
-      ];
-
-      send("status", {
-        phase: "starting",
-        message: "Generating newsletter digest...",
-      });
-
-      let response = await client.messages.create({
-        model,
-        max_tokens: 8192,
-        system: NEWSLETTER_PROMPT,
-        tools: tools as Anthropic.Tool[],
-        messages,
-      });
-
-      while (response.stop_reason === "tool_use") {
-        const toolUseBlocks = response.content.filter(
-          (b): b is Anthropic.ContentBlock & { type: "tool_use" } =>
-            b.type === "tool_use"
-        );
-
-        for (const toolUse of toolUseBlocks) {
-          send("tool_use", { tool: toolUse.name, input: toolUse.input });
-        }
-
-        const toolResults: Anthropic.MessageParam = {
-          role: "user",
-          content: await Promise.all(
-            toolUseBlocks.map(async (toolUse) => {
-              try {
-                const result = await dispatchTool(
-                  input.workspaceId,
-                  toolUse.name,
-                  toolUse.input as Record<string, unknown>
-                );
-                send("tool_result", { tool: toolUse.name, success: true });
-                return {
-                  type: "tool_result" as const,
-                  tool_use_id: toolUse.id,
-                  content: JSON.stringify(result),
-                };
-              } catch (error) {
-                const errMsg =
-                  error instanceof Error ? error.message : String(error);
-                send("tool_result", {
-                  tool: toolUse.name,
-                  success: false,
-                  error: errMsg,
-                });
-                return {
-                  type: "tool_result" as const,
-                  tool_use_id: toolUse.id,
-                  content: `Error: ${errMsg}`,
-                  is_error: true,
-                };
-              }
-            })
-          ),
-        };
-
-        messages.push({ role: "assistant", content: response.content });
-        messages.push(toolResults);
-
-        response = await client.messages.create({
-          model,
-          max_tokens: 8192,
-          system: NEWSLETTER_PROMPT,
-          tools: tools as Anthropic.Tool[],
-          messages,
-        });
-      }
-
-      for (const block of response.content) {
-        if (block.type === "text") {
-          send("text", { content: block.text });
-        }
-      }
-
-      send("complete", { usage: response.usage });
-    } catch (error) {
-      send("error", {
-        message: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      close();
+  let systemPrompt = NEWSLETTER_PROMPT;
+  // Fetch and apply template if provided
+  // Try database template first (by ID), then fall back to built-in (by slug)
+  if (input.templateId) {
+    const dbTemplate = await getTemplateById(input.templateId);
+    let template: ContentTemplate | BuiltInTemplate | null = null;
+    if (dbTemplate) {
+      template = dbTemplate;
+      // Fire-and-forget usage tracking
+      void incrementTemplateUsage(dbTemplate.id);
+    } else {
+      template = getTemplateBySlug(input.templateId) ?? null;
     }
-  };
+    if (template) {
+      const templateInstructions = buildTemplateInstructions(template);
+      systemPrompt = `${systemPrompt}\n\n${templateInstructions}`;
+    }
+  }
 
-  run();
-  return sseResponse(stream);
+  const mcpServer = createAgentMcpServer("newsletter-writer", input.workspaceId);
+
+  return runAgentStreaming(
+    {
+      agentType: "newsletter-writer",
+      workspaceId: input.workspaceId,
+      systemPrompt,
+      userMessage,
+      mcpServer,
+      trackRun: false,
+    },
+  );
 }
 
 /**
- * Routes a tool call from the agent to the appropriate tool handler.
- * Supports session reader, insight, and post manager tools.
+ * Builds template-specific instructions from a template definition.
+ * Converts template structure and tone guidance into prompt instructions
+ * that guide the AI in following the template format.
  *
- * @param workspaceId - Workspace context passed to each handler.
- * @param toolName - Name of the tool requested by the agent.
- * @param toolInput - Arguments supplied by the agent for the tool call.
- * @returns The handler's result, serialised to the agent as JSON.
- * @throws {Error} When `toolName` does not match any known tool.
+ * @param template - The template to build instructions from (database or built-in).
+ * @returns Formatted instructions string to append to the system prompt.
  */
-async function dispatchTool(
-  workspaceId: string,
-  toolName: string,
-  toolInput: Record<string, unknown>
-): Promise<unknown> {
-  if (
-    toolName.startsWith("get_session") ||
-    toolName === "list_sessions_by_timeframe"
-  ) {
-    return handleSessionReaderTool(workspaceId, toolName, toolInput);
+function buildTemplateInstructions(
+  template: ContentTemplate | BuiltInTemplate | null
+): string {
+  if (!template) return "";
+
+  const instructions: string[] = [];
+
+  instructions.push(`## Content Template: ${template.name}`);
+  const description = template.description ?? '';
+  if (description) {
+    instructions.push(`\n${description}\n`);
   }
-  if (
-    toolName.startsWith("get_insight") ||
-    toolName === "get_top_insights" ||
-    toolName === "create_insight"
-  ) {
-    return handleInsightTool(workspaceId, toolName, toolInput);
+
+  if (template.structure?.sections && template.structure.sections.length > 0) {
+    instructions.push("### Required Structure");
+    instructions.push("\nYour newsletter post MUST follow this structure:\n");
+
+    template.structure.sections.forEach((section, index) => {
+      const requiredLabel = section.required ? "(REQUIRED)" : "(OPTIONAL)";
+      instructions.push(`${index + 1}. **${section.heading}** ${requiredLabel}`);
+      instructions.push(`   ${section.description}`);
+      instructions.push("");
+    });
   }
-  if (
-    toolName === "create_post" ||
-    toolName === "update_post" ||
-    toolName === "get_post" ||
-    toolName === "get_markdown"
-  ) {
-    return handlePostManagerTool(workspaceId, toolName, toolInput);
+
+  if (template.toneGuidance) {
+    instructions.push("### Tone and Style Guidance");
+    instructions.push(`\n${template.toneGuidance}\n`);
   }
-  throw new Error(`Unknown tool: ${toolName}`);
+
+  if (template.exampleContent) {
+    instructions.push("### Example Format");
+    instructions.push("\nHere's an example of how this template should look:\n");
+    instructions.push("```markdown");
+    instructions.push(template.exampleContent.substring(0, 500) + "...");
+    instructions.push("```\n");
+  }
+
+  instructions.push("**Important:** Use the template structure as scaffolding, but fill it with content based on the actual session data you fetch. The template provides the format and guidance, not the content itself.");
+
+  return instructions.join("\n");
 }

@@ -1,39 +1,51 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { eq } from "drizzle-orm/sql";
 import { streamBlogWriter } from "@/lib/ai/agents/blog-writer";
+import { withApiHandler } from "@/lib/api-handler";
+import { parseBody, agentBlogSchema } from "@/lib/validation";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { checkQuota, recordUsage } from "@/lib/billing/usage";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: Request) {
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const body = await request.json();
-  const { workspaceSlug, insightId, tone, customInstructions } = body;
+    const rawBody = await req.json().catch(() => ({}));
+    const { workspaceSlug, insightId, tone, customInstructions } = parseBody(agentBlogSchema, rawBody);
+    const templateId = rawBody.templateId as string | undefined;
 
-  if (!workspaceSlug || !insightId) {
-    return NextResponse.json(
-      { error: "workspaceSlug and insightId are required" },
-      { status: 400 }
-    );
-  }
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.slug, workspaceSlug),
+    });
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
+    if (!workspace || workspace.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const quota = await checkQuota(session.user.id, "content_generation");
+    if (!quota.allowed) {
+      return new Response(JSON.stringify({
+        error: "Monthly content generation quota exceeded",
+        quota: { limit: quota.limit, remaining: quota.remaining, percentUsed: quota.percentUsed },
+      }), { status: 402, headers: { "Content-Type": "application/json" } });
+    }
 
-  return streamBlogWriter({
-    workspaceId: workspace.id,
-    insightId,
-    tone: tone ?? "technical",
-    customInstructions,
-  });
+    const result = await streamBlogWriter({
+      workspaceId: workspace.id,
+      insightId,
+      tone: (tone ?? "technical") as Parameters<typeof streamBlogWriter>[0]["tone"],
+      customInstructions,
+      templateId,
+    });
+
+    void recordUsage(session.user.id, workspace.id, "content_generation", 0.05);
+
+    return result;
+  })(req);
 }
