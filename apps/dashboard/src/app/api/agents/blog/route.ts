@@ -18,6 +18,7 @@ export async function POST(req: Request) {
 
     const rawBody = await req.json().catch(() => ({}));
     const { workspaceSlug, insightId, tone, customInstructions } = parseBody(agentBlogSchema, rawBody);
+    const templateId = rawBody.templateId as string | undefined;
 
     const workspace = await db.query.workspaces.findFirst({
       where: eq(workspaces.slug, workspaceSlug),
@@ -40,6 +41,7 @@ export async function POST(req: Request) {
       insightId,
       tone: (tone ?? "technical") as Parameters<typeof streamBlogWriter>[0]["tone"],
       customInstructions,
+      templateId,
     });
 
     void recordUsage(session.user.id, workspace.id, "content_generation", 0.05);
