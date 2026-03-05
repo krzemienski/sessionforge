@@ -4,9 +4,12 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useInsights } from "@/hooks/use-insights";
 import { useFilterParams } from "@/hooks/use-filter-params";
-import { useState } from "react";
-import { Lightbulb, SlidersHorizontal, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Lightbulb, SlidersHorizontal, X, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MultiSelectToolbar } from "@/components/batch/multi-select-toolbar";
+import { JobProgressModal } from "@/components/batch/job-progress-modal";
+import { useGenerateContentBatch } from "@/hooks/use-batch-operations";
 
 const CATEGORIES: Record<string, { label: string; color: string }> = {
   novel_problem_solving: { label: "Novel", color: "text-purple-400 bg-purple-400/10" },
@@ -43,6 +46,66 @@ export default function InsightsPage() {
   const insightList = insights.data?.insights ?? [];
 
   const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
+
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+
+  // Batch job state
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobModalOpen, setJobModalOpen] = useState(false);
+
+  const generateContentBatch = useGenerateContentBatch(workspace as string);
+
+  const handleCheckboxClick = useCallback(
+    (e: React.MouseEvent, insightId: string, index: number) => {
+      e.stopPropagation();
+
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+
+        if (e.shiftKey && lastSelectedIndex !== null) {
+          const start = Math.min(lastSelectedIndex, index);
+          const end = Math.max(lastSelectedIndex, index);
+          const rangeIds: string[] = insightList.slice(start, end + 1).map((ins: any) => ins.id);
+
+          const anchorId = insightList[lastSelectedIndex]?.id;
+          if (anchorId && prev.has(anchorId)) {
+            rangeIds.forEach((id: string) => next.add(id));
+          } else {
+            rangeIds.forEach((id: string) => next.delete(id));
+          }
+        } else {
+          if (next.has(insightId)) {
+            next.delete(insightId);
+          } else {
+            next.add(insightId);
+          }
+          setLastSelectedIndex(index);
+        }
+
+        return next;
+      });
+    },
+    [lastSelectedIndex, insightList]
+  );
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(insightList.map((ins: any) => ins.id)));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+    setLastSelectedIndex(null);
+  };
+
+  const handleGenerateContent = async () => {
+    const insightIds = Array.from(selectedIds);
+    const result = await generateContentBatch.mutateAsync({ insightIds });
+    setActiveJobId(result.jobId);
+    setJobModalOpen(true);
+    handleClearSelection();
+  };
 
   return (
     <div>
@@ -158,16 +221,51 @@ export default function InsightsPage() {
         </div>
       )}
 
+      {selectedIds.size > 0 && (
+        <div className="mb-4">
+          <MultiSelectToolbar
+            selectedCount={selectedIds.size}
+            totalCount={insightList.length}
+            onSelectAll={handleSelectAll}
+            onClearSelection={handleClearSelection}
+          >
+            <button
+              onClick={handleGenerateContent}
+              disabled={generateContentBatch.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-sf-accent text-sf-bg-primary text-sm font-medium rounded-sf hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+            >
+              <Sparkles size={14} />
+              {generateContentBatch.isPending ? "Starting..." : "Generate Content"}
+            </button>
+          </MultiSelectToolbar>
+        </div>
+      )}
+
       <div className="space-y-3">
-        {insightList.map((ins: any) => {
+        {insightList.map((ins: any, index: number) => {
           const cat = CATEGORIES[ins.category] ?? { label: ins.category, color: "text-sf-text-secondary bg-sf-bg-tertiary" };
+          const isSelected = selectedIds.has(ins.id);
           return (
             <div
               key={ins.id}
               onClick={() => router.push(`/${workspace}/insights/${ins.id}`)}
-              className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors"
+              className={cn(
+                "bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors",
+                isSelected && "ring-1 ring-sf-accent bg-sf-accent-bg/30"
+              )}
             >
               <div className="flex items-center gap-2 mb-2">
+                <div
+                  onClick={(e) => handleCheckboxClick(e, ins.id, index)}
+                  className="flex-shrink-0"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => {}}
+                    className="w-4 h-4 accent-sf-accent cursor-pointer"
+                  />
+                </div>
                 <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium", cat.color)}>{cat.label}</span>
                 <span className="ml-auto px-3 py-0.5 bg-sf-accent-bg text-sf-accent rounded-sf-full text-sm font-bold font-display">
                   {ins.compositeScore?.toFixed(0) ?? 0}/65
@@ -215,6 +313,17 @@ export default function InsightsPage() {
           </div>
         )}
       </div>
+
+      {activeJobId && (
+        <JobProgressModal
+          jobId={activeJobId}
+          isOpen={jobModalOpen}
+          onClose={() => {
+            setJobModalOpen(false);
+            setActiveJobId(null);
+          }}
+        />
+      )}
     </div>
   );
 }
