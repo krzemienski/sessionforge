@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { postPerformanceMetrics, posts } from "@sessionforge/db";
-import { eq, desc, avg, sum, count, and, lt, gte } from "drizzle-orm";
+import { postPerformanceMetrics, posts, insights } from "@sessionforge/db";
+import { eq, desc, avg, sum, count, and, lt, gte, isNotNull } from "drizzle-orm";
 import type { contentTypeEnum, insightCategoryEnum } from "@sessionforge/db";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
@@ -51,48 +51,30 @@ export async function getPerformanceByTopic(
 ): Promise<TopicPerformance[]> {
   const rows = await db
     .select({
-      category: posts.insightId,
-      postId: posts.id,
+      category: insights.category,
       totalViews: sum(postPerformanceMetrics.views).mapWith(Number),
       totalLikes: sum(postPerformanceMetrics.likes).mapWith(Number),
       totalComments: sum(postPerformanceMetrics.comments).mapWith(Number),
       totalShares: sum(postPerformanceMetrics.shares).mapWith(Number),
       avgEngagementRate: avg(postPerformanceMetrics.engagementRate).mapWith(Number),
+      postCount: count(posts.id),
     })
     .from(postPerformanceMetrics)
     .innerJoin(posts, eq(postPerformanceMetrics.postId, posts.id))
-    .where(eq(posts.workspaceId, workspaceId))
-    .groupBy(posts.insightId, posts.id);
+    .innerJoin(insights, eq(posts.insightId, insights.id))
+    .where(and(eq(posts.workspaceId, workspaceId), isNotNull(posts.insightId)))
+    .groupBy(insights.category)
+    .orderBy(desc(avg(postPerformanceMetrics.engagementRate)));
 
-  // Group by insightId (used as category proxy) — aggregate across posts
-  const grouped = new Map<string, TopicPerformance>();
-  for (const row of rows) {
-    const key = row.category ?? "uncategorized";
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.postCount += 1;
-      existing.totalViews += row.totalViews ?? 0;
-      existing.totalLikes += row.totalLikes ?? 0;
-      existing.totalComments += row.totalComments ?? 0;
-      existing.totalShares += row.totalShares ?? 0;
-      existing.avgEngagementRate =
-        (existing.avgEngagementRate + (row.avgEngagementRate ?? 0)) / 2;
-    } else {
-      grouped.set(key, {
-        category: key as InsightCategory,
-        postCount: 1,
-        totalViews: row.totalViews ?? 0,
-        totalLikes: row.totalLikes ?? 0,
-        totalComments: row.totalComments ?? 0,
-        totalShares: row.totalShares ?? 0,
-        avgEngagementRate: row.avgEngagementRate ?? 0,
-      });
-    }
-  }
-
-  return Array.from(grouped.values()).sort(
-    (a, b) => b.avgEngagementRate - a.avgEngagementRate
-  );
+  return rows.map((row) => ({
+    category: row.category,
+    postCount: row.postCount,
+    totalViews: row.totalViews ?? 0,
+    totalLikes: row.totalLikes ?? 0,
+    totalComments: row.totalComments ?? 0,
+    totalShares: row.totalShares ?? 0,
+    avgEngagementRate: row.avgEngagementRate ?? 0,
+  }));
 }
 
 export async function getPerformanceByFormat(
