@@ -960,6 +960,41 @@ export const engagementMetrics = pgTable(
   ]
 );
 
+export const contentRecommendations = pgTable(
+  "content_recommendations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    recommendationType: text("recommendation_type").notNull(),
+    title: text("title").notNull(),
+    reasoning: text("reasoning").notNull(),
+    suggestedContentType: contentTypeEnum("suggested_content_type"),
+    suggestedPublishTime: timestamp("suggested_publish_time"),
+    insightId: text("insight_id").references(() => insights.id),
+    priority: integer("priority").default(0),
+    status: text("status").notNull().default("active"),
+    metadata: jsonb("metadata").$type<{
+      cadenceGap?: boolean;
+      engagementPrediction?: number;
+      relatedSessions?: string[];
+      contentTypeMatch?: string;
+      timezoneOptimized?: boolean;
+    }>(),
+    acceptedAt: timestamp("accepted_at"),
+    dismissedAt: timestamp("dismissed_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("contentRecommendations_workspaceId_idx").on(table.workspaceId),
+    index("contentRecommendations_status_idx").on(table.status),
+    index("contentRecommendations_insightId_idx").on(table.insightId),
+    index("contentRecommendations_priority_idx").on(table.priority),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1020,6 +1055,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   usageEvents: many(usageEvents),
   postConversations: many(postConversations),
   engagementMetrics: many(engagementMetrics),
+  contentRecommendations: many(contentRecommendations),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1072,6 +1108,7 @@ export const insightsRelations = relations(insights, ({ one, many }) => ({
     references: [claudeSessions.id],
   }),
   posts: many(posts),
+  contentRecommendations: many(contentRecommendations),
 }));
 
 export const postsRelations = relations(posts, ({ one, many }) => ({
@@ -1354,6 +1391,20 @@ export const postConversationsRelations = relations(postConversations, ({ one })
     references: [workspaces.id],
   }),
 }));
+
+export const contentRecommendationsRelations = relations(
+  contentRecommendations,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [contentRecommendations.workspaceId],
+      references: [workspaces.id],
+    }),
+    insight: one(insights, {
+      fields: [contentRecommendations.insightId],
+      references: [insights.id],
+    }),
+  })
+);
 
 // ── Supplementary Content (Phase 6) ──
 
