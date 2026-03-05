@@ -8,6 +8,10 @@ dist/
 *.tsbuildinfo
 .omc/
 evidence/
+e2e-evidence/
+validation-evidence/
+.DS_Store
+.playwright-mcp/
 
 # Auto Claude data directory
 .auto-claude/

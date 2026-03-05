@@ -1,65 +1,111 @@
 # SessionForge Architecture
 
-**Version:** 2.0.0
-**Updated:** 2026-03-01
+**Version:** 0.5.0-alpha
+**Updated:** 2026-03-05
 
 ---
 
 ## Table of Contents
 
-1. [Monorepo Structure](#monorepo-structure)
-2. [Tech Stack](#tech-stack)
-3. [Session Scanning Pipeline](#session-scanning-pipeline)
-4. [AI Agent Pipeline](#ai-agent-pipeline)
-5. [Database Schema](#database-schema)
-6. [API Routes](#api-routes)
-7. [Key Design Decisions](#key-design-decisions)
+1. [System Overview](#system-overview)
+2. [Monorepo Structure](#monorepo-structure)
+3. [Tech Stack](#tech-stack)
+4. [Session Scanning Pipeline](#session-scanning-pipeline)
+5. [AI Agent Pipeline](#ai-agent-pipeline)
+6. [Content Lifecycle](#content-lifecycle)
+7. [Database Schema](#database-schema)
+8. [API Routes](#api-routes)
+9. [Integration Architecture](#integration-architecture)
+10. [Key Design Decisions](#key-design-decisions)
+
+---
+
+## System Overview
+
+```mermaid
+graph TB
+    subgraph Client["Browser"]
+        UI[Next.js App Router]
+        Editor[Lexical Editor]
+        Views[Calendar / Pipeline / List]
+        Analytics[Social Analytics Dashboard]
+    end
+
+    subgraph Server["Next.js API Routes (100+ endpoints)"]
+        Auth[better-auth]
+        SessionAPI[Sessions]
+        ContentAPI[Content CRUD]
+        AgentAPI[AI Agents - SSE]
+        IntAPI[Integrations - 7 platforms]
+        SchedAPI[Schedule / Queue]
+        SEOAPI[SEO / Analytics]
+    end
+
+    subgraph AI["AI Layer (claude-agent-sdk)"]
+        Blog[Blog Writer]
+        Social[Social Writer]
+        Changelog[Changelog Writer]
+        Chat[Editor Chat]
+        Insight[Insight Extractor]
+        Style[Style Learner]
+    end
+
+    subgraph Data["Data Layer"]
+        DB[(PostgreSQL - Neon\n59 tables)]
+        Redis[(Upstash Redis)]
+        QStash[Upstash QStash]
+    end
+
+    Client --> Server
+    AgentAPI --> AI
+    Server --> Data
+    QStash -->|webhook| SchedAPI
+```
 
 ---
 
 ## Monorepo Structure
 
-The project is a Turborepo monorepo managed with Bun. All application code lives in `apps/`, shared packages in `packages/`.
+Turborepo monorepo managed with Bun. All application code lives in `apps/`, shared packages in `packages/`.
 
 ```
 sessionforge/
-├── turbo.json                          # Turborepo pipeline config
-├── package.json                        # Workspace root
-├── .env.example                        # Environment variable template
-├── CLAUDE.md                           # Claude Code instructions
+├── turbo.json
+├── package.json
+├── .env.example
+├── Dockerfile / docker-compose.yml
 │
 ├── apps/
-│   └── dashboard/                      # Next.js 15 application (App Router)
+│   └── dashboard/                      # Next.js 15 (App Router)
 │       └── src/
 │           ├── app/
-│           │   ├── (auth)/             # Login / signup pages
-│           │   ├── (dashboard)/        # Workspace-scoped pages
-│           │   │   └── [workspace]/
-│           │   │       ├── sessions/   # Session browser + detail
-│           │   │       ├── insights/   # Ranked insight list + detail
-│           │   │       ├── content/    # Content library + editor
-│           │   │       ├── automation/ # Trigger management
-│           │   │       └── settings/   # Workspace / style / API keys
-│           │   └── api/                # Next.js Route Handlers (REST)
-│           │       ├── sessions/       # Scan, list, detail, messages
-│           │       ├── insights/       # Extract, list, detail
-│           │       ├── content/        # CRUD
-│           │       ├── agents/         # Streaming SSE endpoints
-│           │       └── automation/     # Trigger CRUD + QStash webhook
-│           ├── components/             # React components (ui, layout, domain)
+│           │   ├── (auth)/             # Login / signup
+│           │   ├── (dashboard)/[workspace]/
+│           │   │   ├── sessions/       # Session browser
+│           │   │   ├── insights/       # Ranked insights
+│           │   │   ├── content/        # Library + editor (list/calendar/pipeline)
+│           │   │   ├── calendar/       # Standalone calendar
+│           │   │   ├── series/         # Content series
+│           │   │   ├── collections/    # Content collections
+│           │   │   ├── analytics/      # Social media analytics
+│           │   │   ├── recommendations/# AI recommendations
+│           │   │   ├── automation/     # Trigger management
+│           │   │   ├── schedule/       # Publish queue
+│           │   │   └── settings/       # Workspace, style, API keys,
+│           │   │                       # integrations, skills, webhooks, wordpress
+│           │   └── api/                # 100+ Route Handlers
+│           ├── components/             # React components
 │           └── lib/
-│               ├── sessions/           # Scanner → Parser → Normalizer → Indexer
-│               └── ai/
-│                   ├── agents/         # 5 AI agent implementations
-│                   ├── orchestration/  # Tool registry, model selector, SSE streaming
-│                   ├── prompts/        # System prompts per agent / tone
-│                   └── tools/          # MCP-style tool handlers
+│               ├── sessions/           # Scanner -> Parser -> Normalizer -> Indexer
+│               ├── ai/                 # Agents, tools, prompts, orchestration
+│               ├── integrations/       # Platform clients
+│               ├── seo/               # SEO/GEO analysis
+│               ├── media/             # Diagram generation
+│               └── ingestion/         # URL + repo content ingestion
 │
 └── packages/
-    └── db/                             # Shared Drizzle ORM schema + client
-        └── src/
-            ├── schema.ts               # All table definitions and relations
-            └── index.ts                # Re-exports
+    └── db/                             # Drizzle ORM schema + client
+        └── src/schema.ts               # 59 tables, enums, relations
 ```
 
 ---
@@ -77,8 +123,8 @@ sessionforge/
 | Database | PostgreSQL via Drizzle ORM (Neon serverless) |
 | Queue | Upstash QStash (scheduled job execution) |
 | Cache | Upstash Redis (scan results, rate limits) |
-| AI SDK | `@anthropic-ai/sdk` (TypeScript) |
-| AI Models | `claude-opus-4-5` (complex generation), `claude-haiku-4-5` (routing/classification) |
+| AI | `@anthropic-ai/claude-agent-sdk` (CLI-inherited auth, zero API keys) |
+| AI Models | Claude Opus 4.5 (generation), Claude Haiku 4.5 (routing/classification) |
 | Deployment | Vercel (frontend + serverless API routes) |
 | Package Manager | Bun + Turborepo |
 
@@ -86,150 +132,80 @@ sessionforge/
 
 ## Session Scanning Pipeline
 
-The pipeline is the core data ingestion path. It converts raw JSONL files from `~/.claude/` into structured database records.
+The pipeline converts raw JSONL files from `~/.claude/` into structured database records.
 
-```
-Developer's filesystem
-~/.claude/projects/<encoded-path>/sessions/<session-id>.jsonl
-~/.claude/sessions/<session-id>.jsonl
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Stage 1: Scanner  (lib/sessions/scanner.ts)                │
-│                                                             │
-│  • Resolves basePath (default: ~/.claude)                   │
-│  • Reads ~/.claude/projects/*/sessions/*.jsonl              │
-│  • Reads ~/.claude/sessions/*.jsonl (global sessions)       │
-│  • Decodes project path: "-Users-nick-app" → "/Users/nick/app" │
-│  • Filters by lookbackDays (default: 30)                    │
-│  • Returns: SessionFileMeta[]                               │
-│    { filePath, sessionId, projectPath, mtime }              │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Stage 2: Parser  (lib/sessions/parser.ts)                  │
-│                                                             │
-│  • Streams JSONL line-by-line via readline                  │
-│  • Extracts per-message: role, content, tool usage          │
-│  • Aggregates: toolsUsed[], filesModified[], errors[]       │
-│  • Tracks: startedAt, endedAt, costUsd, messageCount        │
-│  • Returns: ParsedSession                                   │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Stage 3: Normalizer  (lib/sessions/normalizer.ts)          │
-│                                                             │
-│  • Combines SessionFileMeta + ParsedSession                 │
-│  • Derives projectName from projectPath                     │
-│  • Computes durationSeconds                                 │
-│  • Returns: NormalizedSession (maps 1:1 to DB schema)       │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Stage 4: Indexer  (lib/sessions/indexer.ts)                │
-│                                                             │
-│  • Drizzle upsert into claude_sessions table                │
-│  • Conflict key: (workspaceId, sessionId)                   │
-│  • Idempotent — safe to re-scan the same files              │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-              PostgreSQL: claude_sessions table
+```mermaid
+flowchart TD
+    FS["Developer Filesystem\n~/.claude/projects/*/sessions/*.jsonl\n~/.claude/sessions/*.jsonl"]
+    S["Stage 1: Scanner\nlib/sessions/scanner.ts\n- Resolve basePath\n- Read JSONL files\n- Decode project paths\n- Filter by lookbackDays"]
+    P["Stage 2: Parser\nlib/sessions/parser.ts\n- Stream JSONL via readline\n- Extract messages, tools, files, errors\n- Track timestamps and costs"]
+    N["Stage 3: Normalizer\nlib/sessions/normalizer.ts\n- Combine meta + parsed data\n- Derive projectName\n- Compute duration"]
+    I["Stage 4: Indexer\nlib/sessions/indexer.ts\n- Drizzle upsert\n- Conflict key: workspaceId + sessionId\n- Idempotent"]
+    DB[(claude_sessions table)]
+
+    FS --> S --> P --> N --> I --> DB
 ```
 
 **Trigger points:**
-- **Manual:** POST `/api/sessions/scan` from the dashboard scan button
-- **Scheduled:** Cron via Upstash QStash → POST `/api/automation/execute`
-- **File watch:** Triggered by the automation trigger system (planned)
+- **Manual:** POST `/api/sessions/scan` from dashboard
+- **Upload:** Drag-drop JSONL files on Sessions page
+- **Scheduled:** Cron via QStash -> POST `/api/automation/execute`
 
 ---
 
 ## AI Agent Pipeline
 
-SessionForge has **5 AI agents**, all sharing the same agentic loop pattern. They differ in their tool access, system prompts, and output delivery.
+All agents use `@anthropic-ai/claude-agent-sdk`, which inherits authentication from the Claude Code CLI session. **No API keys needed.**
 
 ### Agent Overview
 
 | Agent | Route | Model | Output | Tools |
 |---|---|---|---|---|
-| `insight-extractor` | `POST /api/insights/extract` | Haiku | JSON result | session, insight |
-| `blog-writer` | `POST /api/agents/blog` | Opus | SSE stream | session, insight, post, skill |
-| `social-writer` | `POST /api/agents/social` | Opus | SSE stream | session, insight, post |
-| `changelog-writer` | `POST /api/agents/changelog` | Haiku | SSE stream | session, post |
-| `editor-chat` | `POST /api/agents/chat` | Opus | SSE stream | post, markdown |
+| `insight-extractor` | POST `/api/insights/extract` | Haiku | JSON | session, insight |
+| `blog-writer` | POST `/api/agents/blog` | Opus | SSE stream | session, insight, post, skill |
+| `social-writer` | POST `/api/agents/social` | Opus | SSE stream | session, insight, post |
+| `changelog-writer` | POST `/api/agents/changelog` | Haiku | SSE stream | session, post |
+| `editor-chat` | POST `/api/agents/chat` | Opus | SSE stream | post, markdown |
+| `style-learner` | Internal | Opus | JSON | workspace style analysis |
 
 ### Agentic Loop Pattern
 
-All agents implement the same while-loop pattern over the Anthropic Messages API:
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Route as API Route
+    participant SDK as claude-agent-sdk
+    participant Tools as MCP Tools
+    participant DB as PostgreSQL
 
-```
-Input (workspaceId, insightId/sessionId, tone, ...)
-  │
-  ▼
-Build initial messages array
-  │
-  ▼
-┌─────────────────────────────────────────────────────────────┐
-│  client.messages.create({ model, tools, messages })         │
-│                                                             │
-│  while (response.stop_reason === "tool_use") {              │
-│    toolUseBlocks = response.content.filter(tool_use)        │
-│                                                             │
-│    for each toolUse:                                        │
-│      → dispatchTool(workspaceId, name, input)               │
-│      → SSE: send("tool_use", { tool, input })               │  ← streaming agents only
-│      → SSE: send("tool_result", { tool, success })          │  ← streaming agents only
-│                                                             │
-│    append assistant turn + tool_result turn                 │
-│    response = client.messages.create(...)                   │
-│  }                                                          │
-└─────────────────────────────────────────────────────────────┘
-  │
-  ▼
-Streaming agents: SSE send("text", content) for each text block
-Non-streaming:   return { result: text, usage }
-  │
-  ▼
-SSE: send("complete", { usage })  /  return result object
+    Client->>Route: POST /api/agents/blog
+    Route->>SDK: query({ model, tools, messages })
+    loop While tool_use
+        SDK->>Route: tool_use block
+        Route->>Tools: dispatchTool(name, input)
+        Tools->>DB: Read/write data
+        DB-->>Tools: Result
+        Tools-->>Route: tool_result
+        Route-->>Client: SSE: tool_use + tool_result
+        Route->>SDK: Continue with tool_result
+    end
+    SDK-->>Route: Final text response
+    Route-->>Client: SSE: text + complete
 ```
 
 ### Tool Registry
 
-`lib/ai/orchestration/tool-registry.ts` controls which tools each agent can access:
+`lib/ai/orchestration/tool-registry.ts` controls tool access per agent:
 
-```typescript
-const AGENT_TOOL_SETS = {
-  "insight-extractor": ["session", "insight"],
-  "blog-writer":       ["session", "insight", "post", "skill"],
-  "social-writer":     ["session", "insight", "post"],
-  "changelog-writer":  ["session", "post"],
-  "editor-chat":       ["post", "markdown"],
-};
-```
+| Tool Set | Tools Exposed |
+|---|---|
+| `session` | `get_session_summary`, `get_session_messages`, `list_sessions_by_timeframe` |
+| `insight` | `get_insight_details`, `get_top_insights`, `create_insight` |
+| `post` | `create_post`, `update_post`, `get_post`, `get_markdown` |
+| `markdown` | `edit_markdown`, `insert_section`, `replace_section` |
+| `skill` | `list_available_skills`, `get_skill_by_name` |
 
-### Tool Handlers
-
-| Tool Set | File | Tools Exposed |
-|---|---|---|
-| `session` | `tools/session-reader.ts` | `get_session_summary`, `get_session_messages`, `list_sessions_by_timeframe` |
-| `insight` | `tools/insight-tools.ts` | `get_insight_details`, `get_top_insights`, `create_insight` |
-| `post` | `tools/post-manager.ts` | `create_post`, `update_post`, `get_post`, `get_markdown` |
-| `markdown` | `tools/markdown-editor.ts` | `edit_markdown`, `insert_section`, `replace_section` |
-| `skill` | `tools/skill-loader.ts` | `list_available_skills`, `get_skill_by_name` |
-
-### Model Selection
-
-`lib/ai/orchestration/model-selector.ts` routes agents to the right model:
-
-- **claude-opus-4-5** — complex generation tasks: `blog-writer`, `social-writer`, `editor-chat`
-- **claude-haiku-4-5** — fast classification/extraction: `insight-extractor`, `changelog-writer`
-
-### SSE Streaming
-
-Content-generating agents return a `Response` with `Content-Type: text/event-stream`. The stream emits typed events:
+### SSE Event Types
 
 ```
 event: status       { phase, message }
@@ -240,216 +216,195 @@ event: complete     { usage }
 event: error        { message }
 ```
 
-`lib/ai/orchestration/streaming.ts` provides `createSSEStream()` → `{ stream, send, close }` and `sseResponse(stream)`.
+---
+
+## Content Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idea: Manual / AI Recommend
+    Idea --> Draft: Start Writing
+    Draft --> Draft: AI Edit via Chat
+    Draft --> InReview: Submit for Review
+    InReview --> Draft: Request Revisions
+    InReview --> Scheduled: Approve + Set Date
+    InReview --> Published: Approve + Publish Now
+    Scheduled --> Published: QStash fires at scheduled time
+    Published --> Archived: Archive
+    Draft --> Archived: Archive
+
+    state Published {
+        [*] --> Hashnode: Publish
+        [*] --> DevTo: Publish
+        [*] --> Medium: Publish
+        [*] --> Ghost: Publish
+        [*] --> WordPress: Publish
+        [*] --> Twitter: Post Thread
+        [*] --> LinkedIn: Post
+    }
+```
+
+### Content Views
+
+| View | Description |
+|---|---|
+| **List** | All posts with status tabs (All/Ideas/Drafts/In Review/Published/Archived), streak indicator |
+| **Calendar** | Monthly grid with posts on dates, Published/Draft/AI Suggested Slot legend |
+| **Pipeline** | Kanban board: Idea -> Draft -> In Review -> Published columns |
 
 ---
 
 ## Database Schema
 
-All tables are PostgreSQL via Drizzle ORM. The schema lives in `packages/db/src/schema.ts`.
+59 tables in PostgreSQL via Drizzle ORM. Schema at `packages/db/src/schema.ts`.
 
-### Entity Relationship Overview
+### Entity Relationship (Key Tables)
 
+```mermaid
+erDiagram
+    users ||--o{ workspaces : owns
+    workspaces ||--o| style_settings : has
+    workspaces ||--o{ claude_sessions : contains
+    workspaces ||--o{ posts : contains
+    workspaces ||--o{ series : contains
+    workspaces ||--o{ collections : contains
+    workspaces ||--o{ content_triggers : contains
+    workspaces ||--o{ api_keys : contains
+    workspaces ||--o{ scheduled_publications : contains
+    workspaces ||--o{ social_analytics_snapshots : contains
+
+    claude_sessions ||--o{ insights : yields
+    insights ||--o{ posts : generates
+
+    posts ||--o{ post_revisions : tracks
+    posts ||--o{ post_evidence : cites
+    posts ||--o{ post_media : contains
+    posts ||--o{ seo_metadata : has
+
+    series ||--o{ series_posts : contains
+    collections ||--o{ collection_posts : contains
 ```
-users
-  │
-  └─< workspaces (ownerId)
-        │
-        ├─ styleSettings (1:1)
-        │
-        ├─< claude_sessions
-        │       │
-        │       └─< insights
-        │               │
-        │               └─< posts
-        │
-        ├─< posts (workspace-scoped)
-        ├─< content_triggers
-        └─< api_keys
-```
 
-### Core Tables
+### Post Status Enum
 
-#### `users`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | text (UUID) | PK |
-| `name` | text | |
-| `email` | text | unique |
-| `emailVerified` | boolean | |
-| `image` | text | avatar URL |
+`draft` | `published` | `archived` | `idea` | `in_review` | `scheduled`
 
-#### `workspaces`
-| Column | Type | Notes |
-|---|---|---|
-| `id` | text (UUID) | PK |
-| `name` | text | display name |
-| `slug` | text | unique URL slug |
-| `ownerId` | text | FK → users |
-| `sessionBasePath` | text | default: `~/.claude` |
+### Insight Categories
 
-#### `claude_sessions`
-Central table — one row per scanned JSONL file.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | text (UUID) | PK |
-| `workspaceId` | text | FK → workspaces |
-| `sessionId` | text | original JSONL filename (no ext) |
-| `projectPath` | text | decoded filesystem path |
-| `projectName` | text | derived from projectPath |
-| `filePath` | text | absolute path to JSONL file |
-| `messageCount` | integer | |
-| `toolsUsed` | jsonb `string[]` | all tool names invoked |
-| `filesModified` | jsonb `string[]` | files touched in session |
-| `errorsEncountered` | jsonb `string[]` | error messages |
-| `summary` | text | AI-generated summary (nullable) |
-| `startedAt` / `endedAt` | timestamp | session time bounds |
-| `durationSeconds` | integer | |
-| `costUsd` | real | total Anthropic cost |
-
-Unique index: `(workspaceId, sessionId)` — enables safe re-scanning.
-
-#### `insights`
-Scored content opportunities extracted from sessions.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | text (UUID) | PK |
-| `workspaceId` | text | FK → workspaces |
-| `sessionId` | text | FK → claude_sessions |
-| `category` | enum | `novel_problem_solving`, `tool_pattern_discovery`, `before_after_transformation`, `failure_recovery`, `architecture_decision`, `performance_optimization` |
-| `title` | text | |
-| `description` | text | |
-| `codeSnippets` | jsonb | `{ language, code, context }[]` |
-| `terminalOutput` | jsonb | `string[]` |
-| `compositeScore` | real | weighted aggregate (0–1) |
-| `noveltyScore` | real | dimension score |
-| `toolPatternScore` | real | dimension score |
-| `transformationScore` | real | dimension score |
-| `failureRecoveryScore` | real | dimension score |
-| `reproducibilityScore` | real | dimension score |
-| `scaleScore` | real | dimension score |
-| `usedInContent` | boolean | flagged after post generation |
-
-#### `posts`
-Generated content pieces, any format.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | text (UUID) | PK |
-| `workspaceId` | text | FK → workspaces |
-| `title` | text | |
-| `content` | text | raw markdown |
-| `markdown` | text | formatted markdown |
-| `contentType` | enum | `blog_post`, `twitter_thread`, `linkedin_post`, `devto_post`, `changelog`, `newsletter`, `custom` |
-| `status` | enum | `draft`, `published`, `archived` |
-| `insightId` | text | FK → insights (nullable) |
-| `sourceMetadata` | jsonb | triggerId, sessionIds, insightIds, generatedBy |
-| `toneUsed` | enum | `technical`, `tutorial`, `conversational`, `professional`, `casual` |
-| `wordCount` | integer | |
-
-#### `content_triggers`
-Automation rules for scheduled content generation.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | text (UUID) | PK |
-| `workspaceId` | text | FK → workspaces |
-| `name` | text | display name |
-| `triggerType` | enum | `manual`, `scheduled`, `file_watch` |
-| `contentType` | enum | target content format |
-| `lookbackWindow` | enum | `current_day`, `yesterday`, `last_7_days`, `last_14_days`, `last_30_days`, `custom` |
-| `cronExpression` | text | for scheduled triggers |
-| `enabled` | boolean | |
-| `lastRunAt` | timestamp | |
-| `lastRunStatus` | text | |
-
-#### `style_settings`
-Per-workspace writing style configuration (1:1 with workspace).
-
-| Column | Type | Notes |
-|---|---|---|
-| `workspaceId` | text | unique FK → workspaces |
-| `defaultTone` | enum | default tone profile |
-| `targetAudience` | text | e.g. "senior engineers" |
-| `customInstructions` | text | free-form prompt additions |
-| `includeCodeSnippets` | boolean | |
-| `includeTerminalOutput` | boolean | |
-| `maxBlogWordCount` | integer | default: 2500 |
-
-### Auth Tables (better-auth managed)
-
-- `auth_sessions` — active login sessions with token, userId, activeWorkspaceId
-- `accounts` — OAuth provider links (GitHub)
-- `verifications` — email verification tokens
+`novel_problem_solving` | `tool_pattern_discovery` | `before_after_transformation` | `failure_recovery` | `architecture_decision` | `performance_optimization`
 
 ---
 
 ## API Routes
 
-All routes are Next.js App Router Route Handlers under `apps/dashboard/src/app/api/`.
+100+ Route Handlers under `apps/dashboard/src/app/api/`.
 
-### Session Routes
+### Core Routes
+
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/sessions` | List sessions for workspace |
-| `POST` | `/api/sessions/scan` | Trigger JSONL scan pipeline |
-| `GET` | `/api/sessions/[id]` | Get session detail |
-| `GET` | `/api/sessions/[id]/messages` | Get raw message transcript |
+| GET/POST | `/api/sessions` | List / scan sessions |
+| GET | `/api/sessions/[id]` | Session detail |
+| GET | `/api/sessions/[id]/messages` | Raw transcript |
+| GET/POST | `/api/insights` | List / extract insights |
+| GET/POST/PUT/DELETE | `/api/content` | Content CRUD |
+| POST | `/api/agents/blog` | Blog generation (SSE) |
+| POST | `/api/agents/social` | Social content (SSE) |
+| POST | `/api/agents/changelog` | Changelog (SSE) |
+| POST | `/api/agents/chat` | Editor chat (SSE) |
 
-### Insight Routes
+### Scheduling & Automation
+
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/insights` | List insights (ranked by compositeScore) |
-| `POST` | `/api/insights/extract` | Run insight-extractor agent |
-| `GET` | `/api/insights/[id]` | Get insight detail |
+| GET/POST | `/api/schedule` | Publish queue management |
+| GET/POST | `/api/automation/triggers` | Trigger CRUD |
+| POST | `/api/automation/execute` | QStash webhook endpoint |
+| GET | `/api/content/streak` | Publishing streak data |
 
-### Content Routes
+### Integrations
+
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/content` | List posts |
-| `POST` | `/api/content` | Create post (manual) |
-| `GET` | `/api/content/[id]` | Get post |
-| `PUT` | `/api/content/[id]` | Update post |
-| `DELETE` | `/api/content/[id]` | Delete post |
+| GET/POST/DELETE | `/api/integrations/hashnode` | Hashnode PAT |
+| GET/POST/DELETE | `/api/integrations/devto` | Dev.to API key |
+| GET/POST/DELETE | `/api/integrations/medium` | Medium token |
+| GET/POST/DELETE | `/api/integrations/ghost` | Ghost Admin API |
+| GET/DELETE | `/api/integrations/github` | GitHub OAuth |
+| GET/DELETE | `/api/integrations/twitter` | Twitter OAuth |
+| GET/DELETE | `/api/integrations/linkedin` | LinkedIn OAuth |
+| GET | `/api/integrations/*/oauth` | OAuth initiation |
+| GET | `/api/integrations/*/callback` | OAuth callback |
 
-### Agent Routes (SSE Streaming)
+### Analytics & Content Intelligence
+
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/agents/blog` | Stream blog post generation |
-| `POST` | `/api/agents/social` | Stream social content generation |
-| `POST` | `/api/agents/changelog` | Stream changelog generation |
-| `POST` | `/api/agents/chat` | Stream editor chat revisions |
+| GET | `/api/analytics` | Social engagement metrics |
+| GET/POST | `/api/series` | Series CRUD |
+| GET/POST | `/api/collections` | Collections CRUD |
+| GET/POST | `/api/recommendations` | AI recommendations |
+| GET | `/api/feed/[slug].xml` | RSS 2.0 feed |
+| GET | `/api/feed/[slug].atom` | Atom feed |
 
-### Automation Routes
-| Method | Path | Description |
-|---|---|---|
-| `GET/POST` | `/api/automation/triggers` | List / create triggers |
-| `GET/PUT/DELETE` | `/api/automation/triggers/[id]` | Manage trigger |
-| `POST` | `/api/automation/execute` | QStash webhook — execute trigger |
+---
+
+## Integration Architecture
+
+```mermaid
+flowchart LR
+    subgraph TokenAuth["Token-Based"]
+        H[Hashnode\nPAT]
+        D[Dev.to\nAPI Key]
+        M[Medium\nIntegration Token]
+        Gh[Ghost\nAdmin API Key]
+        WP[WordPress\nApp Password]
+    end
+
+    subgraph OAuthFlow["OAuth 2.0"]
+        GH[GitHub]
+        TW[Twitter / X\nPKCE Flow]
+        LI[LinkedIn]
+    end
+
+    SF[SessionForge] --> TokenAuth
+    SF --> OAuthFlow
+
+    TokenAuth --> Pub[Publish Content]
+    OAuthFlow --> Sync[Sync Analytics\n+ Publish]
+```
+
+**Token-based integrations** store credentials in per-workspace integration tables. Users paste tokens directly in Settings > Integrations.
+
+**OAuth integrations** use redirect-based flows. Twitter uses PKCE; LinkedIn uses standard OAuth 2.0. Tokens are stored after callback and used for analytics sync and publishing.
 
 ---
 
 ## Key Design Decisions
 
-### 1. Local JSONL over Webhook Integrations
-SessionForge reads directly from `~/.claude/projects/` rather than integrating with GitHub/Linear/Slack. This keeps the system self-contained, requires no API keys for data ingestion, and ensures content is grounded in the developer's actual work.
+### 1. CLI-Inherited AI Auth (Zero API Keys)
+All AI features use `@anthropic-ai/claude-agent-sdk` which spawns the `claude` CLI subprocess. Authentication comes from the logged-in user's CLI session -- no `ANTHROPIC_API_KEY` environment variable needed. This simplifies deployment and eliminates key management.
 
-### 2. Agentic Loop over Single-Shot Prompts
-All content generation uses multi-turn tool-use loops rather than stuffing all context into one prompt. This lets agents fetch exactly the data they need (session messages, insights, existing posts) and iterate, producing higher-quality output without hitting context limits.
+### 2. Local JSONL over Webhook Integrations
+SessionForge reads directly from `~/.claude/projects/` rather than integrating with external services for data ingestion. Self-contained, no API keys for data intake, content grounded in actual work.
 
-### 3. Tool Registry Pattern
-`tool-registry.ts` centralises which tools each agent can access. Adding a new agent or tool set requires only a registry entry — no changes to individual agent files. This enforces least-privilege access (e.g., `editor-chat` cannot read session data directly).
+### 3. Agentic Loop over Single-Shot Prompts
+Multi-turn tool-use loops let agents fetch exactly the data they need and iterate, producing higher-quality output without context limit issues.
 
-### 4. SSE Streaming for Content Agents
-Content generation agents return `text/event-stream` responses so the dashboard UI can render tool-use activity and partial content in real time. The `insight-extractor` returns a plain JSON result because it runs as a background job, not a user-facing interactive operation.
+### 4. Tool Registry Pattern
+Centralized tool access control per agent. Adding a new agent or tool requires only a registry entry. Enforces least-privilege (e.g., `editor-chat` cannot read sessions directly).
 
-### 5. Composite Scoring for Insight Ranking
-Insights are ranked by a 6-dimension weighted `compositeScore` rather than recency or manual curation. This ensures the most technically novel and reproducible sessions surface at the top of the content queue regardless of when they occurred.
+### 5. SSE Streaming for Content Agents
+Real-time rendering of tool-use activity and partial content in the editor. Background jobs (insight extraction) use plain JSON responses.
 
-### 6. Idempotent Scan Pipeline
-The indexer uses an upsert with `(workspaceId, sessionId)` as the conflict key. Re-running a scan is always safe — it updates existing records rather than creating duplicates.
+### 6. Composite Scoring for Insight Ranking
+6-dimension weighted scoring ensures technically novel, reproducible sessions surface at the top, regardless of recency.
 
-### 7. Workspace-Scoped Everything
-Every table (sessions, insights, posts, triggers, API keys, style settings) is scoped to a `workspaceId`. A single user can have multiple workspaces mapping to different `sessionBasePath` values — useful for separating work and personal projects.
+### 7. Idempotent Scan Pipeline
+Upsert with `(workspaceId, sessionId)` conflict key. Re-scanning is always safe.
+
+### 8. Workspace-Scoped Everything
+Every table scoped to `workspaceId`. Multiple workspaces per user for separating projects.
+
+### 9. 7-Platform Integration Strategy
+Token-based for simple platforms (paste and go), OAuth for platforms requiring user authorization (Twitter, LinkedIn, GitHub). Each platform has its own DB table for credentials and configuration.
