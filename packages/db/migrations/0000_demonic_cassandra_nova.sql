@@ -146,6 +146,29 @@ CREATE TABLE "insights" (
 	"created_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
+CREATE TABLE "medium_integrations" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"api_key" text NOT NULL,
+	"username" text,
+	"enabled" boolean DEFAULT true,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "medium_publications" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"post_id" text NOT NULL,
+	"integration_id" text NOT NULL,
+	"medium_article_id" text NOT NULL,
+	"medium_url" text,
+	"published_as_draft" boolean DEFAULT false,
+	"synced_at" timestamp DEFAULT now(),
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
 CREATE TABLE "posts" (
 	"id" text PRIMARY KEY NOT NULL,
 	"workspace_id" text NOT NULL,
@@ -261,6 +284,10 @@ ALTER TABLE "devto_publications" ADD CONSTRAINT "devto_publications_post_id_post
 ALTER TABLE "devto_publications" ADD CONSTRAINT "devto_publications_integration_id_devto_integrations_id_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."devto_integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "insights" ADD CONSTRAINT "insights_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "insights" ADD CONSTRAINT "insights_session_id_claude_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."claude_sessions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "medium_integrations" ADD CONSTRAINT "medium_integrations_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "medium_publications" ADD CONSTRAINT "medium_publications_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "medium_publications" ADD CONSTRAINT "medium_publications_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "medium_publications" ADD CONSTRAINT "medium_publications_integration_id_medium_integrations_id_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."medium_integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_insight_id_insights_id_fk" FOREIGN KEY ("insight_id") REFERENCES "public"."insights"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -289,6 +316,10 @@ CREATE INDEX "devtoPublications_postId_idx" ON "devto_publications" USING btree 
 CREATE UNIQUE INDEX "devtoPublications_postId_uidx" ON "devto_publications" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "insights_workspaceId_idx" ON "insights" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "insights_compositeScore_idx" ON "insights" USING btree ("composite_score");--> statement-breakpoint
+CREATE UNIQUE INDEX "mediumIntegrations_workspaceId_uidx" ON "medium_integrations" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "mediumPublications_workspaceId_idx" ON "medium_publications" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "mediumPublications_postId_idx" ON "medium_publications" USING btree ("post_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "mediumPublications_postId_uidx" ON "medium_publications" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "posts_workspaceId_createdAt_idx" ON "posts" USING btree ("workspace_id","created_at");--> statement-breakpoint
 CREATE INDEX "posts_createdBy_idx" ON "posts" USING btree ("created_by");--> statement-breakpoint
 CREATE UNIQUE INDEX "styleSettings_workspaceId_uidx" ON "style_settings" USING btree ("workspace_id");--> statement-breakpoint
