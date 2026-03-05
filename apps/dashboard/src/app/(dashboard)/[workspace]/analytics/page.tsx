@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { BarChart2, Eye, Heart, Share2, MessageCircle, MousePointerClick, RefreshCw, Twitter, Linkedin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TrendChart } from "@/components/analytics/trend-chart";
 
 type Timeframe = "7d" | "30d" | "90d";
 
@@ -193,6 +194,13 @@ export default function AnalyticsPage() {
               </div>
             </div>
           )}
+
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-sf-text-secondary uppercase tracking-wide mb-3">
+              Trend
+            </h2>
+            <TrendChart posts={data.posts} timeframe={timeframe} />
+          </div>
 
           {platforms.length === 0 && (
             <div className="text-center py-12">
