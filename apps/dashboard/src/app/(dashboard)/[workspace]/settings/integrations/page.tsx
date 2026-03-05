@@ -88,6 +88,34 @@ export default function IntegrationsPage() {
 
   const isTwitterConnected = twitterIntegration.data?.connected === true;
 
+  // LinkedIn integration state
+  const linkedinIntegration = useQuery({
+    queryKey: ["linkedin-integration", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/integrations/linkedin?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed to load LinkedIn integration status");
+      return res.json();
+    },
+  });
+
+  const linkedinDisconnect = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/integrations/linkedin?workspace=${workspace}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to disconnect LinkedIn");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["linkedin-integration", workspace] });
+    },
+  });
+
+  const isLinkedInConnected = linkedinIntegration.data?.connected === true;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -313,6 +341,93 @@ export default function IntegrationsPage() {
                 <p className="text-sm text-sf-danger flex items-center gap-1 mt-2">
                   <AlertCircle size={13} />
                   {(twitterIntegration.error as Error).message}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        {/* LinkedIn Integration */}
+        <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-sf bg-sf-bg-tertiary border border-sf-border flex items-center justify-center flex-shrink-0">
+              <span className="text-lg font-bold text-sf-text-primary">in</span>
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-base font-semibold text-sf-text-primary">LinkedIn</h2>
+                {isLinkedInConnected ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-sf-success bg-sf-success/10 border border-sf-success/20 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 size={11} />
+                    Connected
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs text-sf-text-muted bg-sf-bg-tertiary border border-sf-border px-2 py-0.5 rounded-full">
+                    Not connected
+                  </span>
+                )}
+              </div>
+
+              <p className="text-sm text-sf-text-secondary mb-4">
+                Connect your LinkedIn account to track engagement analytics for your posts.
+              </p>
+
+              {linkedinIntegration.isLoading && (
+                <div className="animate-pulse h-8 bg-sf-bg-tertiary rounded w-1/3" />
+              )}
+
+              {!linkedinIntegration.isLoading && isLinkedInConnected && (
+                <div className="space-y-3">
+                  <div className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-4 py-3 text-sm space-y-1">
+                    <p className="text-sf-text-primary">
+                      <span className="text-sf-text-muted">Account: </span>
+                      <span className="font-medium font-code">{linkedinIntegration.data.name}</span>
+                    </p>
+                    {linkedinIntegration.data.connectedAt && (
+                      <p className="text-xs text-sf-text-muted">
+                        Connected {timeAgo(linkedinIntegration.data.connectedAt)}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => linkedinDisconnect.mutate()}
+                    disabled={linkedinDisconnect.isPending}
+                    className="flex items-center gap-2 text-sf-danger border border-sf-danger/30 bg-sf-danger/5 hover:bg-sf-danger/10 px-4 py-2 rounded-sf text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    <Link2Off size={14} />
+                    {linkedinDisconnect.isPending ? "Disconnecting..." : "Disconnect LinkedIn"}
+                  </button>
+
+                  {linkedinDisconnect.isError && (
+                    <p className="text-sm text-sf-danger flex items-center gap-1">
+                      <AlertCircle size={13} />
+                      {(linkedinDisconnect.error as Error).message}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!linkedinIntegration.isLoading && !isLinkedInConnected && (
+                <div className="space-y-3">
+                  <p className="text-xs text-sf-text-muted">
+                    Authorize via LinkedIn OAuth to link your account. You will be redirected to LinkedIn to complete the connection.
+                  </p>
+
+                  <a
+                    href={`/api/integrations/linkedin/oauth?workspace=${workspace}`}
+                    className="inline-flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                  >
+                    <Link2 size={14} />
+                    Connect LinkedIn
+                  </a>
+                </div>
+              )}
+
+              {linkedinIntegration.isError && (
+                <p className="text-sm text-sf-danger flex items-center gap-1 mt-2">
+                  <AlertCircle size={13} />
+                  {(linkedinIntegration.error as Error).message}
                 </p>
               )}
             </div>
