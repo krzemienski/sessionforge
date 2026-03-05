@@ -9,9 +9,9 @@ import {
   useCollectionPosts,
   useAddPostToCollection,
   useRemovePostFromCollection,
-  useExportCollection,
 } from "@/hooks/use-collections";
 import { useContent } from "@/hooks/use-content";
+import { StaticSiteExportModal } from "@/components/export/static-site-export-modal";
 import {
   ArrowLeft,
   Save,
@@ -45,7 +45,6 @@ export default function CollectionDetailPage() {
   const deleteCollection = useDeleteCollection();
   const addPost = useAddPostToCollection();
   const removePost = useRemovePostFromCollection();
-  const { exportCollection, isExporting } = useExportCollection();
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -54,6 +53,7 @@ export default function CollectionDetailPage() {
   const [customDomain, setCustomDomain] = useState("");
   const [initialized, setInitialized] = useState(false);
   const [showAddPost, setShowAddPost] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   if (collection.data && !initialized) {
     setName(collection.data.name ?? "");
@@ -79,10 +79,6 @@ export default function CollectionDetailPage() {
     if (!confirm("Delete this collection? Posts will not be deleted.")) return;
     await deleteCollection.mutateAsync(collectionId);
     router.push(`/${workspace}/collections`);
-  };
-
-  const handleExport = () => {
-    exportCollection(collectionId, collection.data?.name ?? "collection", theme);
   };
 
   const currentPostIds = new Set(
@@ -127,16 +123,11 @@ export default function CollectionDetailPage() {
         </button>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+            onClick={() => setShowExportModal(true)}
+            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors"
           >
-            {isExporting ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Download size={14} />
-            )}
-            {isExporting ? "Exporting…" : "Export Site"}
+            <Download size={14} />
+            Export Site
           </button>
           <button
             onClick={handleSave}
@@ -344,6 +335,14 @@ export default function CollectionDetailPage() {
           </div>
         </div>
       </div>
+
+      <StaticSiteExportModal
+        collectionId={collectionId}
+        collectionName={collection.data?.name ?? "collection"}
+        defaultTheme={theme}
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+      />
     </div>
   );
 }
