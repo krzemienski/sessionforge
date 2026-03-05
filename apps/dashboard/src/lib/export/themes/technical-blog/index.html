@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{SITE_DESCRIPTION}}">
+  <meta name="author" content="{{AUTHOR_NAME}}">
+  <meta property="og:title" content="{{PAGE_TITLE}}">
+  <meta property="og:description" content="{{SITE_DESCRIPTION}}">
+  <meta property="og:type" content="{{OG_TYPE}}">
+  <meta property="og:url" content="{{CANONICAL_URL}}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{PAGE_TITLE}}">
+  <meta name="twitter:description" content="{{SITE_DESCRIPTION}}">
+  <link rel="canonical" href="{{CANONICAL_URL}}">
+  <link rel="alternate" type="application/rss+xml" title="{{SITE_TITLE}} RSS Feed" href="{{BASE_URL}}/rss.xml">
+  <link rel="sitemap" type="application/xml" href="{{BASE_URL}}/sitemap.xml">
+  <title>{{PAGE_TITLE}}</title>
+  <link rel="stylesheet" href="{{BASE_URL}}/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <div class="reading-progress" id="reading-progress" aria-hidden="true">
+    <div class="reading-progress-bar" id="reading-progress-bar"></div>
+  </div>
+
+  <header class="site-header">
+    <div class="container">
+      <div class="header-inner">
+        <div class="site-brand">
+          <a href="{{BASE_URL}}/" class="brand-link">
+            <span class="brand-name">{{SITE_TITLE}}</span>
+            <span class="brand-tagline">{{SITE_TAGLINE}}</span>
+          </a>
+        </div>
+        <nav class="site-nav" aria-label="Primary navigation">
+          <ul class="nav-list">
+            <li><a href="{{BASE_URL}}/" class="nav-link {{NAV_HOME_ACTIVE}}">Articles</a></li>
+            {{#if SHOW_RSS}}<li><a href="{{BASE_URL}}/rss.xml" class="nav-link" aria-label="RSS Feed">RSS</a></li>{{/if SHOW_RSS}}
+          </ul>
+        </nav>
+        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">
+          <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content" class="site-main">
+    <div class="container">
+
+      {{#if IS_INDEX}}
+      <section class="posts-section">
+        <div class="posts-section-header">
+          <h1 class="section-title">{{COLLECTION_NAME}}</h1>
+          {{#if COLLECTION_DESCRIPTION}}<p class="section-description">{{COLLECTION_DESCRIPTION}}</p>{{/if COLLECTION_DESCRIPTION}}
+        </div>
+        <ol class="posts-list" reversed>
+          {{POSTS_LIST}}
+        </ol>
+      </section>
+      {{/if IS_INDEX}}
+
+      {{#if IS_POST}}
+      <div class="post-layout">
+        <article class="post-article" itemscope itemtype="https://schema.org/BlogPosting">
+          <header class="post-header">
+            <div class="post-meta">
+              <time class="post-date" datetime="{{POST_DATE_ISO}}" itemprop="datePublished">{{POST_DATE_FORMATTED}}</time>
+              {{#if POST_READING_TIME}}<span class="post-reading-time" aria-label="Estimated reading time">{{POST_READING_TIME}} min read</span>{{/if POST_READING_TIME}}
+              {{#if POST_TAGS}}<ul class="post-tags" aria-label="Tags">{{POST_TAGS}}</ul>{{/if POST_TAGS}}
+            </div>
+            <h1 class="post-title" itemprop="headline">{{POST_TITLE}}</h1>
+            {{#if POST_EXCERPT}}<p class="post-excerpt" itemprop="description">{{POST_EXCERPT}}</p>{{/if POST_EXCERPT}}
+          </header>
+
+          <nav class="toc-mobile" id="toc-mobile" aria-label="Table of contents" hidden>
+            <button class="toc-toggle" id="toc-toggle" aria-expanded="false" aria-controls="toc-mobile-list">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+              Contents
+            </button>
+            <ol class="toc-list" id="toc-mobile-list" hidden></ol>
+          </nav>
+
+          <div class="post-body prose" id="post-body" itemprop="articleBody">
+            {{POST_CONTENT}}
+          </div>
+          <footer class="post-footer">
+            <a href="{{BASE_URL}}/" class="back-link">&larr; All articles</a>
+          </footer>
+        </article>
+
+        <aside class="post-sidebar" id="post-sidebar" aria-label="Table of contents">
+          <div class="toc-sticky">
+            <p class="toc-heading">Contents</p>
+            <ol class="toc-list" id="toc-desktop-list"></ol>
+          </div>
+        </aside>
+      </div>
+      {{/if IS_POST}}
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-inner">
+        <p class="footer-copy">&copy; {{CURRENT_YEAR}} {{AUTHOR_NAME}}</p>
+        {{#if SHOW_ATTRIBUTION}}
+        <p class="footer-attribution">
+          Published with <a href="https://sessionforge.ai" rel="noopener" target="_blank">SessionForge</a>
+        </p>
+        {{/if SHOW_ATTRIBUTION}}
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+  <script src="{{BASE_URL}}/script.js" defer></script>
+</body>
+</html>
