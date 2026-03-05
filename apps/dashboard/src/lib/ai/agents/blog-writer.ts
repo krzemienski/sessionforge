@@ -51,6 +51,8 @@ export async function streamBlogWriter(input: BlogWriterInput): Promise<Response
     const dbTemplate = await getTemplateById(input.templateId);
     if (dbTemplate) {
       template = dbTemplate;
+      // Fire-and-forget usage tracking
+      void incrementTemplateUsage(dbTemplate.id);
     } else {
       template = getTemplateBySlug(input.templateId) ?? null;
     }

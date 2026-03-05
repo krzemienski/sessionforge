@@ -53,6 +53,8 @@ export async function streamSocialWriter(input: SocialWriterInput): Promise<Resp
     const dbTemplate = await getTemplateById(input.templateId);
     if (dbTemplate) {
       template = dbTemplate;
+      // Fire-and-forget usage tracking
+      void incrementTemplateUsage(dbTemplate.id);
     } else {
       template = getTemplateBySlug(input.templateId) ?? null;
     }
@@ -99,7 +101,10 @@ function buildTemplateInstructions(
   const instructions: string[] = [];
 
   instructions.push(`## Content Template: ${template.name}`);
-  instructions.push(`\n${template.description}\n`);
+  const description = template.description ?? '';
+  if (description) {
+    instructions.push(`\n${description}\n`);
+  }
 
   if (template.structure?.sections && template.structure.sections.length > 0) {
     instructions.push("### Required Structure");

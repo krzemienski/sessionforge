@@ -51,7 +51,7 @@ export default function InsightDetailPage() {
     new Set<FormatKey>(["blog", "twitter", "linkedin", "newsletter", "changelog"])
   );
 
-  const { statuses, postIds, generateFormats } = useGenerateFormats(workspace, insightId);
+  const { statuses, postIds, generateFormats } = useGenerateFormats(workspace, insightId, selectedTemplate?.id ?? undefined);
 
   const isAnyGenerating = Object.values(statuses).some((s) => s === "generating");
   const hasSelection = selectedFormats.size > 0;

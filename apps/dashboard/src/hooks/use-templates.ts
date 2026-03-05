@@ -12,7 +12,8 @@ export function useTemplates(workspace: string, params?: { contentType?: string;
       if (params?.templateType) sp.set("templateType", params.templateType);
       const res = await fetch(`/api/templates?${sp}`);
       if (!res.ok) throw new Error("Failed to fetch templates");
-      return res.json() as Promise<ContentTemplate[]>;
+      const data = await res.json() as { templates: ContentTemplate[] };
+      return data.templates;
     },
     enabled: !!workspace,
   });
