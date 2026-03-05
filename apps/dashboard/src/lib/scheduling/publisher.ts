@@ -68,7 +68,7 @@ async function publishToDevtoPlatform(
         success: true,
         skipped: true,
         reason: "Already published to Dev.to",
-        url: existing.devtoUrl,
+        url: existing.devtoUrl ?? undefined,
       };
     }
 
