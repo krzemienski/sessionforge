@@ -493,6 +493,59 @@ export const linkedinIntegrations = pgTable(
   ]
 );
 
+export const twitterPublications = pgTable(
+  "twitter_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => twitterIntegrations.id, { onDelete: "cascade" }),
+    tweetId: text("tweet_id").notNull(),
+    tweetUrl: text("tweet_url"),
+    publishedAsThread: boolean("published_as_thread").default(false),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("twitterPublications_workspaceId_idx").on(table.workspaceId),
+    index("twitterPublications_postId_idx").on(table.postId),
+    uniqueIndex("twitterPublications_postId_uidx").on(table.postId),
+  ]
+);
+
+export const linkedinPublications = pgTable(
+  "linkedin_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => linkedinIntegrations.id, { onDelete: "cascade" }),
+    linkedinPostId: text("linkedin_post_id").notNull(),
+    linkedinUrl: text("linkedin_url"),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("linkedinPublications_workspaceId_idx").on(table.workspaceId),
+    index("linkedinPublications_postId_idx").on(table.postId),
+    uniqueIndex("linkedinPublications_postId_uidx").on(table.postId),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -539,6 +592,8 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   devtoPublications: many(devtoPublications),
   twitterIntegrations: many(twitterIntegrations),
   linkedinIntegrations: many(linkedinIntegrations),
+  twitterPublications: many(twitterPublications),
+  linkedinPublications: many(linkedinPublications),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -587,6 +642,14 @@ export const postsRelations = relations(posts, ({ one }) => ({
   devtoPublication: one(devtoPublications, {
     fields: [posts.id],
     references: [devtoPublications.postId],
+  }),
+  twitterPublication: one(twitterPublications, {
+    fields: [posts.id],
+    references: [twitterPublications.postId],
+  }),
+  linkedinPublication: one(linkedinPublications, {
+    fields: [posts.id],
+    references: [linkedinPublications.postId],
   }),
 }));
 
@@ -686,20 +749,58 @@ export const devtoPublicationsRelations = relations(
 
 export const twitterIntegrationsRelations = relations(
   twitterIntegrations,
-  ({ one }) => ({
+  ({ one, many }) => ({
     workspace: one(workspaces, {
       fields: [twitterIntegrations.workspaceId],
       references: [workspaces.id],
     }),
+    publications: many(twitterPublications),
   })
 );
 
 export const linkedinIntegrationsRelations = relations(
   linkedinIntegrations,
-  ({ one }) => ({
+  ({ one, many }) => ({
     workspace: one(workspaces, {
       fields: [linkedinIntegrations.workspaceId],
       references: [workspaces.id],
+    }),
+    publications: many(linkedinPublications),
+  })
+);
+
+export const twitterPublicationsRelations = relations(
+  twitterPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [twitterPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [twitterPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(twitterIntegrations, {
+      fields: [twitterPublications.integrationId],
+      references: [twitterIntegrations.id],
+    }),
+  })
+);
+
+export const linkedinPublicationsRelations = relations(
+  linkedinPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [linkedinPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [linkedinPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(linkedinIntegrations, {
+      fields: [linkedinPublications.integrationId],
+      references: [linkedinIntegrations.id],
     }),
   })
 );
