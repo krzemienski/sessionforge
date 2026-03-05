@@ -36,12 +36,12 @@ export default function DashboardHome() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold font-display">Dashboard</h1>
         <button
           onClick={() => scan.mutate(30)}
           disabled={scan.isPending}
-          className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+          className="flex items-center justify-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50 w-full sm:w-auto min-h-[44px]"
         >
           <Zap size={16} />
           {scan.isPending ? "Scanning..." : "Scan Now"}

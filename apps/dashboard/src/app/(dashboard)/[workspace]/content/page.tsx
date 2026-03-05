@@ -95,7 +95,7 @@ export default function ContentPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold font-display">Content</h1>
           {streakCount != null && streakCount > 0 && (
@@ -107,6 +107,12 @@ export default function ContentPage() {
             </div>
           )}
         </div>
+        <button
+          onClick={() => setShowExport(!showExport)}
+          className="flex items-center justify-center gap-2 bg-sf-bg-secondary border border-sf-border text-sf-text-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors w-full sm:w-auto min-h-[44px]"
+        >
+          <Download size={16} /> Export
+        </button>
       </div>
 
       {/* View tabs */}
