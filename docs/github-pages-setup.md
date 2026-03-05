@@ -142,40 +142,113 @@ jobs:
 
 ### Custom Domain (GitHub Pages)
 
-If you entered a custom domain when exporting from SessionForge, the ZIP already contains a `CNAME` file. If not, you can add one manually.
+GitHub Pages supports both subdomains (e.g. `blog.example.com`) and apex domains (e.g. `example.com`). In both cases you need two things: a `CNAME` file in the repository root, and a DNS record at your domain registrar.
 
-**Subdomain (e.g. `blog.example.com`)**
+**The `CNAME` file**
 
-1. Add a `CNAME` file to the repository root containing only your domain:
+The `CNAME` file contains exactly one line — your domain — with no trailing slash or `https://` prefix:
 
-   ```
-   blog.example.com
-   ```
+```
+blog.example.com
+```
+
+SessionForge generates this file automatically when you enter a custom domain in the export modal. If you left the field blank, create the file manually:
+
+```bash
+echo "blog.example.com" > CNAME
+git add CNAME
+git commit -m "Add CNAME for custom domain"
+git push
+```
+
+> **Important:** Only one domain may appear in the `CNAME` file. GitHub Pages ignores additional lines.
+
+---
+
+**Option A — Subdomain (e.g. `blog.example.com`)**
+
+1. Add the `CNAME` file containing `blog.example.com` (see above).
 
 2. At your DNS provider, add a `CNAME` record:
 
-   | Host | Type | Value |
-   |---|---|---|
-   | `blog` | CNAME | `<your-username>.github.io` |
+   | Host | Type | Value | TTL |
+   |---|---|---|---|
+   | `blog` | `CNAME` | `<your-username>.github.io` | 3600 |
+
+   Replace `<your-username>` with your GitHub username or organisation name.
 
 3. In **Settings → Pages → Custom domain**, enter `blog.example.com` and click **Save**.
 
-**Apex domain (e.g. `example.com`)**
+4. **Verify DNS propagation** before proceeding:
 
-1. Add a `CNAME` file containing `example.com`.
+   ```bash
+   # macOS / Linux
+   dig blog.example.com CNAME +short
 
-2. At your DNS provider, add four `A` records pointing to GitHub Pages' IP addresses:
+   # Windows
+   nslookup -type=CNAME blog.example.com
+   ```
 
-   | Host | Type | Value |
-   |---|---|---|
-   | `@` | A | `185.199.108.153` |
-   | `@` | A | `185.199.109.153` |
-   | `@` | A | `185.199.110.153` |
-   | `@` | A | `185.199.111.153` |
+   The output should show `<your-username>.github.io` as the target.
 
-3. In **Settings → Pages → Custom domain**, enter `example.com` and click **Save**.
+---
 
-DNS changes can take up to 24 hours to propagate.
+**Option B — Apex domain (e.g. `example.com`)**
+
+Apex (root) domains require `A` records (IPv4) and optionally `AAAA` records (IPv6) because the DNS specification does not allow a `CNAME` at the root of a zone.
+
+1. Add the `CNAME` file containing `example.com`.
+
+2. At your DNS provider, add four `A` records and four `AAAA` records:
+
+   **IPv4 — A records:**
+
+   | Host | Type | Value | TTL |
+   |---|---|---|---|
+   | `@` | `A` | `185.199.108.153` | 3600 |
+   | `@` | `A` | `185.199.109.153` | 3600 |
+   | `@` | `A` | `185.199.110.153` | 3600 |
+   | `@` | `A` | `185.199.111.153` | 3600 |
+
+   **IPv6 — AAAA records** *(recommended, optional):*
+
+   | Host | Type | Value | TTL |
+   |---|---|---|---|
+   | `@` | `AAAA` | `2606:50c0:8000::153` | 3600 |
+   | `@` | `AAAA` | `2606:50c0:8001::153` | 3600 |
+   | `@` | `AAAA` | `2606:50c0:8002::153` | 3600 |
+   | `@` | `AAAA` | `2606:50c0:8003::153` | 3600 |
+
+3. **Redirect `www` to the apex** (recommended). Add a `CNAME` record for `www` pointing to your apex domain or to `<your-username>.github.io`. GitHub Pages will redirect `www.example.com` to `example.com` automatically once the `www` CNAME is in place:
+
+   | Host | Type | Value | TTL |
+   |---|---|---|---|
+   | `www` | `CNAME` | `<your-username>.github.io` | 3600 |
+
+4. In **Settings → Pages → Custom domain**, enter `example.com` and click **Save**.
+
+5. **Verify DNS propagation:**
+
+   ```bash
+   # Check A records
+   dig example.com A +short
+
+   # Check AAAA records
+   dig example.com AAAA +short
+
+   # Check www redirect
+   dig www.example.com CNAME +short
+   ```
+
+   The `A` records should return the four GitHub Pages IP addresses. The `www` CNAME should return `<your-username>.github.io`.
+
+   You can also use the online tool [dnschecker.org](https://dnschecker.org) to verify propagation across multiple global DNS servers.
+
+---
+
+**DNS propagation timing**
+
+DNS changes can take anywhere from a few minutes to 24 hours to propagate worldwide, depending on your registrar and the TTL of existing records. GitHub Pages will display a banner in **Settings → Pages** while it waits for DNS to verify. Do not enable **Enforce HTTPS** until GitHub confirms DNS is correctly configured.
 
 ---
 
