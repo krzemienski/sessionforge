@@ -6,21 +6,14 @@
  * MAX_CONCURRENT_AI_CALLS simultaneous Anthropic API calls to prevent rate limit errors.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
 import { extractInsight } from "@/lib/ai/agents/insight-extractor";
-import { getModelForAgent } from "@/lib/ai/orchestration/model-selector";
-import { getToolsForAgent } from "@/lib/ai/orchestration/tool-registry";
-import { handleSessionReaderTool } from "@/lib/ai/tools/session-reader";
-import { handleInsightTool } from "@/lib/ai/tools/insight-tools";
-import { handlePostManagerTool } from "@/lib/ai/tools/post-manager";
-import { handleSkillLoaderTool } from "@/lib/ai/tools/skill-loader";
+import { createAgentMcpServer } from "@/lib/ai/mcp-server-factory";
+import { runAgent } from "@/lib/ai/agent-runner";
 import { BLOG_TECHNICAL_PROMPT } from "@/lib/ai/prompts/blog/technical";
 import { getJob, updateJobProgress, completeJob, failJob } from "./job-tracker";
-
-const client = new Anthropic();
 
 /**
  * Records usage for a single batch operation item toward workspace plan limits.
@@ -95,131 +88,34 @@ class Semaphore {
 const aiRateLimiter = new Semaphore(MAX_CONCURRENT_AI_CALLS);
 
 /**
- * Routes a blog-writer tool call to the appropriate handler.
- *
- * @param workspaceId - Workspace context for tool execution.
- * @param toolName - Name of the tool requested by the model.
- * @param toolInput - Input arguments provided by the model.
- * @returns The tool result to pass back to the model.
- * @throws {Error} If `toolName` does not match any registered handler.
- */
-async function dispatchBlogTool(
-  workspaceId: string,
-  toolName: string,
-  toolInput: Record<string, unknown>
-): Promise<unknown> {
-  if (
-    toolName.startsWith("get_session") ||
-    toolName === "list_sessions_by_timeframe"
-  ) {
-    return handleSessionReaderTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName.startsWith("get_insight") ||
-    toolName === "get_top_insights" ||
-    toolName === "create_insight"
-  ) {
-    return handleInsightTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName === "create_post" ||
-    toolName === "update_post" ||
-    toolName === "get_post" ||
-    toolName === "get_markdown"
-  ) {
-    return handlePostManagerTool(workspaceId, toolName, toolInput);
-  }
-  if (
-    toolName === "list_available_skills" ||
-    toolName === "get_skill_by_name"
-  ) {
-    return handleSkillLoaderTool(toolName, toolInput);
-  }
-  throw new Error(`Unknown tool: ${toolName}`);
-}
-
-/**
- * Generates a blog post from a single insight without SSE streaming.
- * Runs the blog-writer agent to completion and returns the result.
+ * Generates a blog post from a single insight using the blog-writer agent.
+ * Uses the Agent SDK with MCP tools via createAgentMcpServer + runAgent.
  *
  * @param workspaceId - The workspace that owns the insight.
  * @param insightId - The insight to generate content from.
  * @param contentType - The type of content to generate (defaults to blog_post).
- * @returns The final model response text and token usage.
+ * @returns The final model response text.
  */
 async function generateContentFromInsight(
   workspaceId: string,
   insightId: string,
   contentType?: string
-): Promise<{ result: string | null; usage: Anthropic.Usage }> {
-  const model = getModelForAgent("blog-writer");
-  const tools = getToolsForAgent("blog-writer");
-
-  const messages: Anthropic.MessageParam[] = [
+): Promise<{ result: string | null }> {
+  const mcpServer = createAgentMcpServer("blog-writer", workspaceId);
+  const { text } = await runAgent(
     {
-      role: "user",
-      content: `Generate a ${contentType ?? "blog_post"} from insight "${insightId}". First fetch the insight details, then create the post using create_post.`,
+      agentType: "blog-writer",
+      workspaceId,
+      systemPrompt: BLOG_TECHNICAL_PROMPT,
+      userMessage: `Generate a ${contentType ?? "blog_post"} from insight "${insightId}". First fetch the insight details, then create the post using create_post.`,
+      mcpServer,
     },
-  ];
-
-  let response = await client.messages.create({
-    model,
-    max_tokens: 8192,
-    system: BLOG_TECHNICAL_PROMPT,
-    tools: tools as Anthropic.Tool[],
-    messages,
-  });
-
-  while (response.stop_reason === "tool_use") {
-    const toolUseBlocks = response.content.filter(
-      (b): b is Anthropic.ContentBlock & { type: "tool_use" } =>
-        b.type === "tool_use"
-    );
-
-    const toolResults: Anthropic.MessageParam = {
-      role: "user",
-      content: await Promise.all(
-        toolUseBlocks.map(async (toolUse) => {
-          try {
-            const result = await dispatchBlogTool(
-              workspaceId,
-              toolUse.name,
-              toolUse.input as Record<string, unknown>
-            );
-            return {
-              type: "tool_result" as const,
-              tool_use_id: toolUse.id,
-              content: JSON.stringify(result),
-            };
-          } catch (error) {
-            return {
-              type: "tool_result" as const,
-              tool_use_id: toolUse.id,
-              content: `Error: ${error instanceof Error ? error.message : String(error)}`,
-              is_error: true,
-            };
-          }
-        })
-      ),
-    };
-
-    messages.push({ role: "assistant", content: response.content });
-    messages.push(toolResults);
-
-    response = await client.messages.create({
-      model,
-      max_tokens: 8192,
-      system: BLOG_TECHNICAL_PROMPT,
-      tools: tools as Anthropic.Tool[],
-      messages,
-    });
-  }
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  return {
-    result: textBlock?.type === "text" ? textBlock.text : null,
-    usage: response.usage,
-  };
+    {
+      insightId,
+      workspaceId,
+    }
+  );
+  return { result: text };
 }
 
 /**
