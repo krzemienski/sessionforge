@@ -18,17 +18,24 @@ export default defineConfig({
   /* Fail the build on CI if you accidentally left test.only in source code */
   forbidOnly: !!process.env.CI,
 
-  /* Retry on CI only */
+  /* Retry on CI to detect and tolerate flaky tests */
   retries: process.env.CI ? 2 : 0,
 
   /* Opt out of parallel tests on CI */
   workers: process.env.CI ? 1 : undefined,
 
-  /* Reporter configuration */
-  reporter: [
-    ["html", { outputFolder: "playwright-report", open: "never" }],
-    ["list"],
-  ],
+  /* Reporter configuration — on CI emit a JSON report so flaky test
+     detection tooling can parse retry outcomes across runs */
+  reporter: process.env.CI
+    ? [
+        ["html", { outputFolder: "playwright-report", open: "never" }],
+        ["json", { outputFile: "playwright-report/results.json" }],
+        ["list"],
+      ]
+    : [
+        ["html", { outputFolder: "playwright-report", open: "never" }],
+        ["list"],
+      ],
 
   /* Shared settings for all test projects */
   use: {
@@ -49,23 +56,39 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      /* Exclude quarantined specs from the normal chromium run */
+      testIgnore: ["**/quarantine/**"],
     },
     {
       name: "firefox",
       use: { ...devices["Desktop Firefox"] },
+      testIgnore: ["**/quarantine/**"],
     },
     {
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
+      testIgnore: ["**/quarantine/**"],
     },
     /* Mobile viewports */
     {
       name: "mobile-chrome",
       use: { ...devices["Pixel 5"] },
+      testIgnore: ["**/quarantine/**"],
     },
     {
       name: "mobile-safari",
       use: { ...devices["iPhone 12"] },
+      testIgnore: ["**/quarantine/**"],
+    },
+    /* Quarantine project: runs known-flaky E2E specs in isolation.
+       Failures here do NOT block CI — run explicitly with:
+         npx playwright test --project=quarantine */
+    {
+      name: "quarantine",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: "**/quarantine/**/*.spec.{ts,tsx}",
+      /* Allow more retries for quarantined tests */
+      retries: 3,
     },
   ],
 

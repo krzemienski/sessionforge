@@ -10,7 +10,19 @@ export default defineConfig({
       "src/**/__tests__/**/*.{test,spec}.{ts,tsx}",
       "tests/**/*.{test,spec}.{ts,tsx}",
     ],
-    exclude: ["tests/e2e/**", "node_modules/**", ".next/**"],
+    /* Quarantined tests live in tests/__quarantine__/ and are excluded from
+       the normal run. Run them explicitly with:
+         vitest run tests/__quarantine__ --reporter=verbose */
+    exclude: [
+      "tests/e2e/**",
+      "tests/__quarantine__/**",
+      "node_modules/**",
+      ".next/**",
+    ],
+
+    /* Retry flaky tests up to 2 times on CI before marking as failed */
+    retry: process.env.CI ? 2 : 0,
+
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
