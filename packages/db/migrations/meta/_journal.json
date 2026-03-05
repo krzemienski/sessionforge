@@ -15,6 +15,13 @@
       "when": 1772676533209,
       "tag": "0001_aspiring_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772676736327,
+      "tag": "0002_huge_meteorite",
+      "breakpoints": true
     }
   ]
 }

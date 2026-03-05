@@ -69,6 +69,13 @@ export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
   "viewer",
 ]);
 
+export const scheduledPublicationStatusEnum = pgEnum("scheduled_publication_status", [
+  "pending",
+  "publishing",
+  "published",
+  "failed",
+]);
+
 // ── Tables (PRD §4.2) ──
 
 export const users = pgTable("users", {
@@ -451,6 +458,33 @@ export const devtoPublications = pgTable(
   ]
 );
 
+export const scheduledPublications = pgTable(
+  "scheduled_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    platforms: jsonb("platforms").$type<string[]>().notNull(),
+    scheduledFor: timestamp("scheduled_for").notNull(),
+    status: scheduledPublicationStatusEnum("status").default("pending"),
+    qstashScheduleId: text("qstash_schedule_id"),
+    publishedAt: timestamp("published_at"),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("scheduledPublications_workspaceId_idx").on(table.workspaceId),
+    index("scheduledPublications_postId_idx").on(table.postId),
+    index("scheduledPublications_scheduledFor_idx").on(table.scheduledFor),
+    index("scheduledPublications_status_idx").on(table.status),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -495,6 +529,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   activity: many(workspaceActivity),
   devtoIntegrations: many(devtoIntegrations),
   devtoPublications: many(devtoPublications),
+  scheduledPublications: many(scheduledPublications),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -527,7 +562,7 @@ export const insightsRelations = relations(insights, ({ one, many }) => ({
   posts: many(posts),
 }));
 
-export const postsRelations = relations(posts, ({ one }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   workspace: one(workspaces, {
     fields: [posts.workspaceId],
     references: [workspaces.id],
@@ -544,6 +579,7 @@ export const postsRelations = relations(posts, ({ one }) => ({
     fields: [posts.id],
     references: [devtoPublications.postId],
   }),
+  scheduledPublications: many(scheduledPublications),
 }));
 
 export const contentTriggersRelations = relations(
@@ -636,6 +672,20 @@ export const devtoPublicationsRelations = relations(
     integration: one(devtoIntegrations, {
       fields: [devtoPublications.integrationId],
       references: [devtoIntegrations.id],
+    }),
+  })
+);
+
+export const scheduledPublicationsRelations = relations(
+  scheduledPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [scheduledPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [scheduledPublications.postId],
+      references: [posts.id],
     }),
   })
 );
