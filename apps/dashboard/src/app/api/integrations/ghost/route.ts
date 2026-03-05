@@ -54,11 +54,11 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { workspaceSlug, apiKey, ghostUrl } = body;
+  const { workspaceSlug, adminApiKey, ghostUrl } = body;
 
-  if (!workspaceSlug || !apiKey || !ghostUrl) {
+  if (!workspaceSlug || !adminApiKey || !ghostUrl) {
     return NextResponse.json(
-      { error: "workspaceSlug, apiKey, and ghostUrl are required" },
+      { error: "workspaceSlug, adminApiKey, and ghostUrl are required" },
       { status: 400 }
     );
   }
@@ -72,20 +72,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    await verifyGhostApiKey(apiKey, ghostUrl);
+    await verifyGhostApiKey(adminApiKey, ghostUrl);
 
     await db
       .insert(ghostIntegrations)
       .values({
         workspaceId: workspace.id,
-        adminApiKey: apiKey,
+        adminApiKey,
         ghostUrl,
         enabled: true,
       })
       .onConflictDoUpdate({
         target: ghostIntegrations.workspaceId,
         set: {
-          adminApiKey: apiKey,
+          adminApiKey,
           ghostUrl,
           enabled: true,
           updatedAt: new Date(),

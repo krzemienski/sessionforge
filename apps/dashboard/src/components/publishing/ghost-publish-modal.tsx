@@ -67,7 +67,7 @@ export function GhostPublishModal({
       status: isAlreadyPublished ? undefined : isDraft ? ("draft" as const) : ("published" as const),
       tags: parsedTags.length > 0 ? parsedTags : undefined,
       canonicalUrl: canonicalUrl.trim() || undefined,
-      featuredImage: featuredImage.trim() || undefined,
+      featureImage: featuredImage.trim() || undefined,
       visibility,
     };
 

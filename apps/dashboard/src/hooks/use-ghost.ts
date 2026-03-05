@@ -20,17 +20,17 @@ export function useConnectGhost() {
   return useMutation({
     mutationFn: async ({
       workspaceSlug,
-      apiUrl,
+      ghostUrl,
       adminApiKey,
     }: {
       workspaceSlug: string;
-      apiUrl: string;
+      ghostUrl: string;
       adminApiKey: string;
     }) => {
       const res = await fetch("/api/integrations/ghost", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceSlug, apiUrl, adminApiKey }),
+        body: JSON.stringify({ workspaceSlug, ghostUrl, adminApiKey }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -81,19 +81,23 @@ export function usePublishToGhost() {
       status,
       tags,
       canonicalUrl,
-      excerpt,
+      customExcerpt,
+      visibility,
+      featureImage,
     }: {
       postId: string;
       workspaceSlug: string;
       status?: "draft" | "published";
       tags?: string[];
       canonicalUrl?: string;
-      excerpt?: string;
+      customExcerpt?: string;
+      visibility?: "public" | "members" | "paid";
+      featureImage?: string;
     }) => {
       const res = await fetch("/api/integrations/ghost/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId, workspaceSlug, status, tags, canonicalUrl, excerpt }),
+        body: JSON.stringify({ postId, workspaceSlug, status, tags, canonicalUrl, customExcerpt, visibility, featureImage }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -117,19 +121,23 @@ export function useUpdateGhostPost() {
       status,
       tags,
       canonicalUrl,
-      excerpt,
+      customExcerpt,
+      visibility,
+      featureImage,
     }: {
       postId: string;
       workspaceSlug: string;
       status?: "draft" | "published";
       tags?: string[];
       canonicalUrl?: string;
-      excerpt?: string;
+      customExcerpt?: string;
+      visibility?: "public" | "members" | "paid";
+      featureImage?: string;
     }) => {
       const res = await fetch("/api/integrations/ghost/publish", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId, workspaceSlug, status, tags, canonicalUrl, excerpt }),
+        body: JSON.stringify({ postId, workspaceSlug, status, tags, canonicalUrl, customExcerpt, visibility, featureImage }),
       });
       if (!res.ok) {
         const data = await res.json();
