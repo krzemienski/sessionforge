@@ -3,10 +3,40 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, workspaces, scheduledPublications } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { createPublishSchedule } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
+
+export async function GET(request: Request) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const workspaceSlug = searchParams.get("workspace");
+
+  if (!workspaceSlug) {
+    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
+  }
+
+  const workspace = await db.query.workspaces.findFirst({
+    where: eq(workspaces.slug, workspaceSlug),
+  });
+
+  if (!workspace || workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+
+  const results = await db.query.posts.findMany({
+    where: and(
+      eq(posts.workspaceId, workspace.id),
+      eq(posts.status, "scheduled")
+    ),
+    orderBy: [asc(posts.scheduledFor)],
+  });
+
+  return NextResponse.json({ posts: results });
+}
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
