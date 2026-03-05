@@ -65,18 +65,27 @@ export async function createPublishSchedule(
     throw new Error("Scheduled time must be in the future");
   }
 
-  const { scheduleId } = await client.schedules.create({
-    destination,
-    body: JSON.stringify({ postId }),
-    headers: { "Content-Type": "application/json" },
+  // Use publishJSON for one-time delayed jobs (not schedules)
+  const { messageId } = await client.publishJSON({
+    url: destination,
+    body: { postId },
     delay: delaySeconds,
   });
 
-  return scheduleId;
+  return messageId;
 }
 
 export async function deleteTriggerSchedule(scheduleId: string): Promise<void> {
   await client.schedules.delete(scheduleId);
+}
+
+export async function cancelPublishMessage(messageId: string): Promise<void> {
+  try {
+    await client.messages.delete(messageId);
+  } catch (error) {
+    // Message might have already been delivered or doesn't exist
+    // This is not a critical error - the webhook handler will check the database
+  }
 }
 
 export async function verifyQStashRequest(

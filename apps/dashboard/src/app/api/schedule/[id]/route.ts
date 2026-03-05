@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, scheduledPublications } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
-import { createPublishSchedule, deleteTriggerSchedule } from "@/lib/qstash";
+import { createPublishSchedule, cancelPublishMessage } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
 
@@ -59,10 +59,10 @@ export async function PUT(
       );
     }
 
-    // Delete the old QStash schedule if it exists
+    // Cancel the old QStash message if it exists
     if (existing.qstashScheduleId) {
       try {
-        await deleteTriggerSchedule(existing.qstashScheduleId);
+        await cancelPublishMessage(existing.qstashScheduleId);
       } catch (error) {
         // Continue anyway - we'll create a new schedule
       }
@@ -141,10 +141,10 @@ export async function DELETE(
   }
 
   try {
-    // Delete the QStash schedule if it exists
+    // Cancel the QStash message if it exists
     if (existing.qstashScheduleId) {
       try {
-        await deleteTriggerSchedule(existing.qstashScheduleId);
+        await cancelPublishMessage(existing.qstashScheduleId);
       } catch (error) {
         // Log but continue - we still want to update the database
       }
