@@ -92,6 +92,7 @@ const AGENT_TOOL_GROUPS: Record<AgentType, string[]> = {
   "newsletter-writer": ["session", "insight", "post"],
   "evidence-writer": ["session", "insight", "post", "evidence", "ingestion"],
   "supplementary-writer": ["post"],
+  "content-strategist": ["insight", "analytics", "recommendation"],
 };
 
 // ── Zod schemas for each tool ──
