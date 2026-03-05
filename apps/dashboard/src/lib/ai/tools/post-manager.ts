@@ -31,9 +31,20 @@ export interface UpdatePostInput {
   toneUsed?: ToneProfile;
   badgeEnabled?: boolean;
   platformFooterEnabled?: boolean;
+  publishedAt?: Date;
   versionType?: string;
   editType?: string;
   createdBy?: string;
+  // SEO/GEO fields
+  metaTitle?: string;
+  metaDescription?: string;
+  ogImage?: string;
+  keywords?: string[];
+  structuredData?: unknown;
+  readabilityScore?: number;
+  geoScore?: number;
+  geoChecklist?: { id: string; label: string; passed: boolean; suggestion?: string }[];
+  seoAnalysis?: unknown;
 }
 
 function markdownToHtml(markdown: string): string {
@@ -81,6 +92,24 @@ export async function updatePost(
   if (input.toneUsed !== undefined) updates.toneUsed = input.toneUsed;
   if (input.badgeEnabled !== undefined) updates.badgeEnabled = input.badgeEnabled;
   if (input.platformFooterEnabled !== undefined) updates.platformFooterEnabled = input.platformFooterEnabled;
+
+  // Set publishedAt when transitioning to 'published' status (only if not explicitly provided)
+  if (input.status === "published") {
+    updates.publishedAt = input.publishedAt ?? new Date();
+  } else if (input.publishedAt !== undefined) {
+    updates.publishedAt = input.publishedAt;
+  }
+
+  // SEO/GEO fields
+  if (input.metaTitle !== undefined) updates.metaTitle = input.metaTitle;
+  if (input.metaDescription !== undefined) updates.metaDescription = input.metaDescription;
+  if (input.ogImage !== undefined) updates.ogImage = input.ogImage;
+  if (input.keywords !== undefined) updates.keywords = input.keywords;
+  if (input.structuredData !== undefined) updates.structuredData = input.structuredData;
+  if (input.readabilityScore !== undefined) updates.readabilityScore = input.readabilityScore;
+  if (input.geoScore !== undefined) updates.geoScore = input.geoScore;
+  if (input.geoChecklist !== undefined) updates.geoChecklist = input.geoChecklist;
+  if (input.seoAnalysis !== undefined) updates.seoAnalysis = input.seoAnalysis;
 
   if (input.markdown !== undefined) {
     updates.markdown = input.markdown;

@@ -1,7 +1,13 @@
 /**
  * Export utilities for content formatting and download.
- * All functions are pure/side-effect-free except downloadMarkdownFile.
+ * All functions are pure/side-effect-free except downloadMarkdownFile and downloadHtmlFile.
  */
+
+import {
+  generateStructuredData,
+  wrapInScriptTag,
+} from "./seo/structured-data-generator";
+import type { StructuredDataInput } from "./seo/structured-data-generator";
 
 /** Twitter's character limit per tweet */
 const TWITTER_CHAR_LIMIT = 280;
@@ -163,6 +169,119 @@ export function downloadMarkdownFile(title: string, markdown: string): void {
   const filename = `${slug || "untitled"}-${date}.md`;
 
   const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+/** Options for generating a full HTML document export. */
+export interface HtmlExportOptions {
+  /** Short description used in <meta name="description"> and structured data. */
+  description?: string;
+  /** ISO 8601 date string for datePublished in structured data. Defaults to now. */
+  datePublished?: string;
+  /** ISO 8601 date string for dateModified. Defaults to datePublished. */
+  dateModified?: string;
+  /** Canonical URL for <link rel="canonical"> and structured data. */
+  url?: string;
+  /** OG image URL embedded in structured data. */
+  imageUrl?: string;
+  /** Author metadata for structured data. Defaults to { name: "Unknown" }. */
+  author?: { name: string; url?: string };
+  /** Publisher metadata for structured data. Defaults to { name: "SessionForge" }. */
+  publisher?: { name: string; url?: string; logoUrl?: string };
+  /** Keywords to embed in structured data. */
+  keywords?: string[];
+  /**
+   * Pre-generated JSON-LD string to inject as-is into the <head>.
+   * When provided, automatic structured data generation is skipped.
+   */
+  structuredData?: string;
+}
+
+/**
+ * Generates a complete HTML document from a title and markdown content.
+ * Injects a JSON-LD structured data script tag into <head> for SEO.
+ * If options.structuredData is supplied it is used directly; otherwise
+ * structured data is auto-generated via generateStructuredData().
+ */
+export function generateHtmlDocument(
+  title: string,
+  markdown: string,
+  options: HtmlExportOptions = {}
+): string {
+  const bodyHtml = markdownToHtml(markdown);
+
+  let jsonLdScriptTag: string;
+
+  if (options.structuredData !== undefined && options.structuredData !== "") {
+    jsonLdScriptTag = `<script type="application/ld+json">${options.structuredData}</script>`;
+  } else {
+    const input: StructuredDataInput = {
+      title,
+      content: markdown,
+      description: options.description,
+      datePublished: options.datePublished ?? new Date().toISOString(),
+      dateModified: options.dateModified,
+      url: options.url,
+      imageUrl: options.imageUrl,
+      author: options.author ?? { name: "Unknown" },
+      publisher: options.publisher ?? { name: "SessionForge" },
+      keywords: options.keywords,
+    };
+    const result = generateStructuredData(input);
+    jsonLdScriptTag = wrapInScriptTag(result.jsonLd);
+  }
+
+  const escapedTitle = escapeHtml(title);
+  const metaDescriptionTag = options.description
+    ? `\n  <meta name="description" content="${escapeHtml(options.description)}" />`
+    : "";
+  const canonicalTag = options.url
+    ? `\n  <link rel="canonical" href="${escapeHtml(options.url)}" />`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapedTitle}</title>${metaDescriptionTag}${canonicalTag}
+  ${jsonLdScriptTag}
+</head>
+<body>
+${bodyHtml}
+</body>
+</html>`;
+}
+
+/**
+ * Triggers a browser download of the post as a self-contained .html file.
+ * Embeds JSON-LD structured data in <head> for SEO.
+ * Filename format: slugified-title-YYYY-MM-DD.html
+ */
+export function downloadHtmlFile(
+  title: string,
+  markdown: string,
+  options: HtmlExportOptions = {}
+): void {
+  const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const filename = `${slug || "untitled"}-${date}.html`;
+
+  const html = generateHtmlDocument(title, markdown, options);
+
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
 
   const anchor = document.createElement("a");

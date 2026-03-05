@@ -45,6 +45,23 @@ const STATUS_TABS = [
   { label: "Archived", value: "archived" },
 ];
 
+function getSeoScoreColor(score: number): string {
+  if (score >= 70) return "text-sf-success bg-sf-success/10";
+  if (score >= 40) return "text-sf-warning bg-sf-warning/10";
+  return "text-sf-error bg-sf-error/10";
+}
+
+function SeoScoreBadge({ post }: { post: any }) {
+  const score: number | undefined = post.seoAnalysis?.compositeScore ?? post.geoScore ?? undefined;
+  if (score === undefined || score === null) return null;
+  const rounded = Math.round(score);
+  return (
+    <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium", getSeoScoreColor(rounded))}>
+      SEO {rounded}
+    </span>
+  );
+}
+
 export default function ContentPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const router = useRouter();
@@ -266,6 +283,7 @@ export default function ContentPage() {
                   <span className="px-2 py-0.5 bg-sf-bg-tertiary rounded-sf-full text-xs text-sf-text-secondary">
                     {TYPE_LABELS[post.contentType] || post.contentType}
                   </span>
+                  <SeoScoreBadge post={post} />
                   <div className="ml-auto flex items-center gap-2">
                     <span className="text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
                     <ExportDropdown markdown={post.markdown || ""} title={post.title || ""} />

@@ -11,6 +11,7 @@ interface SeoPanelProps {
   postId: string;
   markdown: string;
   title: string;
+  refreshKey?: number;
 }
 
 function scoreColor(score: number): string {
@@ -37,7 +38,7 @@ function metaDescCounterColor(len: number): string {
   return "text-red-500";
 }
 
-export function SeoPanel({ postId, markdown, title }: SeoPanelProps) {
+export function SeoPanel({ postId, markdown, title, refreshKey }: SeoPanelProps) {
   const seoData = useSeoData(postId);
   const generate = useGenerateSeo();
   const save = useSaveSeo();
@@ -52,6 +53,14 @@ export function SeoPanel({ postId, markdown, title }: SeoPanelProps) {
       setMetaDescription(seoData.data.seoMetadata.metaDescription ?? "");
     }
   }, [seoData.data]);
+
+  // Re-fetch SEO data when refreshKey changes (triggered by auto-analyze on save)
+  useEffect(() => {
+    if (refreshKey && refreshKey > 0) {
+      seoData.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   function handleGenerate() {
     generate.mutate({ postId });

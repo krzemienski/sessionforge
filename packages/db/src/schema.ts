@@ -422,6 +422,18 @@ export const posts = pgTable(
     wordpressPublishedUrl: text("wordpress_published_url"),
     wordpressPostId: text("wordpress_post_id"),
     seoMetadata: jsonb("seo_metadata"),
+    // ── SEO/GEO fields (from 014-seo-generative-engine-optimization-geo) ──
+    metaTitle: text("meta_title"),
+    metaDescription: text("meta_description"),
+    ogImage: text("og_image"),
+    keywords: jsonb("keywords").$type<string[]>(),
+    structuredData: jsonb("structured_data"),
+    readabilityScore: real("readability_score"),
+    geoScore: real("geo_score"),
+    geoChecklist: jsonb("geo_checklist").$type<
+      { id: string; label: string; passed: boolean; suggestion?: string }[]
+    >(),
+    seoAnalysis: jsonb("seo_analysis"),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),

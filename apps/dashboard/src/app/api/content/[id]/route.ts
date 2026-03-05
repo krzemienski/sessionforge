@@ -78,6 +78,63 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+
+  const existing = await db.query.posts.findFirst({
+    where: eq(posts.id, id),
+    with: { workspace: true },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
+  if (existing.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const {
+    metaTitle,
+    metaDescription,
+    ogImage,
+    keywords,
+    structuredData,
+    readabilityScore,
+    geoScore,
+    geoChecklist,
+    seoAnalysis,
+  } = body;
+
+  try {
+    const updated = await updatePost(existing.workspaceId, id, {
+      metaTitle,
+      metaDescription,
+      ogImage,
+      keywords,
+      structuredData,
+      readabilityScore,
+      geoScore,
+      geoChecklist,
+      seoAnalysis,
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Update failed" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
