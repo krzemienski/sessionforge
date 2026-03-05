@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useScheduledPosts, useCancelScheduledPost } from "@/hooks/use-schedule";
+import { useScheduledPosts, useCancelSchedule } from "@/hooks/use-schedule";
 import { Calendar, Clock, X, Edit2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScheduleModal } from "./schedule-modal";
@@ -14,7 +14,7 @@ interface PublishQueueProps {
 export function PublishQueue({ workspace }: PublishQueueProps) {
   const router = useRouter();
   const { data, isLoading } = useScheduledPosts(workspace);
-  const cancelPost = useCancelScheduledPost();
+  const cancelPost = useCancelSchedule();
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<{
     scheduledFor: string;
@@ -39,7 +39,7 @@ export function PublishQueue({ workspace }: PublishQueueProps) {
 
     setCancelingPostId(postId);
     try {
-      await cancelPost.mutateAsync({ postId });
+      await cancelPost.mutateAsync(postId);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to cancel scheduled post");
     } finally {
