@@ -25,6 +25,7 @@ export const lookbackWindowEnum = pgEnum("lookback_window", [
 
 export const postStatusEnum = pgEnum("post_status", [
   "draft",
+  "scheduled",
   "published",
   "archived",
 ]);
