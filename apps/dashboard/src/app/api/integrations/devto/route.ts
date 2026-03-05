@@ -3,84 +3,76 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { devtoIntegrations, workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm/sql";
+import { eq } from "drizzle-orm";
 import { verifyDevtoApiKey, DevtoApiError } from "@/lib/integrations/devto";
-import { withApiHandler } from "@/lib/api-handler";
-import { parseBody, devtoConnectSchema } from "@/lib/validation";
-import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { searchParams } = new URL(request.url);
-    const workspaceSlug = searchParams.get("workspace");
+  const { searchParams } = new URL(request.url);
+  const workspaceSlug = searchParams.get("workspace");
 
-    if (!workspaceSlug)
-      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
+  if (!workspaceSlug) {
+    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
+  }
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
+  const workspace = await db.query.workspaces.findFirst({
+    where: eq(workspaces.slug, workspaceSlug),
+  });
 
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+  if (!workspace || workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
 
-    const integration = await db.query.devtoIntegrations.findFirst({
-      where: eq(devtoIntegrations.workspaceId, workspace.id),
-      columns: {
-        id: true,
-        username: true,
-        enabled: true,
-        createdAt: true,
-      },
-    });
+  const integration = await db.query.devtoIntegrations.findFirst({
+    where: eq(devtoIntegrations.workspaceId, workspace.id),
+    columns: {
+      id: true,
+      username: true,
+      enabled: true,
+      createdAt: true,
+    },
+  });
 
-    if (!integration) {
-      return NextResponse.json({ connected: false });
-    }
+  if (!integration) {
+    return NextResponse.json({ connected: false });
+  }
 
-    return NextResponse.json({
-      connected: true,
-      username: integration.username,
-      enabled: integration.enabled,
-      connectedAt: integration.createdAt,
-    });
-  })(request);
+  return NextResponse.json({
+    connected: true,
+    username: integration.username,
+    enabled: integration.enabled,
+    connectedAt: integration.createdAt,
+  });
 }
 
 export async function POST(request: Request) {
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const rawBody = await request.json().catch(() => ({}));
-    const { workspaceSlug, apiKey } = parseBody(devtoConnectSchema, rawBody);
+  const body = await request.json();
+  const { workspaceSlug, apiKey } = body;
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
+  if (!workspaceSlug || !apiKey) {
+    return NextResponse.json(
+      { error: "workspaceSlug and apiKey are required" },
+      { status: 400 }
+    );
+  }
 
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+  const workspace = await db.query.workspaces.findFirst({
+    where: eq(workspaces.slug, workspaceSlug),
+  });
 
-    let user: Awaited<ReturnType<typeof verifyDevtoApiKey>>;
-    try {
-      user = await verifyDevtoApiKey(apiKey);
-    } catch (err) {
-      if (err instanceof DevtoApiError) {
-        throw new AppError(
-          err.message,
-          ERROR_CODES.BAD_REQUEST,
-          err.status === 401 ? 400 : err.status,
-          { devtoCode: err.code }
-        );
-      }
-      throw err;
-    }
+  if (!workspace || workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+
+  try {
+    const user = await verifyDevtoApiKey(apiKey);
 
     await db
       .insert(devtoIntegrations)
@@ -104,38 +96,50 @@ export async function POST(request: Request) {
       { connected: true, username: user.username },
       { status: 201 }
     );
-  })(request);
+  } catch (error) {
+    if (error instanceof DevtoApiError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: error.status === 401 ? 400 : error.status }
+      );
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to connect Dev.to account" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function DELETE(request: Request) {
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { searchParams } = new URL(request.url);
-    const workspaceSlug = searchParams.get("workspace");
+  const { searchParams } = new URL(request.url);
+  const workspaceSlug = searchParams.get("workspace");
 
-    if (!workspaceSlug)
-      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
+  if (!workspaceSlug) {
+    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
+  }
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
+  const workspace = await db.query.workspaces.findFirst({
+    where: eq(workspaces.slug, workspaceSlug),
+  });
 
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+  if (!workspace || workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
 
-    const existing = await db.query.devtoIntegrations.findFirst({
-      where: eq(devtoIntegrations.workspaceId, workspace.id),
-    });
+  const existing = await db.query.devtoIntegrations.findFirst({
+    where: eq(devtoIntegrations.workspaceId, workspace.id),
+  });
 
-    if (!existing)
-      throw new AppError("Integration not found", ERROR_CODES.NOT_FOUND);
+  if (!existing) {
+    return NextResponse.json({ error: "Integration not found" }, { status: 404 });
+  }
 
-    await db
-      .delete(devtoIntegrations)
-      .where(eq(devtoIntegrations.workspaceId, workspace.id));
+  await db
+    .delete(devtoIntegrations)
+    .where(eq(devtoIntegrations.workspaceId, workspace.id));
 
-    return NextResponse.json({ disconnected: true });
-  })(request);
+  return NextResponse.json({ disconnected: true });
 }

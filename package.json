@@ -1,13 +1,11 @@
 {
   "name": "sessionforge",
-  "version": "0.1.0-alpha",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
-    "test": "turbo test",
     "db:push": "cd packages/db && bunx drizzle-kit push",
     "db:generate": "cd packages/db && bunx drizzle-kit generate"
   },

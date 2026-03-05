@@ -126,6 +126,85 @@ CREATE TABLE "devto_publications" (
 	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
+CREATE TABLE "github_commits" (
+	"id" text PRIMARY KEY NOT NULL,
+	"repository_id" text NOT NULL,
+	"commit_sha" text NOT NULL,
+	"message" text NOT NULL,
+	"author_name" text,
+	"author_email" text,
+	"author_date" timestamp NOT NULL,
+	"commit_url" text NOT NULL,
+	"additions" integer,
+	"deletions" integer,
+	"files_changed" jsonb,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "github_integrations" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"access_token" text NOT NULL,
+	"github_username" text,
+	"enabled" boolean DEFAULT true,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "github_issues" (
+	"id" text PRIMARY KEY NOT NULL,
+	"repository_id" text NOT NULL,
+	"issue_number" integer NOT NULL,
+	"title" text NOT NULL,
+	"body" text,
+	"state" text NOT NULL,
+	"author_name" text,
+	"issue_url" text NOT NULL,
+	"created_at_github" timestamp NOT NULL,
+	"closed_at" timestamp,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "github_privacy_settings" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"repository_id" text,
+	"commit_sha" text,
+	"exclude_from_content" boolean DEFAULT true,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "github_pull_requests" (
+	"id" text PRIMARY KEY NOT NULL,
+	"repository_id" text NOT NULL,
+	"pr_number" integer NOT NULL,
+	"title" text NOT NULL,
+	"body" text,
+	"state" text NOT NULL,
+	"author_name" text,
+	"pr_url" text NOT NULL,
+	"merged_at" timestamp,
+	"created_at_github" timestamp NOT NULL,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE "github_repositories" (
+	"id" text PRIMARY KEY NOT NULL,
+	"workspace_id" text NOT NULL,
+	"integration_id" text NOT NULL,
+	"github_repo_id" integer NOT NULL,
+	"repo_name" text NOT NULL,
+	"repo_url" text NOT NULL,
+	"default_branch" text DEFAULT 'main',
+	"last_synced_at" timestamp,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
+);
+--> statement-breakpoint
 CREATE TABLE "insights" (
 	"id" text PRIMARY KEY NOT NULL,
 	"workspace_id" text NOT NULL,
@@ -259,6 +338,14 @@ ALTER TABLE "devto_integrations" ADD CONSTRAINT "devto_integrations_workspace_id
 ALTER TABLE "devto_publications" ADD CONSTRAINT "devto_publications_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "devto_publications" ADD CONSTRAINT "devto_publications_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "devto_publications" ADD CONSTRAINT "devto_publications_integration_id_devto_integrations_id_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."devto_integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "github_commits" ADD CONSTRAINT "github_commits_repository_id_github_repositories_id_fk" FOREIGN KEY ("repository_id") REFERENCES "public"."github_repositories"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "github_integrations" ADD CONSTRAINT "github_integrations_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "github_issues" ADD CONSTRAINT "github_issues_repository_id_github_repositories_id_fk" FOREIGN KEY ("repository_id") REFERENCES "public"."github_repositories"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "github_privacy_settings" ADD CONSTRAINT "github_privacy_settings_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "github_privacy_settings" ADD CONSTRAINT "github_privacy_settings_repository_id_github_repositories_id_fk" FOREIGN KEY ("repository_id") REFERENCES "public"."github_repositories"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "github_pull_requests" ADD CONSTRAINT "github_pull_requests_repository_id_github_repositories_id_fk" FOREIGN KEY ("repository_id") REFERENCES "public"."github_repositories"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "github_repositories" ADD CONSTRAINT "github_repositories_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "github_repositories" ADD CONSTRAINT "github_repositories_integration_id_github_integrations_id_fk" FOREIGN KEY ("integration_id") REFERENCES "public"."github_integrations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "insights" ADD CONSTRAINT "insights_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "insights" ADD CONSTRAINT "insights_session_id_claude_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."claude_sessions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -287,6 +374,21 @@ CREATE UNIQUE INDEX "devtoIntegrations_workspaceId_uidx" ON "devto_integrations"
 CREATE INDEX "devtoPublications_workspaceId_idx" ON "devto_publications" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "devtoPublications_postId_idx" ON "devto_publications" USING btree ("post_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "devtoPublications_postId_uidx" ON "devto_publications" USING btree ("post_id");--> statement-breakpoint
+CREATE INDEX "githubCommits_repositoryId_idx" ON "github_commits" USING btree ("repository_id");--> statement-breakpoint
+CREATE INDEX "githubCommits_authorDate_idx" ON "github_commits" USING btree ("author_date");--> statement-breakpoint
+CREATE UNIQUE INDEX "githubCommits_repositoryId_commitSha_uidx" ON "github_commits" USING btree ("repository_id","commit_sha");--> statement-breakpoint
+CREATE UNIQUE INDEX "githubIntegrations_workspaceId_uidx" ON "github_integrations" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "githubIssues_repositoryId_idx" ON "github_issues" USING btree ("repository_id");--> statement-breakpoint
+CREATE INDEX "githubIssues_createdAtGithub_idx" ON "github_issues" USING btree ("created_at_github");--> statement-breakpoint
+CREATE UNIQUE INDEX "githubIssues_repositoryId_issueNumber_uidx" ON "github_issues" USING btree ("repository_id","issue_number");--> statement-breakpoint
+CREATE INDEX "githubPrivacySettings_workspaceId_idx" ON "github_privacy_settings" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "githubPrivacySettings_repositoryId_idx" ON "github_privacy_settings" USING btree ("repository_id");--> statement-breakpoint
+CREATE INDEX "githubPullRequests_repositoryId_idx" ON "github_pull_requests" USING btree ("repository_id");--> statement-breakpoint
+CREATE INDEX "githubPullRequests_createdAtGithub_idx" ON "github_pull_requests" USING btree ("created_at_github");--> statement-breakpoint
+CREATE UNIQUE INDEX "githubPullRequests_repositoryId_prNumber_uidx" ON "github_pull_requests" USING btree ("repository_id","pr_number");--> statement-breakpoint
+CREATE INDEX "githubRepositories_workspaceId_idx" ON "github_repositories" USING btree ("workspace_id");--> statement-breakpoint
+CREATE INDEX "githubRepositories_integrationId_idx" ON "github_repositories" USING btree ("integration_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "githubRepositories_workspaceId_githubRepoId_uidx" ON "github_repositories" USING btree ("workspace_id","github_repo_id");--> statement-breakpoint
 CREATE INDEX "insights_workspaceId_idx" ON "insights" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "insights_compositeScore_idx" ON "insights" USING btree ("composite_score");--> statement-breakpoint
 CREATE INDEX "posts_workspaceId_createdAt_idx" ON "posts" USING btree ("workspace_id","created_at");--> statement-breakpoint
