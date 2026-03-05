@@ -1032,6 +1032,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   subscriptions: many(subscriptions),
   usageEvents: many(usageEvents),
   usageMonthlySummary: many(usageMonthlySummary),
+  contentTemplates: many(contentTemplates),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -1078,6 +1079,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   automationRuns: many(automationRuns),
   usageEvents: many(usageEvents),
   postConversations: many(postConversations),
+  contentTemplates: many(contentTemplates),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1471,6 +1473,20 @@ export const ghostPublicationsRelations = relations(
     integration: one(ghostIntegrations, {
       fields: [ghostPublications.integrationId],
       references: [ghostIntegrations.id],
+    }),
+  })
+);
+
+export const contentTemplatesRelations = relations(
+  contentTemplates,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [contentTemplates.workspaceId],
+      references: [workspaces.id],
+    }),
+    creator: one(users, {
+      fields: [contentTemplates.createdBy],
+      references: [users.id],
     }),
   })
 );
