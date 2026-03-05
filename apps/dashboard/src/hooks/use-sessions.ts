@@ -178,3 +178,29 @@ export function useStreamingScan(workspace: string) {
 
   return { isScanning, progress, events, startScan, cancel };
 }
+
+export type UploadResult = {
+  uploaded: number;
+  new: number;
+  updated: number;
+  errors: string[];
+};
+
+export function useUploadSessions() {
+  const qc = useQueryClient();
+  return useMutation<UploadResult, Error, File[]>({
+    mutationFn: async (files: File[]) => {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("file", file);
+      }
+      const res = await fetch("/api/v1/sessions/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sessions"] }),
+  });
+}
