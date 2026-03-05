@@ -6,8 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useSessions, useScanSessions, useStreamingScan, ScanResult, ScanProgressEvent } from "@/hooks/use-sessions";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { timeAgo, formatDuration, cn } from "@/lib/utils";
-import { useState } from "react";
-import { Zap, ScrollText, SlidersHorizontal, X, RotateCcw } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Zap, ScrollText, SlidersHorizontal, X, RotateCcw, Sparkles } from "lucide-react";
+import { MultiSelectToolbar } from "@/components/batch/multi-select-toolbar";
+import { JobProgressModal } from "@/components/batch/job-progress-modal";
+import { useExtractInsightsBatch } from "@/hooks/use-batch-operations";
 
 const FILTER_DEFAULTS = {
   dateFrom: "",
@@ -46,9 +49,18 @@ export default function SessionsPage() {
     hasSummary: hasSummaryValue,
   });
 
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+
+  // Batch job state
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobModalOpen, setJobModalOpen] = useState(false);
   const scan = useScanSessions(workspace);
   const streamingScan = useStreamingScan(workspace);
   const sessionList = sessions.data?.data ?? [];
+
+  const extractInsightsBatch = useExtractInsightsBatch(workspace as string);
 
   const workspaceData = useQuery({
     queryKey: ["workspace", workspace],
@@ -79,6 +91,59 @@ export default function SessionsPage() {
   const streamProgress = streamingScan.progress;
 
   const activeFilterCount = Object.values(filters).filter((v) => v !== "").length;
+
+  const handleCheckboxClick = useCallback(
+    (e: React.MouseEvent, sessionId: string, index: number) => {
+      e.stopPropagation();
+
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+
+        if (e.shiftKey && lastSelectedIndex !== null) {
+          // Range selection: determine range boundaries
+          const start = Math.min(lastSelectedIndex, index);
+          const end = Math.max(lastSelectedIndex, index);
+          const rangeIds: string[] = sessionList.slice(start, end + 1).map((s: any) => s.id);
+
+          // If the anchor item is selected, add the range; otherwise remove it
+          const anchorId = sessionList[lastSelectedIndex]?.id;
+          if (anchorId && prev.has(anchorId)) {
+            rangeIds.forEach((id: string) => next.add(id));
+          } else {
+            rangeIds.forEach((id: string) => next.delete(id));
+          }
+        } else {
+          // Single toggle
+          if (next.has(sessionId)) {
+            next.delete(sessionId);
+          } else {
+            next.add(sessionId);
+          }
+          setLastSelectedIndex(index);
+        }
+
+        return next;
+      });
+    },
+    [lastSelectedIndex, sessionList]
+  );
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(sessionList.map((s: any) => s.id)));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+    setLastSelectedIndex(null);
+  };
+
+  const handleExtractInsights = async () => {
+    const ids = Array.from(selectedIds);
+    const result = await extractInsightsBatch.mutateAsync(ids);
+    setActiveJobId(result.jobId);
+    setJobModalOpen(true);
+    handleClearSelection();
+  };
 
   return (
     <div>
@@ -315,27 +380,73 @@ export default function SessionsPage() {
         </div>
       )}
 
-      <div className="space-y-3">
-        {sessionList.map((s: any) => (
-          <div
-            key={s.id}
-            onClick={() => router.push(`/${workspace}/sessions/${s.id}`)}
-            className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors border-l-[3px] border-l-sf-accent"
+      {selectedIds.size > 0 && (
+        <div className="mb-4">
+          <MultiSelectToolbar
+            selectedCount={selectedIds.size}
+            totalCount={sessionList.length}
+            onSelectAll={handleSelectAll}
+            onClearSelection={handleClearSelection}
           >
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold text-sf-text-primary">{s.projectName}</h3>
-              <span className="text-xs text-sf-text-muted">{s.startedAt ? timeAgo(s.startedAt) : ""}</span>
+            <button
+              onClick={handleExtractInsights}
+              disabled={extractInsightsBatch.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-sf-accent text-sf-bg-primary text-sm font-medium rounded-sf hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+            >
+              <Sparkles size={14} />
+              {extractInsightsBatch.isPending ? "Starting..." : "Extract Insights"}
+            </button>
+          </MultiSelectToolbar>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {sessionList.map((s: any, index: number) => {
+          const isSelected = selectedIds.has(s.id);
+          return (
+            <div
+              key={s.id}
+              onClick={() => router.push(`/${workspace}/sessions/${s.id}`)}
+              className={cn(
+                "bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors border-l-[3px] border-l-sf-accent",
+                isSelected && "ring-1 ring-sf-accent bg-sf-accent-bg/30"
+              )}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-3">
+                  <div
+                    onClick={(e) => handleCheckboxClick(e, s.id, index)}
+                    className={cn(
+                      "flex-shrink-0 flex items-center justify-center w-4 h-4 rounded border transition-colors cursor-pointer",
+                      isSelected
+                        ? "border-sf-accent bg-sf-accent"
+                        : "border-sf-border hover:border-sf-accent"
+                    )}
+                    role="checkbox"
+                    aria-checked={isSelected}
+                    aria-label={`Select session ${s.projectName}`}
+                  >
+                    {isSelected && (
+                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                        <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-sf-bg-primary" />
+                      </svg>
+                    )}
+                  </div>
+                  <h3 className="font-semibold text-sf-text-primary">{s.projectName}</h3>
+                </div>
+                <span className="text-xs text-sf-text-muted">{s.startedAt ? timeAgo(s.startedAt) : ""}</span>
+              </div>
+              <p className="text-xs text-sf-text-secondary mb-2 pl-7">
+                {s.messageCount} messages{s.filesModified?.length ? ` · ${s.filesModified.length} files` : ""}
+                {s.toolsUsed?.length ? ` · ${s.toolsUsed.slice(0, 4).join(", ")}` : ""}
+                {s.durationSeconds ? ` · ${formatDuration(s.durationSeconds)}` : ""}
+              </p>
+              {s.summary && (
+                <p className="text-sm text-sf-text-secondary truncate pl-7">{s.summary}</p>
+              )}
             </div>
-            <p className="text-xs text-sf-text-secondary mb-2">
-              {s.messageCount} messages{s.filesModified?.length ? ` · ${s.filesModified.length} files` : ""}
-              {s.toolsUsed?.length ? ` · ${s.toolsUsed.slice(0, 4).join(", ")}` : ""}
-              {s.durationSeconds ? ` · ${formatDuration(s.durationSeconds)}` : ""}
-            </p>
-            {s.summary && (
-              <p className="text-sm text-sf-text-secondary truncate">{s.summary}</p>
-            )}
-          </div>
-        ))}
+          );
+        })}
 
         {sessionList.length === 0 && !sessions.isLoading && (
           <div className="text-center py-12">
@@ -379,6 +490,13 @@ export default function SessionsPage() {
           </button>
         </div>
       )}
+
+      <JobProgressModal
+        jobId={activeJobId}
+        title="Extracting Insights"
+        isOpen={jobModalOpen}
+        onClose={() => { setJobModalOpen(false); setActiveJobId(null); }}
+      />
     </div>
   );
 }
