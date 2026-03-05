@@ -11,6 +11,7 @@ import {
   Zap,
   BarChart3,
   FolderOpen,
+  TrendingUp,
   Settings,
   Palette,
   KeyRound,
@@ -27,6 +28,7 @@ const mainNav = [
   { label: "Content", icon: FileText, href: "/content" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Collections", icon: FolderOpen, href: "/collections" },
+  { label: "Recommendations", icon: TrendingUp, href: "/recommendations" },
   { label: "Automation", icon: Zap, href: "/automation" },
 ];
 

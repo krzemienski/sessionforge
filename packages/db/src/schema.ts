@@ -149,6 +149,14 @@ export const scheduledPublicationStatusEnum = pgEnum("scheduled_publication_stat
   "failed",
 ]);
 
+export const recommendationTypeEnum = pgEnum("recommendation_type", [
+  "topic",
+  "format",
+  "length",
+  "keyword",
+  "improvement",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -1291,6 +1299,50 @@ export const contentTemplates = pgTable(
   ]
 );
 
+// ── Content Performance tables (from 011-content-performance-recommendations-engine) ──
+
+export const postPerformanceMetrics = pgTable(
+  "post_performance_metrics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    views: integer("views").notNull().default(0),
+    likes: integer("likes").notNull().default(0),
+    comments: integer("comments").notNull().default(0),
+    shares: integer("shares").notNull().default(0),
+    engagementRate: real("engagement_rate").notNull().default(0),
+    platform: text("platform").notNull(),
+    recordedAt: timestamp("recorded_at").defaultNow(),
+  },
+  (table) => [
+    index("postPerformanceMetrics_postId_idx").on(table.postId),
+    index("postPerformanceMetrics_recordedAt_idx").on(table.recordedAt),
+  ]
+);
+
+export const contentRecommendations = pgTable(
+  "content_recommendations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    recommendationType: recommendationTypeEnum("recommendation_type").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    reasoning: text("reasoning").notNull(),
+    supportingData: jsonb("supporting_data"),
+    confidenceScore: real("confidence_score").notNull(),
+    helpfulRating: boolean("helpful_rating"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("contentRecommendations_workspaceId_idx").on(table.workspaceId),
+    index("contentRecommendations_confidenceScore_idx").on(table.confidenceScore),
+  ]
+);
 
 // ── Relations (PRD §4.3) ──
 
@@ -1354,6 +1406,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   githubIntegrations: many(githubIntegrations),
   githubRepositories: many(githubRepositories),
   githubPrivacySettings: many(githubPrivacySettings),
+  contentRecommendations: many(contentRecommendations),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1412,6 +1465,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   conversations: many(postConversations),
   collectionPosts: many(collectionPosts),
   seriesPosts: many(seriesPosts),
+  performanceMetrics: many(postPerformanceMetrics),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -1609,6 +1663,16 @@ export const collectionPostsRelations = relations(
   })
 );
 
+export const postPerformanceMetricsRelations = relations(
+  postPerformanceMetrics,
+  ({ one }) => ({
+    post: one(posts, {
+      fields: [postPerformanceMetrics.postId],
+      references: [posts.id],
+    }),
+  })
+);
+
 export const postConversationsRelations = relations(postConversations, ({ one }) => ({
   post: one(posts, {
     fields: [postConversations.postId],
@@ -1646,6 +1710,16 @@ export const contentAssets = pgTable("content_assets", {
   metadata: jsonb("metadata").$type<{ generatedAt?: string; model?: string; diagramType?: string }>().default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const contentRecommendationsRelations = relations(
+  contentRecommendations,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [contentRecommendations.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
 
 // ── Supplementary Content (Phase 6) ──
 
