@@ -118,6 +118,21 @@ export const usageEventTypeEnum = pgEnum("usage_event_type", [
   "content_generation",
 ]);
 
+export const batchJobTypeEnum = pgEnum("batch_job_type", [
+  "extract_insights",
+  "generate_content",
+  "batch_archive",
+  "batch_delete",
+]);
+
+export const batchJobStatusEnum = pgEnum("batch_job_status", [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
 export const templateTypeEnum = pgEnum("template_type", [
   "built_in",
   "custom",
@@ -1380,6 +1395,34 @@ export const postPerformanceMetrics = pgTable(
   ]
 );
 
+export const batchJobs = pgTable(
+  "batch_jobs",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    type: batchJobTypeEnum("type").notNull(),
+    status: batchJobStatusEnum("status").notNull().default("pending"),
+    totalItems: integer("total_items").notNull().default(0),
+    processedItems: integer("processed_items").notNull().default(0),
+    successCount: integer("success_count").notNull().default(0),
+    errorCount: integer("error_count").notNull().default(0),
+    metadata: jsonb("metadata"),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [
+    index("batchJobs_workspaceId_idx").on(table.workspaceId),
+    index("batchJobs_status_idx").on(table.status),
+    index("batchJobs_createdBy_idx").on(table.createdBy),
+  ]
+);
+
 export const engagementMetrics = pgTable(
   "engagement_metrics",
   {
@@ -1876,6 +1919,17 @@ export const engagementMetricsRelations = relations(
     }),
   })
 );
+
+export const batchJobsRelations = relations(batchJobs, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [batchJobs.workspaceId],
+    references: [workspaces.id],
+  }),
+  createdByUser: one(users, {
+    fields: [batchJobs.createdBy],
+    references: [users.id],
+  }),
+}));
 
 export const recommendationFeedbackRelations = relations(
   recommendationFeedback,

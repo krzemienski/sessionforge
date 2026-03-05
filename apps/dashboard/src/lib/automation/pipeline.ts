@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { workspaces, insights } from "@sessionforge/db";
+import { workspaces, insights, automationRuns } from "@sessionforge/db";
 import { eq, desc, and } from "drizzle-orm";
 import { createAgentMcpServer } from "@/lib/ai/mcp-server-factory";
 import { runAgent } from "@/lib/ai/agent-runner";
@@ -209,4 +209,46 @@ export async function runAutomationPipeline(
   }
 
   return { postsGenerated, sessionsScanned, errors };
+}
+
+/**
+ * Fire-and-forget pipeline execution used by the automation execute API route.
+ * Wraps `runAutomationPipeline` with run-status bookkeeping.
+ */
+export async function executePipeline(
+  runId: string,
+  trigger: { id: string; workspaceId: string; lookbackWindow: string | null; contentType: string },
+  workspace: { id: string; sessionBasePath: string | null }
+): Promise<void> {
+  try {
+    await db
+      .update(automationRuns)
+      .set({ status: "scanning" })
+      .where(eq(automationRuns.id, runId));
+
+    const result = await runAutomationPipeline({
+      workspaceId: workspace.id,
+      contentType: (trigger.contentType ?? "blog_post") as ContentType,
+      lookbackWindow: (trigger.lookbackWindow ?? "last_7_days") as LookbackWindow,
+      triggerId: trigger.id,
+    });
+
+    await db
+      .update(automationRuns)
+      .set({
+        status: "complete",
+        sessionsScanned: result.sessionsScanned,
+        completedAt: new Date(),
+      })
+      .where(eq(automationRuns.id, runId));
+  } catch (error) {
+    await db
+      .update(automationRuns)
+      .set({
+        status: "failed",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        completedAt: new Date(),
+      })
+      .where(eq(automationRuns.id, runId));
+  }
 }
