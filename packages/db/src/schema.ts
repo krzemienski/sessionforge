@@ -142,6 +142,14 @@ export const templateTypeEnum = pgEnum("template_type", [
   "workspace_default",
 ]);
 
+export const recommendationTypeEnum = pgEnum("recommendation_type", [
+  "topic",
+  "format",
+  "length",
+  "keyword",
+  "improvement",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -1038,6 +1046,29 @@ export const postPerformanceMetrics = pgTable(
     index("postPerformanceMetrics_recordedAt_idx").on(table.recordedAt),
   ]
 );
+
+export const contentRecommendations = pgTable(
+  "content_recommendations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    recommendationType: recommendationTypeEnum("recommendation_type").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    reasoning: text("reasoning").notNull(),
+    supportingData: jsonb("supporting_data"),
+    confidenceScore: real("confidence_score").notNull(),
+    helpfulRating: boolean("helpful_rating"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("contentRecommendations_workspaceId_idx").on(table.workspaceId),
+    index("contentRecommendations_confidenceScore_idx").on(table.confidenceScore),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1101,6 +1132,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   usageEvents: many(usageEvents),
   postConversations: many(postConversations),
   contentTemplates: many(contentTemplates),
+  contentRecommendations: many(contentRecommendations),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1428,6 +1460,16 @@ export const postConversationsRelations = relations(postConversations, ({ one })
     references: [workspaces.id],
   }),
 }));
+
+export const contentRecommendationsRelations = relations(
+  contentRecommendations,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [contentRecommendations.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
 
 // ── Supplementary Content (Phase 6) ──
 
