@@ -6,12 +6,9 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   ScrollText,
-  FileText,
   Lightbulb,
-  CalendarDays,
-  BarChart3,
+  FileText,
   Settings,
-  Plug2,
 } from "lucide-react";
 
 const tabs = [
@@ -19,9 +16,7 @@ const tabs = [
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
-  { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Settings", icon: Settings, href: "/settings" },
-  { label: "Integrations", icon: Plug2, href: "/settings/integrations" },
 ];
 
 export function MobileBottomNav({ workspace }: { workspace: string }) {
