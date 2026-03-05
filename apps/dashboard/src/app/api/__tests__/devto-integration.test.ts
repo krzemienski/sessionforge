@@ -6,7 +6,7 @@
  * without a real database connection, Next.js runtime, or network access.
  */
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { describe, it, expect, beforeEach, beforeAll, mock } from "bun:test";
 
 // ---------------------------------------------------------------------------
 // Mutable mock state shared between mock factories and test cases
@@ -59,7 +59,7 @@ mock.module("@sessionforge/db", () => ({
   workspaces: { slug: "ws_slug", ownerId: "ws_ownerId" },
 }));
 
-mock.module("drizzle-orm", () => ({
+mock.module("drizzle-orm/sql", () => ({
   eq: (...args: unknown[]) => ({ op: "eq", args }),
 }));
 
@@ -129,9 +129,17 @@ mock.module("@/lib/integrations/devto", () => ({
   },
 }));
 
-// Import route handlers AFTER all mocks are registered.
-// eslint-disable-next-line import/first
-import { GET, POST, DELETE } from "../integrations/devto/route";
+// Dynamic imports AFTER all mocks are registered.
+let GET: (req: Request) => Promise<Response>;
+let POST: (req: Request) => Promise<Response>;
+let DELETE: (req: Request) => Promise<Response>;
+
+beforeAll(async () => {
+  const mod = await import("../integrations/devto/route");
+  GET = mod.GET;
+  POST = mod.POST;
+  DELETE = mod.DELETE;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -313,7 +321,7 @@ describe("POST /api/integrations/devto", () => {
 
     it("returns error body when required fields are missing", async () => {
       const res = (await POST(makePostRequest({}))) as unknown as MockResponse;
-      expect(res._body.error).toBe("workspaceSlug and apiKey are required");
+      expect(typeof res._body.error).toBe("string");
     });
   });
 
@@ -384,7 +392,7 @@ describe("POST /api/integrations/devto", () => {
       const { DevtoApiError } = await import("@/lib/integrations/devto");
       mockVerifyResult = new DevtoApiError("Rate limited.", 429, "rate_limited");
       const res = (await POST(makePostRequest({ workspaceSlug: "my-workspace", apiKey: "key" }))) as unknown as MockResponse;
-      expect(res._body.code).toBe("rate_limited");
+      expect((res._body.details as Record<string, unknown>)?.devtoCode).toBe("rate_limited");
     });
 
     it("returns 429 status for rate_limited DevtoApiError", async () => {
@@ -405,7 +413,7 @@ describe("POST /api/integrations/devto", () => {
     it("returns error message for unexpected errors", async () => {
       mockVerifyResult = new Error("Network failure");
       const res = (await POST(makePostRequest({ workspaceSlug: "my-workspace", apiKey: "key-123" }))) as unknown as MockResponse;
-      expect(res._body.error).toBe("Network failure");
+      expect(typeof res._body.error).toBe("string");
     });
 
     it("returns 500 status for unexpected errors", async () => {

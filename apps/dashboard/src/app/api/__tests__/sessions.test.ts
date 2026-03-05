@@ -6,7 +6,7 @@
  * connection or Next.js runtime.
  */
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { describe, it, expect, beforeEach, beforeAll, mock } from "bun:test";
 
 // ---------------------------------------------------------------------------
 // Mutable mock state shared between mock factories and test cases
@@ -62,12 +62,15 @@ mock.module("@sessionforge/db", () => ({
 
 // Provide lightweight stand-ins for drizzle-orm query builder helpers.
 // The mock db never inspects the condition objects they produce.
-mock.module("drizzle-orm", () => ({
+mock.module("drizzle-orm/sql", () => ({
   eq: (...args: unknown[]) => ({ op: "eq", args }),
   desc: (col: unknown) => ({ op: "desc", col }),
   asc: (col: unknown) => ({ op: "asc", col }),
   gte: (...args: unknown[]) => ({ op: "gte", args }),
+  lte: (...args: unknown[]) => ({ op: "lte", args }),
   and: (...args: unknown[]) => ({ op: "and", args }),
+  isNotNull: (col: unknown) => ({ op: "isNotNull", col }),
+  isNull: (col: unknown) => ({ op: "isNull", col }),
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ op: "sql", strings, values }),
 }));
 
@@ -145,9 +148,13 @@ mock.module("next/server", () => {
   return { NextResponse };
 });
 
-// Import the route handler AFTER all mocks are registered.
-// eslint-disable-next-line import/first
-import { GET } from "../sessions/route";
+// Dynamic import AFTER all mocks are registered.
+let GET: (req: Parameters<typeof import("../sessions/route")["GET"]>[0]) => Promise<Response>;
+
+beforeAll(async () => {
+  const mod = await import("../sessions/route");
+  GET = mod.GET;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -160,10 +167,10 @@ type MockResponse = { _status: number; _body: unknown };
  * `nextUrl`, which is the only part of NextRequest that the route handler
  * reads directly.
  */
-function makeRequest(params: Record<string, string> = {}): Parameters<typeof GET>[0] {
+function makeRequest(params: Record<string, string> = {}): Request {
   const url = new URL("http://localhost/api/sessions");
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  return { nextUrl: url } as unknown as Parameters<typeof GET>[0];
+  return { url: url.toString() } as unknown as Request;
 }
 
 // ---------------------------------------------------------------------------

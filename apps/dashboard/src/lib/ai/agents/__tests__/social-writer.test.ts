@@ -1,50 +1,81 @@
 /**
  * Unit tests for the social writer agent.
  *
- * Uses dynamic imports so that mock.module() calls are registered before the
- * module under test (and its dependencies) are loaded.
+ * The agent delegates to createAgentMcpServer() + runAgentStreaming().
+ * Tests verify prompt selection by platform, user message construction,
+ * template handling, skill integration, and proper delegation to the agent runner.
+ *
+ * Uses dynamic imports so that mock.module() calls are registered before
+ * the module under test (and its dependencies) are loaded.
  */
 
 import { describe, it, expect, mock, beforeAll, beforeEach } from "bun:test";
 
 // --- Mock factory functions (stable references, reassigned per test) ---
 
-const mockCreate = mock(async () => ({}));
-const mockGetModelForAgent = mock(() => "claude-opus-4-6");
-const mockGetToolsForAgent = mock(() => [] as unknown[]);
-const mockHandleSessionReaderTool = mock(async () => ({ data: "session-data" }));
-const mockHandleInsightTool = mock(async () => ({ id: "insight-123" }));
-const mockHandlePostManagerTool = mock(async () => ({ postId: "post-456" }));
+const mockCreateAgentMcpServer = mock((_type: string, _ws: string) => ({
+  name: "mock-mcp-server",
+}));
 
-const mockSend = mock((_event: string, _data: unknown) => {});
-const mockClose = mock(() => {});
+const mockRunAgentStreaming = mock(
+  (_opts: unknown, _meta?: unknown): Response =>
+    new Response("data: mock\n\n", {
+      headers: { "Content-Type": "text/event-stream" },
+    })
+);
+
+const mockGetActiveSkillsForAgentType = mock(async () => []);
+const mockBuildSkillSystemPromptSuffix = mock((_skills: unknown[]) => "");
+
+const mockInjectStyleProfile = mock(
+  async (prompt: string, _workspaceId: string) => prompt
+);
+
+const mockGetTemplateById = mock(async (_id: string) => null as null | {
+  id: string;
+  name: string;
+  description: string | null;
+  structure: { sections: Array<{ heading: string; description: string; required: boolean }> } | null;
+  toneGuidance: string | null;
+  exampleContent: string | null;
+});
+
+const mockIncrementTemplateUsage = mock(async (_id: string) => {});
+
+const mockGetTemplateBySlug = mock((_slug: string) => null as null | {
+  name: string;
+  description: string | null;
+  structure: { sections: Array<{ heading: string; description: string; required: boolean }> } | null;
+  toneGuidance: string | null;
+  exampleContent: string | null;
+});
 
 // --- Register module mocks BEFORE any dynamic import of the module under test ---
 
-mock.module("@anthropic-ai/sdk", () => ({
-  default: class MockAnthropic {
-    messages = { create: mockCreate };
-  },
+mock.module("../../mcp-server-factory", () => ({
+  createAgentMcpServer: mockCreateAgentMcpServer,
 }));
 
-mock.module("../../orchestration/model-selector", () => ({
-  getModelForAgent: mockGetModelForAgent,
+mock.module("../../agent-runner", () => ({
+  runAgentStreaming: mockRunAgentStreaming,
 }));
 
-mock.module("../../orchestration/tool-registry", () => ({
-  getToolsForAgent: mockGetToolsForAgent,
+mock.module("../../tools/skill-loader", () => ({
+  getActiveSkillsForAgentType: mockGetActiveSkillsForAgentType,
+  buildSkillSystemPromptSuffix: mockBuildSkillSystemPromptSuffix,
 }));
 
-mock.module("../../tools/session-reader", () => ({
-  handleSessionReaderTool: mockHandleSessionReaderTool,
+mock.module("@/lib/style/profile-injector", () => ({
+  injectStyleProfile: mockInjectStyleProfile,
 }));
 
-mock.module("../../tools/insight-tools", () => ({
-  handleInsightTool: mockHandleInsightTool,
+mock.module("@/lib/templates", () => ({
+  getTemplateBySlug: mockGetTemplateBySlug,
 }));
 
-mock.module("../../tools/post-manager", () => ({
-  handlePostManagerTool: mockHandlePostManagerTool,
+mock.module("@/lib/templates/db-operations", () => ({
+  getTemplateById: mockGetTemplateById,
+  incrementTemplateUsage: mockIncrementTemplateUsage,
 }));
 
 mock.module("../../prompts/social/twitter-thread", () => ({
@@ -55,18 +86,6 @@ mock.module("../../prompts/social/linkedin-post", () => ({
   LINKEDIN_PROMPT: "You are a LinkedIn post writer.",
 }));
 
-mock.module("../../orchestration/streaming", () => ({
-  createSSEStream: () => ({
-    stream: new ReadableStream(),
-    send: mockSend,
-    close: mockClose,
-  }),
-  sseResponse: (stream: ReadableStream) =>
-    new Response(stream, {
-      headers: { "Content-Type": "text/event-stream" },
-    }),
-}));
-
 // --- Dynamic import of the module under test ---
 
 let streamSocialWriter: (input: {
@@ -74,755 +93,319 @@ let streamSocialWriter: (input: {
   insightId: string;
   platform: "twitter" | "linkedin";
   customInstructions?: string;
-}) => Response;
+  templateId?: string;
+}) => Promise<Response>;
 
 beforeAll(async () => {
   const mod = await import("../social-writer");
   streamSocialWriter = mod.streamSocialWriter;
 });
 
-// --- Helpers ---
-
-function makeTextResponse(
-  text: string,
-  usage = { input_tokens: 10, output_tokens: 20 }
-) {
-  return {
-    content: [{ type: "text", text }],
-    stop_reason: "end_turn",
-    usage,
-  };
-}
-
-function makeToolUseResponse(
-  tools: Array<{ id: string; name: string; input: Record<string, unknown> }>,
-  usage = { input_tokens: 15, output_tokens: 30 }
-) {
-  return {
-    content: tools.map((t) => ({
-      type: "tool_use",
-      id: t.id,
-      name: t.name,
-      input: t.input,
-    })),
-    stop_reason: "tool_use",
-    usage,
-  };
-}
-
-/** Wait for the background async run() to fully settle. */
-async function flushAsync() {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-
 // --- Tests ---
 
 describe("streamSocialWriter", () => {
   const workspaceId = "ws-social-001";
-  const insightId = "insight-abc";
+  const insightId = "insight-xyz";
 
   beforeEach(() => {
-    mockCreate.mockClear();
-    mockGetModelForAgent.mockClear();
-    mockGetToolsForAgent.mockClear();
-    mockHandleSessionReaderTool.mockClear();
-    mockHandleInsightTool.mockClear();
-    mockHandlePostManagerTool.mockClear();
-    mockSend.mockClear();
-    mockClose.mockClear();
+    mockCreateAgentMcpServer.mockClear();
+    mockRunAgentStreaming.mockClear();
+    mockGetActiveSkillsForAgentType.mockClear();
+    mockBuildSkillSystemPromptSuffix.mockClear();
+    mockInjectStyleProfile.mockClear();
+    mockGetTemplateById.mockClear();
+    mockGetTemplateBySlug.mockClear();
+    mockIncrementTemplateUsage.mockClear();
 
     // Reset defaults
-    mockGetModelForAgent.mockImplementation(() => "claude-opus-4-6");
-    mockGetToolsForAgent.mockImplementation(() => []);
-    mockHandleSessionReaderTool.mockImplementation(async () => ({ data: "session-data" }));
-    mockHandleInsightTool.mockImplementation(async () => ({ id: "insight-123" }));
-    mockHandlePostManagerTool.mockImplementation(async () => ({ postId: "post-456" }));
+    mockGetActiveSkillsForAgentType.mockImplementation(async () => []);
+    mockBuildSkillSystemPromptSuffix.mockImplementation(() => "");
+    mockInjectStyleProfile.mockImplementation(
+      async (prompt: string, _ws: string) => prompt
+    );
+    mockGetTemplateById.mockImplementation(async () => null);
+    mockGetTemplateBySlug.mockImplementation(() => null);
+    mockRunAgentStreaming.mockImplementation(
+      () =>
+        new Response("data: mock\n\n", {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+    );
   });
 
   describe("return value", () => {
-    it("returns a Response immediately (synchronous)", () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Tweet thread."));
-
-      const response = streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-
+    it("returns a Response", async () => {
+      const response = await streamSocialWriter({
+        workspaceId,
+        insightId,
+        platform: "twitter",
+      });
       expect(response).toBeInstanceOf(Response);
     });
 
-    it("returns a response with text/event-stream content type", () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Tweet thread."));
-
-      const response = streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-
+    it("returns a response with text/event-stream content type", async () => {
+      const response = await streamSocialWriter({
+        workspaceId,
+        insightId,
+        platform: "twitter",
+      });
       expect(response.headers.get("Content-Type")).toBe("text/event-stream");
     });
   });
 
-  describe("SSE event lifecycle", () => {
-    it("sends a starting status event", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Done."));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const statusCalls = mockSend.mock.calls.filter((c) => c[0] === "status");
-      expect(statusCalls.length).toBeGreaterThan(0);
-      expect((statusCalls[0][1] as { phase: string }).phase).toBe("starting");
-    });
-
-    it("sends a text event with the model's final text", async () => {
-      mockCreate.mockImplementation(async () =>
-        makeTextResponse("This is the social post content.")
+  describe("MCP server and agent runner delegation", () => {
+    it("creates an MCP server with the social-writer agent type", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      expect(mockCreateAgentMcpServer).toHaveBeenCalledWith(
+        "social-writer",
+        workspaceId
       );
-
-      streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
-      await flushAsync();
-
-      const textCalls = mockSend.mock.calls.filter((c) => c[0] === "text");
-      expect(textCalls.length).toBe(1);
-      expect(
-        (textCalls[0][1] as { content: string }).content
-      ).toBe("This is the social post content.");
     });
 
-    it("sends a complete event after all text is emitted", async () => {
-      const usage = { input_tokens: 42, output_tokens: 100 };
-      mockCreate.mockImplementation(async () => makeTextResponse("Done.", usage));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const completeCalls = mockSend.mock.calls.filter((c) => c[0] === "complete");
-      expect(completeCalls.length).toBe(1);
-      expect((completeCalls[0][1] as { usage: unknown }).usage).toEqual(usage);
+    it("calls runAgentStreaming with agentType social-writer", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { agentType: string };
+      expect(call.agentType).toBe("social-writer");
     });
 
-    it("calls close() after the run completes", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Done."));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(mockClose).toHaveBeenCalledTimes(1);
-    });
-
-    it("sends an error event and still calls close() on API failure", async () => {
-      mockCreate.mockImplementation(async () => {
-        throw new Error("API unavailable");
+    it("passes workspaceId to runAgentStreaming", async () => {
+      await streamSocialWriter({
+        workspaceId: "my-workspace-99",
+        insightId,
+        platform: "twitter",
       });
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const errorCalls = mockSend.mock.calls.filter((c) => c[0] === "error");
-      expect(errorCalls.length).toBe(1);
-      expect(
-        (errorCalls[0][1] as { message: string }).message
-      ).toBe("API unavailable");
-      expect(mockClose).toHaveBeenCalledTimes(1);
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { workspaceId: string };
+      expect(call.workspaceId).toBe("my-workspace-99");
     });
 
-    it("sends an error event for non-Error thrown values", async () => {
-      mockCreate.mockImplementation(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-throw-literal
-        throw "network failure";
-      });
+    it("passes the created MCP server to runAgentStreaming", async () => {
+      const fakeMcp = { name: "fake-mcp" };
+      mockCreateAgentMcpServer.mockImplementationOnce(() => fakeMcp);
 
-      streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
-      await flushAsync();
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
 
-      const errorCalls = mockSend.mock.calls.filter((c) => c[0] === "error");
-      expect(errorCalls.length).toBe(1);
-      expect(
-        (errorCalls[0][1] as { message: string }).message
-      ).toBe("network failure");
-    });
-
-    it("sends no text events when the model produces no text block", async () => {
-      mockCreate.mockImplementation(async () => ({
-        content: [],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 5, output_tokens: 0 },
-      }));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const textCalls = mockSend.mock.calls.filter((c) => c[0] === "text");
-      expect(textCalls.length).toBe(0);
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { mcpServer: unknown };
+      expect(call.mcpServer).toBe(fakeMcp);
     });
   });
 
   describe("prompt selection by platform", () => {
-    it("uses the Twitter thread prompt when platform is 'twitter'", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Twitter post"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { system: string }).system
-      ).toBe("You are a Twitter thread writer.");
+    it("uses the Twitter thread prompt for twitter platform", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toBe("You are a Twitter thread writer.");
     });
 
-    it("uses the LinkedIn prompt when platform is 'linkedin'", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("LinkedIn post"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { system: string }).system
-      ).toBe("You are a LinkedIn post writer.");
+    it("uses the LinkedIn prompt for linkedin platform", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toBe("You are a LinkedIn post writer.");
     });
   });
 
   describe("user message construction", () => {
-    it("includes the insightId in the initial user message", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId: "my-special-insight", platform: "twitter" });
-      await flushAsync();
-
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.role).toBe("user");
-      expect(userMessage.content).toContain("my-special-insight");
+    it("includes the insightId in the user message", async () => {
+      await streamSocialWriter({
+        workspaceId,
+        insightId: "special-insight-42",
+        platform: "twitter",
+      });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("special-insight-42");
     });
 
-    it("includes the platform in the initial user message", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
-      await flushAsync();
-
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.content).toContain("linkedin");
+    it("includes the platform name in the user message for twitter", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("twitter");
     });
 
-    it("includes the content_type 'twitter_thread' when platform is twitter", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.content).toContain("twitter_thread");
+    it("includes the platform name in the user message for linkedin", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("linkedin");
     });
 
-    it("includes the content_type 'linkedin_post' when platform is linkedin", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
+    it("includes the twitter_thread content type for twitter platform", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("twitter_thread");
+    });
 
-      streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
-      await flushAsync();
-
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.content).toContain("linkedin_post");
+    it("includes the linkedin_post content type for linkedin platform", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("linkedin_post");
     });
 
     it("appends customInstructions to the user message when provided", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({
+      await streamSocialWriter({
         workspaceId,
         insightId,
         platform: "twitter",
-        customInstructions: "Use bullet points and emojis",
+        customInstructions: "Keep it punchy and use emojis",
       });
-      await flushAsync();
-
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.content).toContain("Use bullet points and emojis");
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("Keep it punchy and use emojis");
     });
 
-    it("does not include 'Additional instructions' text when no customInstructions", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.content).not.toContain("Additional instructions:");
-    });
-  });
-
-  describe("API call parameters", () => {
-    it("calls getModelForAgent with social-writer", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(mockGetModelForAgent).toHaveBeenCalledWith("social-writer");
+    it("does not include 'Additional instructions' when no customInstructions", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).not.toContain("Additional instructions:");
     });
 
-    it("calls getToolsForAgent with social-writer", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(mockGetToolsForAgent).toHaveBeenCalledWith("social-writer");
+    it("includes 'Additional instructions' label when customInstructions is provided", async () => {
+      await streamSocialWriter({
+        workspaceId,
+        insightId,
+        platform: "linkedin",
+        customInstructions: "Focus on leadership",
+      });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("Additional instructions:");
     });
 
-    it("passes max_tokens of 4096 to each API call", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { max_tokens: number }).max_tokens
-      ).toBe(4096);
-    });
-
-    it("passes the model returned by getModelForAgent", async () => {
-      mockGetModelForAgent.mockImplementation(() => "claude-custom-model");
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { model: string }).model
-      ).toBe("claude-custom-model");
-    });
-
-    it("passes tools returned by getToolsForAgent", async () => {
-      const fakeTool = {
-        name: "fake_tool",
-        description: "A fake tool",
-        input_schema: { type: "object" as const, properties: {} },
-      };
-      mockGetToolsForAgent.mockImplementation(() => [fakeTool]);
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { tools: unknown[] }).tools
-      ).toEqual([fakeTool]);
-    });
-
-    it("passes the system prompt on every API call in a tool-use loop", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      for (const call of mockCreate.mock.calls) {
-        expect((call[0] as { system: string }).system).toBe(
-          "You are a Twitter thread writer."
-        );
-      }
+    it("mentions aiDraftMarkdown in the user message", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("aiDraftMarkdown");
     });
   });
 
-  describe("agentic tool-use loop", () => {
-    it("sends tool_use events for each tool call", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("Social post done."));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const toolUseCalls = mockSend.mock.calls.filter((c) => c[0] === "tool_use");
-      expect(toolUseCalls.length).toBe(1);
-      expect((toolUseCalls[0][1] as { tool: string }).tool).toBe("get_insight_by_id");
-    });
-
-    it("sends tool_result events after each dispatch", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
-      await flushAsync();
-
-      const toolResultCalls = mockSend.mock.calls.filter(
-        (c) => c[0] === "tool_result"
+  describe("style profile injection", () => {
+    it("calls injectStyleProfile with the base prompt and workspaceId", async () => {
+      await streamSocialWriter({
+        workspaceId: "style-ws",
+        insightId,
+        platform: "twitter",
+      });
+      expect(mockInjectStyleProfile).toHaveBeenCalledWith(
+        "You are a Twitter thread writer.",
+        "style-ws"
       );
-      expect(toolResultCalls.length).toBe(1);
-      expect((toolResultCalls[0][1] as { success: boolean }).success).toBe(true);
     });
 
-    it("handles multiple sequential rounds of tool calls before final response", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-2", name: "create_post", input: { title: "Post", content: "..." } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("Final social post."));
+    it("uses the style-injected prompt as system prompt", async () => {
+      mockInjectStyleProfile.mockImplementationOnce(
+        async () => "Style-injected: Twitter thread prompt"
+      );
 
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
 
-      expect(mockCreate).toHaveBeenCalledTimes(3);
-
-      const textCalls = mockSend.mock.calls.filter((c) => c[0] === "text");
-      expect(textCalls.length).toBe(1);
-      expect(
-        (textCalls[0][1] as { content: string }).content
-      ).toBe("Final social post.");
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toContain("Style-injected:");
     });
 
-    it("handles multiple tool calls in a single response (parallel dispatch)", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-            { id: "tu-2", name: "get_session_summary", input: { sessionId: "s1" } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("Done."));
+    it("applies style injection to LinkedIn prompt", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
+      expect(mockInjectStyleProfile).toHaveBeenCalledWith(
+        "You are a LinkedIn post writer.",
+        workspaceId
+      );
+    });
+  });
 
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const toolUseCalls = mockSend.mock.calls.filter((c) => c[0] === "tool_use");
-      expect(toolUseCalls.length).toBe(2);
+  describe("skill integration", () => {
+    it("fetches active skills for the social agent type", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      expect(mockGetActiveSkillsForAgentType).toHaveBeenCalledWith(
+        workspaceId,
+        "social"
+      );
     });
 
-    it("includes tool results as user messages in subsequent API calls", async () => {
-      mockHandleInsightTool.mockImplementation(async () => ({
-        id: "insight-123",
-        title: "My Insight",
+    it("calls buildSkillSystemPromptSuffix with the fetched skills", async () => {
+      const fakeSkills = [{ name: "social-skill" }];
+      mockGetActiveSkillsForAgentType.mockImplementationOnce(async () => fakeSkills);
+
+      await streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
+
+      expect(mockBuildSkillSystemPromptSuffix).toHaveBeenCalledWith(fakeSkills);
+    });
+
+    it("appends skill suffix to the system prompt", async () => {
+      mockBuildSkillSystemPromptSuffix.mockImplementationOnce(
+        () => " [social-skill-suffix]"
+      );
+
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toContain("[social-skill-suffix]");
+    });
+  });
+
+  describe("template handling", () => {
+    it("does not query templates when no templateId is provided", async () => {
+      await streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
+      expect(mockGetTemplateById).not.toHaveBeenCalled();
+      expect(mockGetTemplateBySlug).not.toHaveBeenCalled();
+    });
+
+    it("looks up template by ID when templateId is provided", async () => {
+      await streamSocialWriter({
+        workspaceId,
+        insightId,
+        platform: "twitter",
+        templateId: "tmpl-social-1",
+      });
+      expect(mockGetTemplateById).toHaveBeenCalledWith("tmpl-social-1");
+    });
+
+    it("falls back to built-in template when DB template is not found", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => null);
+
+      await streamSocialWriter({
+        workspaceId,
+        insightId,
+        platform: "twitter",
+        templateId: "built-in-social",
+      });
+
+      expect(mockGetTemplateBySlug).toHaveBeenCalledWith("built-in-social");
+    });
+
+    it("appends template name to system prompt when template is found", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => ({
+        id: "tmpl-social-1",
+        name: "Twitter Thread Template",
+        description: "A template for Twitter threads",
+        structure: null,
+        toneGuidance: null,
+        exampleContent: null,
       }));
 
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-99", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
-      await flushAsync();
-
-      const secondCallMessages = (
-        mockCreate.mock.calls[1][0] as { messages: unknown[] }
-      ).messages;
-      // initial user → assistant (tool_use) → user (tool_result)
-      expect(secondCallMessages.length).toBe(3);
-
-      const toolResultMessage = secondCallMessages[2] as {
-        role: string;
-        content: unknown[];
-      };
-      expect(toolResultMessage.role).toBe("user");
-
-      const toolResult = toolResultMessage.content[0] as {
-        type: string;
-        tool_use_id: string;
-        content: string;
-      };
-      expect(toolResult.type).toBe("tool_result");
-      expect(toolResult.tool_use_id).toBe("tu-99");
-      expect(toolResult.content).toContain("insight-123");
-    });
-  });
-
-  describe("tool dispatch routing", () => {
-    async function runWithSingleTool(toolName: string) {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: toolName, input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-    }
-
-    it("routes get_session_summary to handleSessionReaderTool", async () => {
-      await runWithSingleTool("get_session_summary");
-      expect(mockHandleSessionReaderTool).toHaveBeenCalledWith(
+      await streamSocialWriter({
         workspaceId,
-        "get_session_summary",
-        expect.any(Object)
-      );
-      expect(mockHandleInsightTool).not.toHaveBeenCalled();
-    });
-
-    it("routes get_session_messages to handleSessionReaderTool", async () => {
-      await runWithSingleTool("get_session_messages");
-      expect(mockHandleSessionReaderTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_session_messages",
-        expect.any(Object)
-      );
-    });
-
-    it("routes list_sessions_by_timeframe to handleSessionReaderTool", async () => {
-      await runWithSingleTool("list_sessions_by_timeframe");
-      expect(mockHandleSessionReaderTool).toHaveBeenCalledWith(
-        workspaceId,
-        "list_sessions_by_timeframe",
-        expect.any(Object)
-      );
-    });
-
-    it("routes get_insight_by_id to handleInsightTool", async () => {
-      await runWithSingleTool("get_insight_by_id");
-      expect(mockHandleInsightTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_insight_by_id",
-        expect.any(Object)
-      );
-      expect(mockHandleSessionReaderTool).not.toHaveBeenCalled();
-    });
-
-    it("routes get_top_insights to handleInsightTool", async () => {
-      await runWithSingleTool("get_top_insights");
-      expect(mockHandleInsightTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_top_insights",
-        expect.any(Object)
-      );
-    });
-
-    it("routes create_insight to handleInsightTool", async () => {
-      await runWithSingleTool("create_insight");
-      expect(mockHandleInsightTool).toHaveBeenCalledWith(
-        workspaceId,
-        "create_insight",
-        expect.any(Object)
-      );
-    });
-
-    it("routes create_post to handlePostManagerTool", async () => {
-      await runWithSingleTool("create_post");
-      expect(mockHandlePostManagerTool).toHaveBeenCalledWith(
-        workspaceId,
-        "create_post",
-        expect.any(Object)
-      );
-      expect(mockHandleInsightTool).not.toHaveBeenCalled();
-    });
-
-    it("routes update_post to handlePostManagerTool", async () => {
-      await runWithSingleTool("update_post");
-      expect(mockHandlePostManagerTool).toHaveBeenCalledWith(
-        workspaceId,
-        "update_post",
-        expect.any(Object)
-      );
-    });
-
-    it("routes get_post to handlePostManagerTool", async () => {
-      await runWithSingleTool("get_post");
-      expect(mockHandlePostManagerTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_post",
-        expect.any(Object)
-      );
-    });
-
-    it("routes get_markdown to handlePostManagerTool", async () => {
-      await runWithSingleTool("get_markdown");
-      expect(mockHandlePostManagerTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_markdown",
-        expect.any(Object)
-      );
-    });
-
-    it("passes the workspaceId to session reader tool handler", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_session_summary", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId: "my-workspace-99", insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(mockHandleSessionReaderTool).toHaveBeenCalledWith(
-        "my-workspace-99",
-        expect.any(String),
-        expect.any(Object)
-      );
-    });
-
-    it("passes the tool input to the handler", async () => {
-      const toolInput = { insightId: "specific-insight" };
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: toolInput },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      expect(mockHandleInsightTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_insight_by_id",
-        toolInput
-      );
-    });
-  });
-
-  describe("tool error handling", () => {
-    it("sends a failed tool_result event when a tool throws an Error", async () => {
-      mockHandleInsightTool.mockImplementation(async () => {
-        throw new Error("Insight not found");
+        insightId,
+        platform: "twitter",
+        templateId: "tmpl-social-1",
       });
 
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-err", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("Recovered."));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const failedToolResult = mockSend.mock.calls.find(
-        (c) =>
-          c[0] === "tool_result" &&
-          (c[1] as { success: boolean }).success === false
-      );
-      expect(failedToolResult).toBeDefined();
-      expect(
-        (failedToolResult![1] as { error: string }).error
-      ).toBe("Insight not found");
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toContain("Twitter Thread Template");
     });
 
-    it("includes error info in the tool_result message sent to the API", async () => {
-      mockHandlePostManagerTool.mockImplementation(async () => {
-        throw new Error("Post creation failed");
+    it("tracks template usage when a DB template is found", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => ({
+        id: "tmpl-track",
+        name: "Template",
+        description: null,
+        structure: null,
+        toneGuidance: null,
+        exampleContent: null,
+      }));
+
+      await streamSocialWriter({
+        workspaceId,
+        insightId,
+        platform: "linkedin",
+        templateId: "tmpl-track",
       });
 
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-err", name: "create_post", input: { title: "T" } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("ok"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "linkedin" });
-      await flushAsync();
-
-      const secondCallMessages = (
-        mockCreate.mock.calls[1][0] as { messages: unknown[] }
-      ).messages;
-      const toolResultMessage = secondCallMessages[2] as {
-        role: string;
-        content: unknown[];
-      };
-      const errorResult = toolResultMessage.content[0] as {
-        is_error: boolean;
-        content: string;
-      };
-      expect(errorResult.is_error).toBe(true);
-      expect(errorResult.content).toContain("Post creation failed");
-    });
-
-    it("handles non-Error thrown values gracefully", async () => {
-      mockHandleInsightTool.mockImplementation(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-throw-literal
-        throw "string error value";
-      });
-
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-str", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("ok"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const secondCallMessages = (
-        mockCreate.mock.calls[1][0] as { messages: unknown[] }
-      ).messages;
-      const toolResultMessage = secondCallMessages[2] as {
-        role: string;
-        content: unknown[];
-      };
-      const errorResult = toolResultMessage.content[0] as {
-        is_error: boolean;
-        content: string;
-      };
-      expect(errorResult.is_error).toBe(true);
-      expect(errorResult.content).toContain("string error value");
-    });
-
-    it("surfaces an unknown tool as an error tool_result without crashing", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-unknown", name: "totally_unknown_tool", input: {} },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("unreachable"));
-
-      streamSocialWriter({ workspaceId, insightId, platform: "twitter" });
-      await flushAsync();
-
-      const secondCallMessages = (
-        mockCreate.mock.calls[1][0] as { messages: unknown[] }
-      ).messages;
-      const toolResultMessage = secondCallMessages[2] as {
-        role: string;
-        content: unknown[];
-      };
-      const errorResult = toolResultMessage.content[0] as {
-        is_error: boolean;
-        content: string;
-      };
-      expect(errorResult.is_error).toBe(true);
-      expect(errorResult.content).toContain("Unknown tool: totally_unknown_tool");
+      await new Promise<void>((r) => setTimeout(r, 0));
+      expect(mockIncrementTemplateUsage).toHaveBeenCalledWith("tmpl-track");
     });
   });
 });

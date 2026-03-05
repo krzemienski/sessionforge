@@ -3,10 +3,14 @@
  *
  * The database module is replaced with a controllable in-memory fake so that
  * tests run without a real database connection.
+ *
+ * Uses dynamic imports so that mock.module() calls are registered before
+ * the module under test (and its transitive dependencies) are loaded.
  */
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { describe, it, expect, beforeEach, beforeAll, mock } from "bun:test";
 import type { NormalizedSession } from "../normalizer";
+import type { IndexResult } from "../indexer";
 
 // ---------------------------------------------------------------------------
 // Mutable state shared between mock factory and test cases
@@ -62,11 +66,54 @@ const mockDb = {
   }),
 };
 
+// ---------------------------------------------------------------------------
+// Register module mocks BEFORE dynamic import of the module under test
+// ---------------------------------------------------------------------------
+
+// Mock drizzle-orm/sql operators — passed to mockDb chain which discards them.
+mock.module("drizzle-orm/sql", () => ({
+  eq: (col: unknown, val: unknown) => ({ col, val }),
+  and: (...args: unknown[]) => args,
+}));
+
+// Mock @sessionforge/db schema — claudeSessions used only as table/column refs
+// that are passed to the mocked db chain (which ignores them entirely).
+mock.module("@sessionforge/db", () => ({
+  claudeSessions: {
+    id: "id",
+    sessionId: "sessionId",
+    workspaceId: "workspaceId",
+    projectPath: "projectPath",
+    projectName: "projectName",
+    filePath: "filePath",
+    messageCount: "messageCount",
+    toolsUsed: "toolsUsed",
+    filesModified: "filesModified",
+    errorsEncountered: "errorsEncountered",
+    costUsd: "costUsd",
+    startedAt: "startedAt",
+    endedAt: "endedAt",
+    durationSeconds: "durationSeconds",
+    scannedAt: "scannedAt",
+  },
+}));
+
 // Replace the real db module before the indexer is imported.
 mock.module("@/lib/db", () => ({ db: mockDb }));
 
-// eslint-disable-next-line import/first
-import { indexSessions } from "../indexer";
+// ---------------------------------------------------------------------------
+// Dynamic import of the module under test
+// ---------------------------------------------------------------------------
+
+let indexSessions: (
+  workspaceId: string,
+  sessions: NormalizedSession[]
+) => Promise<IndexResult>;
+
+beforeAll(async () => {
+  const mod = await import("../indexer");
+  indexSessions = mod.indexSessions;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -133,7 +180,7 @@ describe("indexSessions", () => {
   describe("new session insertion", () => {
     it("inserts a new session when no existing record is found", async () => {
       mockSelectResult = [];
-      const result = await indexSessions("ws-1", [makeSession()]);
+      await indexSessions("ws-1", [makeSession()]);
       expect(mockInsertCalled).toBe(true);
     });
 

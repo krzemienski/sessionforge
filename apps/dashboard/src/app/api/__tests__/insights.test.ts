@@ -3,7 +3,7 @@
  *
  * Covers:
  *   GET  /api/insights           – list insights with filtering & pagination
- *   POST /api/insights/extract   – trigger AI insight extraction for a session
+ *   POST /api/insights/extract   – stream AI insight extraction for session(s)
  *   GET  /api/insights/[id]      – fetch a single insight by ID
  *
  * All external dependencies (auth, db, Next.js server utilities, AI agents)
@@ -11,7 +11,7 @@
  * real database connection or Next.js runtime.
  */
 
-import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { describe, it, expect, beforeEach, beforeAll, mock } from "bun:test";
 
 // ---------------------------------------------------------------------------
 // Mutable mock state shared between mock factories and test cases
@@ -33,11 +33,18 @@ let mockInsightRows: Record<string, unknown>[] = [];
 /** Controls the single insight returned by db.query.insights.findFirst(). */
 let mockInsightResult: Record<string, unknown> | undefined = undefined;
 
-/** Controls the result returned by extractInsight(). */
-let mockExtractResult: Record<string, unknown> = { id: "insight-1", summary: "test" };
+/** Controls the rows returned by db.select().from(claudeSessions).where().limit(). */
+let mockDbSessionRows: { id: string; sessionId: string }[] = [
+  { id: "cs-db-1", sessionId: "sess-abc" },
+];
 
-/** When truthy, extractInsight() throws this error. */
-let mockExtractError: Error | null = null;
+/** Controls checkQuota() result. */
+let mockQuotaResult: { allowed: boolean; limit: number; remaining: number; percentUsed: number } = {
+  allowed: true,
+  limit: 100,
+  remaining: 95,
+  percentUsed: 5,
+};
 
 // ---------------------------------------------------------------------------
 // Module mocks (must be declared before importing the modules under test)
@@ -60,21 +67,71 @@ mock.module("@sessionforge/db", () => ({
   insights: {
     id: "i_id",
     workspaceId: "i_workspaceId",
+    sessionId: "i_sessionId",
     compositeScore: "i_compositeScore",
+    category: "i_category",
+    createdAt: "i_createdAt",
   },
   workspaces: {
     id: "ws_id",
     slug: "ws_slug",
     ownerId: "ws_ownerId",
   },
+  claudeSessions: {
+    id: "cs_id",
+    sessionId: "cs_sessionId",
+    workspaceId: "cs_workspaceId",
+  },
+  webhookEndpoints: {
+    workspaceId: "we_workspaceId",
+    events: "we_events",
+    isActive: "we_isActive",
+    url: "we_url",
+    secret: "we_secret",
+  },
+  insightCategoryEnum: {
+    enumValues: ["performance", "learning", "decision", "blocker", "achievement", "pattern"],
+  },
 }));
 
-// Lightweight stand-ins for drizzle-orm query builder helpers.
-mock.module("drizzle-orm", () => ({
+// Lightweight stand-ins for drizzle-orm/sql query builder helpers.
+mock.module("drizzle-orm/sql", () => ({
   eq: (...args: unknown[]) => ({ op: "eq", args }),
   desc: (col: unknown) => ({ op: "desc", col }),
   gte: (...args: unknown[]) => ({ op: "gte", args }),
+  lte: (...args: unknown[]) => ({ op: "lte", args }),
   and: (...args: unknown[]) => ({ op: "and", args }),
+}));
+
+// Mock webhooks to avoid transitive DB access.
+mock.module("@/lib/webhooks/events", () => ({
+  fireWebhookEvent: async () => {},
+}));
+
+// Mock billing/usage used by extract route.
+mock.module("@/lib/billing/usage", () => ({
+  checkQuota: async () => mockQuotaResult,
+  recordUsage: async () => {},
+}));
+
+// Mock AI MCP server and agent runner used by extract route.
+mock.module("@/lib/ai/mcp-server-factory", () => ({
+  createAgentMcpServer: () => ({ name: "mock-mcp" }),
+}));
+
+const mockRunAgentStreaming = mock(
+  (_opts: unknown, _meta?: unknown): Response =>
+    new Response("data: mock\n\n", {
+      headers: { "Content-Type": "text/event-stream" },
+    })
+);
+
+mock.module("@/lib/ai/agent-runner", () => ({
+  runAgentStreaming: mockRunAgentStreaming,
+}));
+
+mock.module("@/lib/ai/prompts/insight-extraction", () => ({
+  INSIGHT_EXTRACTION_PROMPT: "You are an insight extractor.",
 }));
 
 // Fake db with both query-style and chained interfaces.
@@ -88,17 +145,17 @@ const mockDb = {
       findFirst: (_opts?: unknown) => Promise.resolve(mockInsightResult),
     },
   },
+  // Chainable select used by extract route's claudeSessions lookup.
+  select: (_fields?: unknown) => ({
+    from: (_table: unknown) => ({
+      where: (_cond: unknown) => ({
+        limit: async (_n: number) => mockDbSessionRows,
+      }),
+    }),
+  }),
 };
 
 mock.module("@/lib/db", () => ({ db: mockDb }));
-
-// Mock the AI insight extractor used by the extract endpoint.
-mock.module("@/lib/ai/agents/insight-extractor", () => ({
-  extractInsight: (_opts: unknown) => {
-    if (mockExtractError) return Promise.reject(mockExtractError);
-    return Promise.resolve(mockExtractResult);
-  },
-}));
 
 // Minimal NextResponse.json implementation that exposes _status and _body.
 mock.module("next/server", () => {
@@ -116,13 +173,22 @@ mock.module("next/server", () => {
   return { NextResponse };
 });
 
-// Import route handlers AFTER all mocks are registered.
-// eslint-disable-next-line import/first
-import { GET as getInsights } from "../insights/route";
-// eslint-disable-next-line import/first
-import { POST as postExtract } from "../insights/extract/route";
-// eslint-disable-next-line import/first
-import { GET as getInsightById } from "../insights/[id]/route";
+// ---------------------------------------------------------------------------
+// Dynamic imports AFTER all mocks are registered.
+// ---------------------------------------------------------------------------
+
+let getInsights: (req: Request) => Promise<Response>;
+let postExtract: (req: Request) => Promise<Response>;
+let getInsightById: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
+
+beforeAll(async () => {
+  const insightsMod = await import("../insights/route");
+  getInsights = insightsMod.GET;
+  const extractMod = await import("../insights/extract/route");
+  postExtract = extractMod.POST;
+  const insightByIdMod = await import("../insights/[id]/route");
+  getInsightById = insightByIdMod.GET;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -142,7 +208,7 @@ function makeListRequest(params: Record<string, string> = {}): Request {
 
 /**
  * Builds a minimal Request-like object whose `.json()` method resolves to the
- * given body – used for the POST /api/insights/extract handler.
+ * given body – used for POST handlers.
  */
 function makePostRequest(body: Record<string, unknown>): Request {
   return {
@@ -381,8 +447,15 @@ describe("POST /api/insights/extract", () => {
   beforeEach(() => {
     mockAuthSession = { user: { id: "user-1" } };
     mockWorkspaceResult = { id: "ws-1", slug: "my-workspace", ownerId: "user-1" };
-    mockExtractResult = { id: "insight-1", summary: "extracted insight" };
-    mockExtractError = null;
+    mockDbSessionRows = [{ id: "cs-db-1", sessionId: "sess-abc" }];
+    mockQuotaResult = { allowed: true, limit: 100, remaining: 95, percentUsed: 5 };
+    mockRunAgentStreaming.mockClear();
+    mockRunAgentStreaming.mockImplementation(
+      () =>
+        new Response("data: mock\n\n", {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -393,7 +466,7 @@ describe("POST /api/insights/extract", () => {
     it("returns 401 when no session exists", async () => {
       mockAuthSession = null;
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "my-workspace" })
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "my-workspace" })
       )) as unknown as MockResponse;
       expect(res._status).toBe(401);
     });
@@ -401,7 +474,7 @@ describe("POST /api/insights/extract", () => {
     it("returns Unauthorized error body when not authenticated", async () => {
       mockAuthSession = null;
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "my-workspace" })
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "my-workspace" })
       )) as unknown as MockResponse;
       expect((res._body as Record<string, string>).error).toBe("Unauthorized");
     });
@@ -412,7 +485,7 @@ describe("POST /api/insights/extract", () => {
   // -------------------------------------------------------------------------
 
   describe("input validation", () => {
-    it("returns 400 when sessionId is missing", async () => {
+    it("returns 400 when sessionIds is missing", async () => {
       const res = (await postExtract(
         makePostRequest({ workspaceSlug: "my-workspace" })
       )) as unknown as MockResponse;
@@ -421,19 +494,12 @@ describe("POST /api/insights/extract", () => {
 
     it("returns 400 when workspaceSlug is missing", async () => {
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1" })
+        makePostRequest({ sessionIds: ["cs-db-1"] })
       )) as unknown as MockResponse;
       expect(res._status).toBe(400);
     });
 
-    it("returns the correct error body when required fields are absent", async () => {
-      const res = (await postExtract(makePostRequest({}))) as unknown as MockResponse;
-      expect((res._body as Record<string, string>).error).toBe(
-        "sessionId and workspaceSlug are required"
-      );
-    });
-
-    it("returns 400 when both sessionId and workspaceSlug are missing", async () => {
+    it("returns 400 when body is empty", async () => {
       const res = (await postExtract(makePostRequest({}))) as unknown as MockResponse;
       expect(res._status).toBe(400);
     });
@@ -447,7 +513,7 @@ describe("POST /api/insights/extract", () => {
     it("returns 404 when workspace is not found", async () => {
       mockWorkspaceResult = undefined;
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "missing" })
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "missing" })
       )) as unknown as MockResponse;
       expect(res._status).toBe(404);
     });
@@ -455,7 +521,7 @@ describe("POST /api/insights/extract", () => {
     it("returns 404 when workspace belongs to a different user", async () => {
       mockWorkspaceResult = { id: "ws-1", slug: "other-ws", ownerId: "other-user" };
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "other-ws" })
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "other-ws" })
       )) as unknown as MockResponse;
       expect(res._status).toBe(404);
     });
@@ -463,60 +529,91 @@ describe("POST /api/insights/extract", () => {
     it("returns Workspace not found error body", async () => {
       mockWorkspaceResult = undefined;
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "missing" })
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "missing" })
       )) as unknown as MockResponse;
       expect((res._body as Record<string, string>).error).toBe("Workspace not found");
     });
   });
 
   // -------------------------------------------------------------------------
-  // Successful extraction
+  // Quota enforcement
   // -------------------------------------------------------------------------
 
-  describe("successful extraction", () => {
-    it("returns 200 on a successful extraction", async () => {
+  describe("quota enforcement", () => {
+    it("returns 402 when quota is exceeded", async () => {
+      mockQuotaResult = { allowed: false, limit: 100, remaining: 0, percentUsed: 100 };
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "my-workspace" })
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "my-workspace" })
       )) as unknown as MockResponse;
-      expect(res._status).toBe(200);
+      expect(res._status).toBe(402);
     });
 
-    it("returns the extraction result in the response body", async () => {
-      mockExtractResult = { id: "insight-99", summary: "deep analysis", compositeScore: 0.95 };
+    it("returns quota info in the 402 response body", async () => {
+      mockQuotaResult = { allowed: false, limit: 100, remaining: 0, percentUsed: 100 };
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "my-workspace" })
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "my-workspace" })
       )) as unknown as MockResponse;
-      expect(res._body).toEqual(mockExtractResult);
+      expect((res._body as Record<string, unknown>).quota).toBeDefined();
+    });
+
+    it("proceeds past quota check when quota is allowed", async () => {
+      mockQuotaResult = { allowed: true, limit: 100, remaining: 50, percentUsed: 50 };
+      const res = await postExtract(
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "my-workspace" })
+      );
+      // Not 402
+      const status = ("_status" in (res as object) ? (res as MockResponse)._status : (res as Response).status);
+      expect(status).not.toBe(402);
     });
   });
 
   // -------------------------------------------------------------------------
-  // Error handling
+  // Session lookup
   // -------------------------------------------------------------------------
 
-  describe("error handling", () => {
-    it("returns 500 when the extractor throws an Error", async () => {
-      mockExtractError = new Error("AI service unavailable");
+  describe("session lookup", () => {
+    it("returns 404 when the session is not found in the database", async () => {
+      mockDbSessionRows = [];
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "my-workspace" })
+        makePostRequest({ sessionIds: ["nonexistent"], workspaceSlug: "my-workspace" })
       )) as unknown as MockResponse;
-      expect(res._status).toBe(500);
+      expect(res._status).toBe(404);
     });
 
-    it("returns the error message when the extractor throws an Error", async () => {
-      mockExtractError = new Error("AI service unavailable");
+    it("returns Session not found error body when session is missing", async () => {
+      mockDbSessionRows = [];
       const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "my-workspace" })
+        makePostRequest({ sessionIds: ["nonexistent"], workspaceSlug: "my-workspace" })
       )) as unknown as MockResponse;
-      expect((res._body as Record<string, string>).error).toBe("AI service unavailable");
+      expect((res._body as Record<string, string>).error).toBe("Session not found");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Successful extraction (streaming)
+  // -------------------------------------------------------------------------
+
+  describe("successful extraction", () => {
+    it("returns a streaming Response on success", async () => {
+      const res = await postExtract(
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "my-workspace" })
+      );
+      expect(res).toBeInstanceOf(Response);
     });
 
-    it("returns 'Extraction failed' when the extractor throws a non-Error value", async () => {
-      mockExtractError = "string error" as unknown as Error;
-      const res = (await postExtract(
-        makePostRequest({ sessionId: "s-1", workspaceSlug: "my-workspace" })
-      )) as unknown as MockResponse;
-      expect((res._body as Record<string, string>).error).toBe("Extraction failed");
+    it("calls runAgentStreaming on success", async () => {
+      await postExtract(
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "my-workspace" })
+      );
+      expect(mockRunAgentStreaming).toHaveBeenCalled();
+    });
+
+    it("passes insight-extractor as the agentType", async () => {
+      await postExtract(
+        makePostRequest({ sessionIds: ["cs-db-1"], workspaceSlug: "my-workspace" })
+      );
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { agentType: string };
+      expect(call.agentType).toBe("insight-extractor");
     });
   });
 });

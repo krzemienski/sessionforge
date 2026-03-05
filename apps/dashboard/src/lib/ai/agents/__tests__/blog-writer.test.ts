@@ -1,55 +1,81 @@
 /**
  * Unit tests for the blog writer agent.
  *
- * Uses dynamic imports so that mock.module() calls are registered before the
- * module under test (and its dependencies) are loaded.
+ * The agent delegates to createAgentMcpServer() + runAgentStreaming().
+ * Tests verify prompt selection, user message construction, template
+ * handling, skill integration, and proper delegation to the agent runner.
+ *
+ * Uses dynamic imports so that mock.module() calls are registered before
+ * the module under test (and its dependencies) are loaded.
  */
 
 import { describe, it, expect, mock, beforeAll, beforeEach } from "bun:test";
 
 // --- Mock factory functions (stable references, reassigned per test) ---
 
-const mockCreate = mock(async () => ({}));
-const mockGetModelForAgent = mock(() => "claude-opus-4-6");
-const mockGetToolsForAgent = mock(() => [] as unknown[]);
-const mockHandleSessionReaderTool = mock(async () => ({ data: "session-data" }));
-const mockHandleInsightTool = mock(async () => ({ id: "insight-123" }));
-const mockHandlePostManagerTool = mock(async () => ({ postId: "post-456" }));
-const mockHandleSkillLoaderTool = mock(async () => ({ skills: [] }));
+const mockCreateAgentMcpServer = mock((_type: string, _ws: string) => ({
+  name: "mock-mcp-server",
+}));
 
-const mockSend = mock((_event: string, _data: unknown) => {});
-const mockClose = mock(() => {});
+const mockRunAgentStreaming = mock(
+  (_opts: unknown, _meta?: unknown): Response =>
+    new Response("data: mock\n\n", {
+      headers: { "Content-Type": "text/event-stream" },
+    })
+);
+
+const mockGetActiveSkillsForAgentType = mock(async () => []);
+const mockBuildSkillSystemPromptSuffix = mock((_skills: unknown[]) => "");
+
+const mockInjectStyleProfile = mock(
+  async (prompt: string, _workspaceId: string) => prompt
+);
+
+const mockGetTemplateById = mock(async (_id: string) => null as null | {
+  id: string;
+  name: string;
+  description: string | null;
+  structure: { sections: Array<{ heading: string; description: string; required: boolean }> } | null;
+  toneGuidance: string | null;
+  exampleContent: string | null;
+});
+
+const mockIncrementTemplateUsage = mock(async (_id: string) => {});
+
+const mockGetTemplateBySlug = mock((_slug: string) => null as null | {
+  name: string;
+  description: string;
+  structure: { sections: Array<{ heading: string; description: string; required: boolean }> } | null;
+  toneGuidance: string | null;
+  exampleContent: string | null;
+});
 
 // --- Register module mocks BEFORE any dynamic import of the module under test ---
 
-mock.module("@anthropic-ai/sdk", () => ({
-  default: class MockAnthropic {
-    messages = { create: mockCreate };
-  },
+mock.module("../../mcp-server-factory", () => ({
+  createAgentMcpServer: mockCreateAgentMcpServer,
 }));
 
-mock.module("../../orchestration/model-selector", () => ({
-  getModelForAgent: mockGetModelForAgent,
-}));
-
-mock.module("../../orchestration/tool-registry", () => ({
-  getToolsForAgent: mockGetToolsForAgent,
-}));
-
-mock.module("../../tools/session-reader", () => ({
-  handleSessionReaderTool: mockHandleSessionReaderTool,
-}));
-
-mock.module("../../tools/insight-tools", () => ({
-  handleInsightTool: mockHandleInsightTool,
-}));
-
-mock.module("../../tools/post-manager", () => ({
-  handlePostManagerTool: mockHandlePostManagerTool,
+mock.module("../../agent-runner", () => ({
+  runAgentStreaming: mockRunAgentStreaming,
 }));
 
 mock.module("../../tools/skill-loader", () => ({
-  handleSkillLoaderTool: mockHandleSkillLoaderTool,
+  getActiveSkillsForAgentType: mockGetActiveSkillsForAgentType,
+  buildSkillSystemPromptSuffix: mockBuildSkillSystemPromptSuffix,
+}));
+
+mock.module("@/lib/style/profile-injector", () => ({
+  injectStyleProfile: mockInjectStyleProfile,
+}));
+
+mock.module("@/lib/templates", () => ({
+  getTemplateBySlug: mockGetTemplateBySlug,
+}));
+
+mock.module("@/lib/templates/db-operations", () => ({
+  getTemplateById: mockGetTemplateById,
+  incrementTemplateUsage: mockIncrementTemplateUsage,
 }));
 
 mock.module("../../prompts/blog/technical", () => ({
@@ -64,18 +90,6 @@ mock.module("../../prompts/blog/conversational", () => ({
   BLOG_CONVERSATIONAL_PROMPT: "You are a conversational blog writer.",
 }));
 
-mock.module("../../orchestration/streaming", () => ({
-  createSSEStream: () => ({
-    stream: new ReadableStream(),
-    send: mockSend,
-    close: mockClose,
-  }),
-  sseResponse: (stream: ReadableStream) =>
-    new Response(stream, {
-      headers: { "Content-Type": "text/event-stream" },
-    }),
-}));
-
 // --- Dynamic import of the module under test ---
 
 let streamBlogWriter: (input: {
@@ -83,46 +97,13 @@ let streamBlogWriter: (input: {
   insightId: string;
   tone?: "technical" | "tutorial" | "conversational";
   customInstructions?: string;
-}) => Response;
+  templateId?: string;
+}) => Promise<Response>;
 
 beforeAll(async () => {
   const mod = await import("../blog-writer");
   streamBlogWriter = mod.streamBlogWriter;
 });
-
-// --- Helpers ---
-
-function makeTextResponse(
-  text: string,
-  usage = { input_tokens: 10, output_tokens: 20 }
-) {
-  return {
-    content: [{ type: "text", text }],
-    stop_reason: "end_turn",
-    usage,
-  };
-}
-
-function makeToolUseResponse(
-  tools: Array<{ id: string; name: string; input: Record<string, unknown> }>,
-  usage = { input_tokens: 15, output_tokens: 30 }
-) {
-  return {
-    content: tools.map((t) => ({
-      type: "tool_use",
-      id: t.id,
-      name: t.name,
-      input: t.input,
-    })),
-    stop_reason: "tool_use",
-    usage,
-  };
-}
-
-/** Wait for the background async run() to fully settle. */
-async function flushAsync() {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
 
 // --- Tests ---
 
@@ -131,710 +112,306 @@ describe("streamBlogWriter", () => {
   const insightId = "insight-xyz";
 
   beforeEach(() => {
-    mockCreate.mockClear();
-    mockGetModelForAgent.mockClear();
-    mockGetToolsForAgent.mockClear();
-    mockHandleSessionReaderTool.mockClear();
-    mockHandleInsightTool.mockClear();
-    mockHandlePostManagerTool.mockClear();
-    mockHandleSkillLoaderTool.mockClear();
-    mockSend.mockClear();
-    mockClose.mockClear();
+    mockCreateAgentMcpServer.mockClear();
+    mockRunAgentStreaming.mockClear();
+    mockGetActiveSkillsForAgentType.mockClear();
+    mockBuildSkillSystemPromptSuffix.mockClear();
+    mockInjectStyleProfile.mockClear();
+    mockGetTemplateById.mockClear();
+    mockGetTemplateBySlug.mockClear();
+    mockIncrementTemplateUsage.mockClear();
 
     // Reset defaults
-    mockGetModelForAgent.mockImplementation(() => "claude-opus-4-6");
-    mockGetToolsForAgent.mockImplementation(() => []);
-    mockHandleSessionReaderTool.mockImplementation(async () => ({ data: "session-data" }));
-    mockHandleInsightTool.mockImplementation(async () => ({ id: "insight-123" }));
-    mockHandlePostManagerTool.mockImplementation(async () => ({ postId: "post-456" }));
-    mockHandleSkillLoaderTool.mockImplementation(async () => ({ skills: [] }));
+    mockGetActiveSkillsForAgentType.mockImplementation(async () => []);
+    mockBuildSkillSystemPromptSuffix.mockImplementation(() => "");
+    mockInjectStyleProfile.mockImplementation(
+      async (prompt: string, _ws: string) => prompt
+    );
+    mockGetTemplateById.mockImplementation(async () => null);
+    mockGetTemplateBySlug.mockImplementation(() => null);
+    mockRunAgentStreaming.mockImplementation(
+      () =>
+        new Response("data: mock\n\n", {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+    );
   });
 
   describe("return value", () => {
-    it("returns a Response immediately (synchronous)", () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Blog post."));
-
-      const response = streamBlogWriter({ workspaceId, insightId });
-
+    it("returns a Response", async () => {
+      const response = await streamBlogWriter({ workspaceId, insightId });
       expect(response).toBeInstanceOf(Response);
     });
 
-    it("returns a response with text/event-stream content type", () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Blog post."));
-
-      const response = streamBlogWriter({ workspaceId, insightId });
-
+    it("returns a response with text/event-stream content type", async () => {
+      const response = await streamBlogWriter({ workspaceId, insightId });
       expect(response.headers.get("Content-Type")).toBe("text/event-stream");
     });
   });
 
-  describe("SSE event lifecycle", () => {
-    it("sends a starting status event", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Done."));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const statusCalls = mockSend.mock.calls.filter(
-        (c) => c[0] === "status"
+  describe("MCP server and agent runner delegation", () => {
+    it("creates an MCP server with the blog-writer agent type", async () => {
+      await streamBlogWriter({ workspaceId, insightId });
+      expect(mockCreateAgentMcpServer).toHaveBeenCalledWith(
+        "blog-writer",
+        workspaceId
       );
-      expect(statusCalls.length).toBeGreaterThan(0);
-      expect((statusCalls[0][1] as { phase: string }).phase).toBe("starting");
     });
 
-    it("sends a text event with the model's final text", async () => {
-      mockCreate.mockImplementation(async () =>
-        makeTextResponse("This is the blog post content.")
-      );
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const textCalls = mockSend.mock.calls.filter((c) => c[0] === "text");
-      expect(textCalls.length).toBe(1);
-      expect(
-        (textCalls[0][1] as { content: string }).content
-      ).toBe("This is the blog post content.");
+    it("calls runAgentStreaming with agentType blog-writer", async () => {
+      await streamBlogWriter({ workspaceId, insightId });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { agentType: string };
+      expect(call.agentType).toBe("blog-writer");
     });
 
-    it("sends a complete event after all text is emitted", async () => {
-      const usage = { input_tokens: 42, output_tokens: 100 };
-      mockCreate.mockImplementation(async () => makeTextResponse("Done.", usage));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const completeCalls = mockSend.mock.calls.filter((c) => c[0] === "complete");
-      expect(completeCalls.length).toBe(1);
-      expect((completeCalls[0][1] as { usage: unknown }).usage).toEqual(usage);
+    it("passes workspaceId to runAgentStreaming", async () => {
+      await streamBlogWriter({ workspaceId: "my-workspace-99", insightId });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { workspaceId: string };
+      expect(call.workspaceId).toBe("my-workspace-99");
     });
 
-    it("calls close() after the run completes", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("Done."));
+    it("passes the created MCP server to runAgentStreaming", async () => {
+      const fakeMcp = { name: "fake-mcp" };
+      mockCreateAgentMcpServer.mockImplementationOnce(() => fakeMcp);
 
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
+      await streamBlogWriter({ workspaceId, insightId });
 
-      expect(mockClose).toHaveBeenCalledTimes(1);
-    });
-
-    it("sends an error event and still calls close() on API failure", async () => {
-      mockCreate.mockImplementation(async () => {
-        throw new Error("API unavailable");
-      });
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const errorCalls = mockSend.mock.calls.filter((c) => c[0] === "error");
-      expect(errorCalls.length).toBe(1);
-      expect(
-        (errorCalls[0][1] as { message: string }).message
-      ).toBe("API unavailable");
-      expect(mockClose).toHaveBeenCalledTimes(1);
-    });
-
-    it("sends an error event for non-Error thrown values", async () => {
-      mockCreate.mockImplementation(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-throw-literal
-        throw "network failure";
-      });
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const errorCalls = mockSend.mock.calls.filter((c) => c[0] === "error");
-      expect(errorCalls.length).toBe(1);
-      expect(
-        (errorCalls[0][1] as { message: string }).message
-      ).toBe("network failure");
-    });
-
-    it("sends no text events when the model produces no text block", async () => {
-      mockCreate.mockImplementation(async () => ({
-        content: [],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 5, output_tokens: 0 },
-      }));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const textCalls = mockSend.mock.calls.filter((c) => c[0] === "text");
-      expect(textCalls.length).toBe(0);
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { mcpServer: unknown };
+      expect(call.mcpServer).toBe(fakeMcp);
     });
   });
 
   describe("prompt selection by tone", () => {
     it("uses the technical prompt by default (no tone specified)", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("technical post"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { system: string }).system
-      ).toBe("You are a technical blog writer.");
+      await streamBlogWriter({ workspaceId, insightId });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toBe("You are a technical blog writer.");
     });
 
     it("uses the technical prompt when tone is 'technical'", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("technical post"));
-
-      streamBlogWriter({ workspaceId, insightId, tone: "technical" });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { system: string }).system
-      ).toBe("You are a technical blog writer.");
+      await streamBlogWriter({ workspaceId, insightId, tone: "technical" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toBe("You are a technical blog writer.");
     });
 
     it("uses the tutorial prompt when tone is 'tutorial'", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("tutorial post"));
-
-      streamBlogWriter({ workspaceId, insightId, tone: "tutorial" });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { system: string }).system
-      ).toBe("You are a tutorial blog writer.");
+      await streamBlogWriter({ workspaceId, insightId, tone: "tutorial" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toBe("You are a tutorial blog writer.");
     });
 
     it("uses the conversational prompt when tone is 'conversational'", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("conversational post"));
-
-      streamBlogWriter({ workspaceId, insightId, tone: "conversational" });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { system: string }).system
-      ).toBe("You are a conversational blog writer.");
+      await streamBlogWriter({ workspaceId, insightId, tone: "conversational" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toBe("You are a conversational blog writer.");
     });
   });
 
   describe("user message construction", () => {
-    it("includes the insightId in the initial user message", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId: "my-special-insight" });
-      await flushAsync();
-
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.role).toBe("user");
-      expect(userMessage.content).toContain("my-special-insight");
+    it("includes the insightId in the user message", async () => {
+      await streamBlogWriter({ workspaceId, insightId: "my-special-insight" });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("my-special-insight");
     });
 
     it("appends customInstructions to the user message when provided", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamBlogWriter({
+      await streamBlogWriter({
         workspaceId,
         insightId,
         customInstructions: "Use lots of code examples",
       });
-      await flushAsync();
-
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.content).toContain("Use lots of code examples");
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("Use lots of code examples");
     });
 
     it("does not include 'Additional instructions' text when no customInstructions", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
+      await streamBlogWriter({ workspaceId, insightId });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).not.toContain("Additional instructions:");
+    });
 
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
+    it("includes 'Additional instructions' label when customInstructions is provided", async () => {
+      await streamBlogWriter({
+        workspaceId,
+        insightId,
+        customInstructions: "Focus on TypeScript",
+      });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("Additional instructions:");
+    });
 
-      const firstCall = mockCreate.mock.calls[0][0] as {
-        messages: Array<{ role: string; content: string }>;
-      };
-      const userMessage = firstCall.messages[0];
-      expect(userMessage.content).not.toContain("Additional instructions:");
+    it("mentions create_post in the user message", async () => {
+      await streamBlogWriter({ workspaceId, insightId });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("create_post");
+    });
+
+    it("mentions aiDraftMarkdown in the user message", async () => {
+      await streamBlogWriter({ workspaceId, insightId });
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { userMessage: string };
+      expect(call.userMessage).toContain("aiDraftMarkdown");
     });
   });
 
-  describe("API call parameters", () => {
-    it("calls getModelForAgent with blog-writer", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      expect(mockGetModelForAgent).toHaveBeenCalledWith("blog-writer");
-    });
-
-    it("calls getToolsForAgent with blog-writer", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      expect(mockGetToolsForAgent).toHaveBeenCalledWith("blog-writer");
-    });
-
-    it("passes max_tokens of 8192 to each API call", async () => {
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { max_tokens: number }).max_tokens
-      ).toBe(8192);
-    });
-
-    it("passes the model returned by getModelForAgent", async () => {
-      mockGetModelForAgent.mockImplementation(() => "claude-custom-model");
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { model: string }).model
-      ).toBe("claude-custom-model");
-    });
-
-    it("passes tools returned by getToolsForAgent", async () => {
-      const fakeTool = {
-        name: "fake_tool",
-        description: "A fake tool",
-        input_schema: { type: "object" as const, properties: {} },
-      };
-      mockGetToolsForAgent.mockImplementation(() => [fakeTool]);
-      mockCreate.mockImplementation(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      expect(
-        (mockCreate.mock.calls[0][0] as { tools: unknown[] }).tools
-      ).toEqual([fakeTool]);
-    });
-
-    it("passes the system prompt on every API call in a tool-use loop", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      for (const call of mockCreate.mock.calls) {
-        expect((call[0] as { system: string }).system).toBe(
-          "You are a technical blog writer."
-        );
-      }
-    });
-  });
-
-  describe("agentic tool-use loop", () => {
-    it("sends tool_use events for each tool call", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("Blog done."));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const toolUseCalls = mockSend.mock.calls.filter((c) => c[0] === "tool_use");
-      expect(toolUseCalls.length).toBe(1);
-      expect((toolUseCalls[0][1] as { tool: string }).tool).toBe("get_insight_by_id");
-    });
-
-    it("sends tool_result events after each dispatch", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const toolResultCalls = mockSend.mock.calls.filter(
-        (c) => c[0] === "tool_result"
+  describe("style profile injection", () => {
+    it("calls injectStyleProfile with the base prompt and workspaceId", async () => {
+      await streamBlogWriter({ workspaceId: "style-ws", insightId });
+      expect(mockInjectStyleProfile).toHaveBeenCalledWith(
+        "You are a technical blog writer.",
+        "style-ws"
       );
-      expect(toolResultCalls.length).toBe(1);
-      expect((toolResultCalls[0][1] as { success: boolean }).success).toBe(true);
     });
 
-    it("handles multiple sequential rounds of tool calls before final response", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-2", name: "create_post", input: { title: "Post", content: "..." } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("Final blog post."));
+    it("uses the style-injected prompt as the system prompt", async () => {
+      mockInjectStyleProfile.mockImplementationOnce(
+        async () => "Style-injected: technical prompt"
+      );
 
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
+      await streamBlogWriter({ workspaceId, insightId });
 
-      expect(mockCreate).toHaveBeenCalledTimes(3);
-
-      const textCalls = mockSend.mock.calls.filter((c) => c[0] === "text");
-      expect(textCalls.length).toBe(1);
-      expect(
-        (textCalls[0][1] as { content: string }).content
-      ).toBe("Final blog post.");
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toContain("Style-injected:");
     });
 
-    it("handles multiple tool calls in a single response (parallel dispatch)", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: { insightId } },
-            { id: "tu-2", name: "get_session_summary", input: { sessionId: "s1" } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("Done."));
+    it("applies style injection to tutorial prompt", async () => {
+      await streamBlogWriter({ workspaceId, insightId, tone: "tutorial" });
+      expect(mockInjectStyleProfile).toHaveBeenCalledWith(
+        "You are a tutorial blog writer.",
+        workspaceId
+      );
+    });
+  });
 
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const toolUseCalls = mockSend.mock.calls.filter((c) => c[0] === "tool_use");
-      expect(toolUseCalls.length).toBe(2);
+  describe("skill integration", () => {
+    it("fetches active skills for the blog agent type", async () => {
+      await streamBlogWriter({ workspaceId, insightId });
+      expect(mockGetActiveSkillsForAgentType).toHaveBeenCalledWith(
+        workspaceId,
+        "blog"
+      );
     });
 
-    it("includes tool results as user messages in subsequent API calls", async () => {
-      mockHandleInsightTool.mockImplementation(async () => ({
-        id: "insight-123",
-        title: "My Insight",
+    it("calls buildSkillSystemPromptSuffix with the fetched skills", async () => {
+      const fakeSkills = [{ name: "test-skill" }];
+      mockGetActiveSkillsForAgentType.mockImplementationOnce(async () => fakeSkills);
+
+      await streamBlogWriter({ workspaceId, insightId });
+
+      expect(mockBuildSkillSystemPromptSuffix).toHaveBeenCalledWith(fakeSkills);
+    });
+
+    it("appends skill suffix to the system prompt", async () => {
+      mockBuildSkillSystemPromptSuffix.mockImplementationOnce(() => " [skill-suffix]");
+
+      await streamBlogWriter({ workspaceId, insightId });
+
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toContain("[skill-suffix]");
+    });
+  });
+
+  describe("template handling", () => {
+    it("does not query templates when no templateId is provided", async () => {
+      await streamBlogWriter({ workspaceId, insightId });
+      expect(mockGetTemplateById).not.toHaveBeenCalled();
+      expect(mockGetTemplateBySlug).not.toHaveBeenCalled();
+    });
+
+    it("looks up template by ID when templateId is provided", async () => {
+      await streamBlogWriter({ workspaceId, insightId, templateId: "tmpl-123" });
+      expect(mockGetTemplateById).toHaveBeenCalledWith("tmpl-123");
+    });
+
+    it("falls back to built-in template when DB template is not found", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => null);
+
+      await streamBlogWriter({ workspaceId, insightId, templateId: "how-i-built-x" });
+
+      expect(mockGetTemplateBySlug).toHaveBeenCalledWith("how-i-built-x");
+    });
+
+    it("does not call getTemplateBySlug when DB template is found", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => ({
+        id: "tmpl-123",
+        name: "My Template",
+        description: null,
+        structure: null,
+        toneGuidance: null,
+        exampleContent: null,
       }));
 
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-99", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
+      await streamBlogWriter({ workspaceId, insightId, templateId: "tmpl-123" });
 
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const secondCallMessages = (
-        mockCreate.mock.calls[1][0] as { messages: unknown[] }
-      ).messages;
-      // initial user → assistant (tool_use) → user (tool_result)
-      expect(secondCallMessages.length).toBe(3);
-
-      const toolResultMessage = secondCallMessages[2] as {
-        role: string;
-        content: unknown[];
-      };
-      expect(toolResultMessage.role).toBe("user");
-
-      const toolResult = toolResultMessage.content[0] as {
-        type: string;
-        tool_use_id: string;
-        content: string;
-      };
-      expect(toolResult.type).toBe("tool_result");
-      expect(toolResult.tool_use_id).toBe("tu-99");
-      expect(toolResult.content).toContain("insight-123");
-    });
-  });
-
-  describe("tool dispatch routing", () => {
-    async function runWithSingleTool(toolName: string) {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: toolName, input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-    }
-
-    it("routes get_session_summary to handleSessionReaderTool", async () => {
-      await runWithSingleTool("get_session_summary");
-      expect(mockHandleSessionReaderTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_session_summary",
-        expect.any(Object)
-      );
-      expect(mockHandleInsightTool).not.toHaveBeenCalled();
+      expect(mockGetTemplateBySlug).not.toHaveBeenCalled();
     });
 
-    it("routes get_session_messages to handleSessionReaderTool", async () => {
-      await runWithSingleTool("get_session_messages");
-      expect(mockHandleSessionReaderTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_session_messages",
-        expect.any(Object)
-      );
+    it("appends template name to system prompt when DB template is found", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => ({
+        id: "tmpl-123",
+        name: "Debugging Story",
+        description: "A template for debugging stories.",
+        structure: null,
+        toneGuidance: null,
+        exampleContent: null,
+      }));
+
+      await streamBlogWriter({ workspaceId, insightId, templateId: "tmpl-123" });
+
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toContain("Debugging Story");
     });
 
-    it("routes list_sessions_by_timeframe to handleSessionReaderTool", async () => {
-      await runWithSingleTool("list_sessions_by_timeframe");
-      expect(mockHandleSessionReaderTool).toHaveBeenCalledWith(
-        workspaceId,
-        "list_sessions_by_timeframe",
-        expect.any(Object)
-      );
+    it("includes template sections in system prompt when present", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => ({
+        id: "tmpl-s",
+        name: "Structured Template",
+        description: null,
+        structure: {
+          sections: [
+            { heading: "Problem", description: "Describe the problem.", required: true },
+          ],
+        },
+        toneGuidance: null,
+        exampleContent: null,
+      }));
+
+      await streamBlogWriter({ workspaceId, insightId, templateId: "tmpl-s" });
+
+      const call = mockRunAgentStreaming.mock.calls[0][0] as { systemPrompt: string };
+      expect(call.systemPrompt).toContain("Problem");
     });
 
-    it("routes get_insight_by_id to handleInsightTool", async () => {
-      await runWithSingleTool("get_insight_by_id");
-      expect(mockHandleInsightTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_insight_by_id",
-        expect.any(Object)
-      );
-      expect(mockHandleSessionReaderTool).not.toHaveBeenCalled();
+    it("tracks template usage when a DB template is found", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => ({
+        id: "tmpl-abc",
+        name: "Template",
+        description: null,
+        structure: null,
+        toneGuidance: null,
+        exampleContent: null,
+      }));
+
+      await streamBlogWriter({ workspaceId, insightId, templateId: "tmpl-abc" });
+
+      // Fire-and-forget: allow the microtask queue to settle
+      await new Promise<void>((r) => setTimeout(r, 0));
+      expect(mockIncrementTemplateUsage).toHaveBeenCalledWith("tmpl-abc");
     });
 
-    it("routes get_top_insights to handleInsightTool", async () => {
-      await runWithSingleTool("get_top_insights");
-      expect(mockHandleInsightTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_top_insights",
-        expect.any(Object)
-      );
-    });
+    it("does not track usage for built-in (slug) templates", async () => {
+      mockGetTemplateById.mockImplementationOnce(async () => null);
+      mockGetTemplateBySlug.mockImplementationOnce(() => ({
+        name: "Built-in",
+        description: "A built-in template",
+        structure: null,
+        toneGuidance: null,
+        exampleContent: null,
+      }));
 
-    it("routes create_insight to handleInsightTool", async () => {
-      await runWithSingleTool("create_insight");
-      expect(mockHandleInsightTool).toHaveBeenCalledWith(
-        workspaceId,
-        "create_insight",
-        expect.any(Object)
-      );
-    });
+      await streamBlogWriter({ workspaceId, insightId, templateId: "built-in-slug" });
+      await new Promise<void>((r) => setTimeout(r, 0));
 
-    it("routes create_post to handlePostManagerTool", async () => {
-      await runWithSingleTool("create_post");
-      expect(mockHandlePostManagerTool).toHaveBeenCalledWith(
-        workspaceId,
-        "create_post",
-        expect.any(Object)
-      );
-      expect(mockHandleInsightTool).not.toHaveBeenCalled();
-    });
-
-    it("routes update_post to handlePostManagerTool", async () => {
-      await runWithSingleTool("update_post");
-      expect(mockHandlePostManagerTool).toHaveBeenCalledWith(
-        workspaceId,
-        "update_post",
-        expect.any(Object)
-      );
-    });
-
-    it("routes get_post to handlePostManagerTool", async () => {
-      await runWithSingleTool("get_post");
-      expect(mockHandlePostManagerTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_post",
-        expect.any(Object)
-      );
-    });
-
-    it("routes get_markdown to handlePostManagerTool", async () => {
-      await runWithSingleTool("get_markdown");
-      expect(mockHandlePostManagerTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_markdown",
-        expect.any(Object)
-      );
-    });
-
-    it("routes list_available_skills to handleSkillLoaderTool", async () => {
-      await runWithSingleTool("list_available_skills");
-      expect(mockHandleSkillLoaderTool).toHaveBeenCalledWith(
-        "list_available_skills",
-        expect.any(Object)
-      );
-      expect(mockHandlePostManagerTool).not.toHaveBeenCalled();
-    });
-
-    it("routes get_skill_by_name to handleSkillLoaderTool", async () => {
-      await runWithSingleTool("get_skill_by_name");
-      expect(mockHandleSkillLoaderTool).toHaveBeenCalledWith(
-        "get_skill_by_name",
-        expect.any(Object)
-      );
-    });
-
-    it("passes the workspaceId to session reader tool handler", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_session_summary", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId: "my-workspace-99", insightId });
-      await flushAsync();
-
-      expect(mockHandleSessionReaderTool).toHaveBeenCalledWith(
-        "my-workspace-99",
-        expect.any(String),
-        expect.any(Object)
-      );
-    });
-
-    it("passes the tool input to the handler", async () => {
-      const toolInput = { insightId: "specific-insight" };
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-1", name: "get_insight_by_id", input: toolInput },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("done"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      expect(mockHandleInsightTool).toHaveBeenCalledWith(
-        workspaceId,
-        "get_insight_by_id",
-        toolInput
-      );
-    });
-  });
-
-  describe("tool error handling", () => {
-    it("sends a failed tool_result event when a tool throws an Error", async () => {
-      mockHandleInsightTool.mockImplementation(async () => {
-        throw new Error("Insight not found");
-      });
-
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-err", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("Recovered."));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const failedToolResult = mockSend.mock.calls.find(
-        (c) =>
-          c[0] === "tool_result" &&
-          (c[1] as { success: boolean }).success === false
-      );
-      expect(failedToolResult).toBeDefined();
-      expect(
-        (failedToolResult![1] as { error: string }).error
-      ).toBe("Insight not found");
-    });
-
-    it("includes error info in the tool_result message sent to the API", async () => {
-      mockHandlePostManagerTool.mockImplementation(async () => {
-        throw new Error("Post creation failed");
-      });
-
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-err", name: "create_post", input: { title: "T" } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("ok"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const secondCallMessages = (
-        mockCreate.mock.calls[1][0] as { messages: unknown[] }
-      ).messages;
-      const toolResultMessage = secondCallMessages[2] as {
-        role: string;
-        content: unknown[];
-      };
-      const errorResult = toolResultMessage.content[0] as {
-        is_error: boolean;
-        content: string;
-      };
-      expect(errorResult.is_error).toBe(true);
-      expect(errorResult.content).toContain("Post creation failed");
-    });
-
-    it("handles non-Error thrown values gracefully", async () => {
-      mockHandleInsightTool.mockImplementation(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-throw-literal
-        throw "string error value";
-      });
-
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-str", name: "get_insight_by_id", input: { insightId } },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("ok"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const secondCallMessages = (
-        mockCreate.mock.calls[1][0] as { messages: unknown[] }
-      ).messages;
-      const toolResultMessage = secondCallMessages[2] as {
-        role: string;
-        content: unknown[];
-      };
-      const errorResult = toolResultMessage.content[0] as {
-        is_error: boolean;
-        content: string;
-      };
-      expect(errorResult.is_error).toBe(true);
-      expect(errorResult.content).toContain("string error value");
-    });
-
-    it("surfaces an unknown tool as an error tool_result without crashing", async () => {
-      mockCreate
-        .mockImplementationOnce(async () =>
-          makeToolUseResponse([
-            { id: "tu-unknown", name: "totally_unknown_tool", input: {} },
-          ])
-        )
-        .mockImplementationOnce(async () => makeTextResponse("unreachable"));
-
-      streamBlogWriter({ workspaceId, insightId });
-      await flushAsync();
-
-      const secondCallMessages = (
-        mockCreate.mock.calls[1][0] as { messages: unknown[] }
-      ).messages;
-      const toolResultMessage = secondCallMessages[2] as {
-        role: string;
-        content: unknown[];
-      };
-      const errorResult = toolResultMessage.content[0] as {
-        is_error: boolean;
-        content: string;
-      };
-      expect(errorResult.is_error).toBe(true);
-      expect(errorResult.content).toContain("Unknown tool: totally_unknown_tool");
+      expect(mockIncrementTemplateUsage).not.toHaveBeenCalled();
     });
   });
 });
