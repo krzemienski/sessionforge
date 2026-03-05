@@ -21,6 +21,7 @@ export async function GET(
     with: {
       workspace: true,
       collectionPosts: {
+        orderBy: (collectionPosts, { asc }) => [asc(collectionPosts.order)],
         with: {
           post: true,
         },
