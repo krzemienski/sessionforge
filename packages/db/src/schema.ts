@@ -724,6 +724,53 @@ export const devtoPublications = pgTable(
   ]
 );
 
+// ── Ghost CMS Integration tables (from 016-ghost-cms-publishing-integration) ──
+
+export const ghostIntegrations = pgTable(
+  "ghost_integrations",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    ghostUrl: text("ghost_url").notNull(),
+    adminApiKey: text("admin_api_key").notNull(),
+    enabled: boolean("enabled").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("ghostIntegrations_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const ghostPublications = pgTable(
+  "ghost_publications",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => ghostIntegrations.id, { onDelete: "cascade" }),
+    ghostPostId: text("ghost_post_id").notNull(),
+    ghostUrl: text("ghost_url"),
+    publishedAsDraft: boolean("published_as_draft").default(false),
+    syncedAt: timestamp("synced_at").defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("ghostPublications_workspaceId_idx").on(table.workspaceId),
+    index("ghostPublications_postId_idx").on(table.postId),
+    uniqueIndex("ghostPublications_postId_uidx").on(table.postId),
+  ]
+);
+
 // ── Agent Runs (from 004-error-recovery) ──
 
 export const agentRuns = pgTable(
@@ -978,6 +1025,8 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   activity: many(workspaceActivity),
   devtoIntegrations: many(devtoIntegrations),
   devtoPublications: many(devtoPublications),
+  ghostIntegrations: many(ghostIntegrations),
+  ghostPublications: many(ghostPublications),
   agentRuns: many(agentRuns),
   writingSkills: many(writingSkills),
   sessionBookmarks: many(sessionBookmarks),
@@ -1351,3 +1400,32 @@ export const contentAssetsRelations = relations(contentAssets, ({ one }) => ({
     references: [workspaces.id],
   }),
 }));
+
+export const ghostIntegrationsRelations = relations(
+  ghostIntegrations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [ghostIntegrations.workspaceId],
+      references: [workspaces.id],
+    }),
+    publications: many(ghostPublications),
+  })
+);
+
+export const ghostPublicationsRelations = relations(
+  ghostPublications,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [ghostPublications.workspaceId],
+      references: [workspaces.id],
+    }),
+    post: one(posts, {
+      fields: [ghostPublications.postId],
+      references: [posts.id],
+    }),
+    integration: one(ghostIntegrations, {
+      fields: [ghostPublications.integrationId],
+      references: [ghostIntegrations.id],
+    }),
+  })
+);
