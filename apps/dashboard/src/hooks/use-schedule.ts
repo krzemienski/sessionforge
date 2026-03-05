@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 export function useSchedulePost() {
   const qc = useQueryClient();
@@ -57,3 +57,38 @@ export function useUnschedulePost() {
     },
   });
 }
+
+export function useScheduledPosts(workspaceSlug: string) {
+  return useQuery({
+    queryKey: ["scheduled-posts", workspaceSlug],
+    queryFn: async () => {
+      const res = await fetch(`/api/schedule?workspace=${workspaceSlug}`);
+      if (!res.ok) {
+        throw new Error("Failed to fetch scheduled posts");
+      }
+      return res.json();
+    },
+    enabled: !!workspaceSlug,
+  });
+}
+
+export function useCancelScheduledPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ postId }: { postId: string }) => {
+      const res = await fetch(`/api/schedule/${postId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to cancel scheduled post");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scheduled-posts"] });
+      qc.invalidateQueries({ queryKey: ["content"] });
+    },
+  });
+}
+
