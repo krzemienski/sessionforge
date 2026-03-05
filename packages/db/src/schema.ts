@@ -1191,6 +1191,7 @@ export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
     fields: [postRevisions.postId],
     references: [posts.id],
   }),
+}));
 
 export const contentTriggersRelations = relations(
   contentTriggers,
