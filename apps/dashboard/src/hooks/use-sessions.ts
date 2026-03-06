@@ -103,7 +103,10 @@ export function useScanSessions(workspace: string) {
 export type ScanProgressEvent =
   | { type: "start"; total: number }
   | { type: "progress"; current: number; total: number; sessionId: string; projectPath: string }
-  | { type: "complete"; scanned: number; new: number; updated: number; errors: string[]; durationMs: number }
+  | { type: "analyzing"; message: string }
+  | { type: "analysis_complete"; insightCount: number }
+  | { type: "analysis_error"; message: string }
+  | { type: "complete"; scanned: number; new: number; updated: number; errors: string[]; durationMs: number; insightsFound?: number }
   | { type: "error"; message: string };
 
 /** Hook that streams scan progress via SSE for real-time UI updates. */
@@ -154,9 +157,13 @@ export function useStreamingScan(workspace: string) {
               const event = JSON.parse(dataLine) as ScanProgressEvent;
               setProgress(event);
               setEvents((prev) => [...prev, event]);
+              if (event.type === "analysis_complete") {
+                qc.invalidateQueries({ queryKey: ["insights"] });
+              }
               if (event.type === "complete" || event.type === "error") {
                 setIsScanning(false);
                 qc.invalidateQueries({ queryKey: ["sessions"] });
+                qc.invalidateQueries({ queryKey: ["insights"] });
               }
             } catch { /* skip malformed */ }
           }

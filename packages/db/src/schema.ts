@@ -918,6 +918,31 @@ export const agentRuns = pgTable(
   (table) => [index("agentRuns_workspaceId_idx").on(table.workspaceId)]
 );
 
+// ── Agent Events (observability) ──
+
+export const agentEvents = pgTable(
+  "agent_events",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    traceId: text("trace_id").notNull(),
+    parentEventId: text("parent_event_id"),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    agentType: text("agent_type").notNull(),
+    agentRunId: text("agent_run_id"),
+    eventType: text("event_type").notNull(),
+    level: text("level").notNull().default("info"),
+    payload: jsonb("payload").notNull().default({}),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("agentEvents_traceId_idx").on(table.traceId),
+    index("agentEvents_workspace_time_idx").on(table.workspaceId, table.createdAt),
+    index("agentEvents_eventType_idx").on(table.eventType),
+  ]
+);
+
 // ── Writing Skills (from 021-skill-loader-ui-custom-writing-skills) ──
 
 export const writingSkills = pgTable(

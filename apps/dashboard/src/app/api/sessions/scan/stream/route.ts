@@ -9,6 +9,8 @@ import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";
 import { indexSessions } from "@/lib/sessions/indexer";
 import { checkQuota, recordUsage } from "@/lib/billing/usage";
+import { createPipelineInstrumentation } from "@/lib/observability/instrument-pipeline";
+import { analyzeCorpus } from "@/lib/ai/agents/corpus-analyzer";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,7 @@ export async function GET(req: NextRequest) {
   const lookbackParam = searchParams.get("lookbackDays");
   const parsedDays = lookbackParam !== null ? parseInt(lookbackParam, 10) : NaN;
   const lookbackDays = !isNaN(parsedDays) ? parsedDays : 30;
+  const analyzeAfterScan = searchParams.get("analyzeAfterScan") !== "false";
   const workspaceSlug = searchParams.get("workspaceSlug");
 
   const workspace = workspaceSlug
@@ -69,6 +72,7 @@ export async function GET(req: NextRequest) {
   const userId = session.user.id;
   const basePath = ws.sessionBasePath ?? "~/.claude";
   const start = Date.now();
+  const obs = createPipelineInstrumentation("session-scan", ws.id);
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -77,14 +81,18 @@ export async function GET(req: NextRequest) {
       };
 
       try {
+        obs.start({ lookbackDays, basePath });
+        obs.stage("scanning-files");
         const files = await scanSessionFiles(lookbackDays, basePath);
         const total = files.length;
 
         enqueue({ type: "start", total });
 
+        obs.stage("parsing-sessions", { total });
         const normalized = [];
         for (let i = 0; i < files.length; i++) {
           const meta = files[i];
+          obs.progress(i + 1, total, { sessionId: meta.sessionId });
           enqueue({
             type: "progress",
             current: i + 1,
@@ -96,15 +104,12 @@ export async function GET(req: NextRequest) {
           normalized.push(await normalizeSession(meta, parsed));
         }
 
+        obs.stage("indexing", { count: normalized.length });
         const result = await indexSessions(ws.id, normalized);
 
-        // Record usage for newly indexed sessions
+        // Record usage for newly indexed sessions (single call, not N parallel)
         if (result.new > 0) {
-          void Promise.all(
-            Array.from({ length: result.new }, () =>
-              recordUsage(userId, ws.id, "session_scan")
-            )
-          );
+          void recordUsage(userId, ws.id, "session_scan", undefined, result.new);
         }
 
         // Update workspace lastScanAt
@@ -113,15 +118,46 @@ export async function GET(req: NextRequest) {
           .set({ lastScanAt: new Date() })
           .where(eq(workspaces.id, ws.id));
 
+        // ── ANALYZE (auto-chain) ──────────────────────────────────────────
+        let analysisResult: { insightCount: number } | null = null;
+
+        if (analyzeAfterScan && result.scanned > 0) {
+          obs.stage("analyzing");
+          enqueue({ type: "analyzing", message: "Analyzing cross-session patterns..." });
+
+          try {
+            analysisResult = await analyzeCorpus({
+              workspaceId: ws.id,
+              lookbackDays,
+              traceId: obs.traceId,
+            });
+
+            enqueue({
+              type: "analysis_complete",
+              insightCount: analysisResult.insightCount,
+            });
+          } catch (analysisErr) {
+            // Analysis failure is non-fatal — scan still succeeded
+            enqueue({
+              type: "analysis_error",
+              message: analysisErr instanceof Error ? analysisErr.message : String(analysisErr),
+            });
+          }
+        }
+
+        obs.complete({ scanned: result.scanned, new: result.new, updated: result.updated, errors: result.errors, insightsFound: analysisResult?.insightCount ?? 0 });
         enqueue({
           type: "complete",
           scanned: result.scanned,
           new: result.new,
           updated: result.updated,
           errors: result.errors,
+          insightsFound: analysisResult?.insightCount ?? 0,
           durationMs: Date.now() - start,
+          traceId: obs.traceId,
         });
       } catch (err) {
+        obs.error(err);
         enqueue({
           type: "error",
           message: err instanceof Error ? err.message : String(err),

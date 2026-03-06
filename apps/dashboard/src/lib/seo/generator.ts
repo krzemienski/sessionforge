@@ -5,6 +5,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
+import { instrumentQuery } from "@/lib/observability/instrument-query";
 
 delete process.env.CLAUDECODE;
 
@@ -69,23 +70,25 @@ export async function generateSeoMetadata(
 
   // Use Agent SDK query() with no tools for pure text generation
   let responseText: string | null = null;
-  for await (const message of query({
-    prompt,
-    options: {
-      model,
-      maxTurns: 1,
-    },
-  })) {
-    if ("result" in message) {
-      responseText = message.result;
+  await instrumentQuery("seo-generator", "system", async () => {
+    for await (const message of query({
+      prompt,
+      options: {
+        model,
+        maxTurns: 1,
+      },
+    })) {
+      if ("result" in message) {
+        responseText = message.result;
+      }
     }
-  }
+  });
 
   if (!responseText) {
     throw new Error("No text response from SEO metadata generation");
   }
 
-  const rawText = responseText.trim();
+  const rawText = (responseText as string).trim();
 
   let parsed: Record<string, unknown>;
   try {

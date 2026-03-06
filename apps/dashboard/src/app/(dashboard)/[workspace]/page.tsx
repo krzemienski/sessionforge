@@ -5,19 +5,53 @@ import Link from "next/link";
 import { useSessions, useScanSessions } from "@/hooks/use-sessions";
 import { useInsights } from "@/hooks/use-insights";
 import { useContent } from "@/hooks/use-content";
-import { timeAgo } from "@/lib/utils";
-import { Zap, ScrollText, Lightbulb, FileText, Clock } from "lucide-react";
+import { useActivity } from "@/hooks/use-activity";
+import { ActivityLog } from "@/components/dashboard/activity-log";
+import {
+  Zap,
+  ScrollText,
+  Lightbulb,
+  FileText,
+  ArrowRight,
+  CalendarDays,
+  PenTool,
+} from "lucide-react";
 
-function StatCard({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string | number; sub?: string }) {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  href,
+}: {
+  icon: typeof ScrollText;
+  label: string;
+  value: string | number;
+  sub?: string;
+  href: string;
+}) {
   return (
-    <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-sf-lg">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon size={16} className="text-sf-text-muted" />
-        <span className="text-xs text-sf-text-secondary font-medium uppercase tracking-wide">{label}</span>
+    <Link
+      href={href}
+      className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-sf-lg hover:border-sf-accent/40 transition-colors group"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Icon size={16} className="text-sf-text-muted" />
+          <span className="text-xs text-sf-text-secondary font-medium uppercase tracking-wide">
+            {label}
+          </span>
+        </div>
+        <ArrowRight
+          size={14}
+          className="text-sf-text-muted opacity-0 group-hover:opacity-100 transition-opacity"
+        />
       </div>
-      <p className="text-3xl font-bold font-display text-sf-text-primary">{value}</p>
+      <p className="text-3xl font-bold font-display text-sf-text-primary">
+        {value}
+      </p>
       {sub && <p className="text-xs text-sf-text-muted mt-1">{sub}</p>}
-    </div>
+    </Link>
   );
 }
 
@@ -27,15 +61,16 @@ export default function DashboardHome() {
   const insights = useInsights(workspace, { limit: 100 });
   const content = useContent(workspace, { limit: 100 });
   const scan = useScanSessions(workspace);
+  const activity = useActivity(workspace);
 
   const sessionList = sessions.data?.sessions ?? [];
   const insightList = insights.data?.insights ?? [];
   const contentList = content.data?.posts ?? [];
-  const drafts = contentList.filter((p: any) => p.status === "draft");
-  const lastScan = sessionList[0]?.scannedAt;
+  const drafts = contentList.filter((p: Record<string, unknown>) => p.status === "draft");
 
   return (
     <div>
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold font-display">Dashboard</h1>
         <button
@@ -48,44 +83,83 @@ export default function DashboardHome() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={ScrollText} label="Sessions" value={sessionList.length} sub="indexed sessions" />
-        <StatCard icon={Lightbulb} label="Insights" value={insightList.length} sub={insightList.length > 0 ? `avg score ${(insightList.reduce((s: number, i: any) => s + (i.compositeScore || 0), 0) / insightList.length).toFixed(1)}` : undefined} />
-        <StatCard icon={FileText} label="Drafts" value={drafts.length} sub={`${contentList.length} total posts`} />
-        <StatCard icon={Clock} label="Last Scan" value={lastScan ? timeAgo(lastScan) : "Never"} sub={lastScan ? new Date(lastScan).toLocaleDateString() : "Run your first scan"} />
-      </div>
-
-      {sessionList.length === 0 && !sessions.isLoading && (
-        <div className="text-center py-16 bg-sf-bg-secondary border border-sf-border rounded-sf-lg">
-          <ScrollText size={48} className="mx-auto text-sf-text-muted mb-4" />
-          <h2 className="text-lg font-semibold text-sf-text-primary mb-2">No sessions found</h2>
-          <p className="text-sf-text-secondary mb-6">Scan your Claude Code sessions to get started</p>
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={() => scan.mutate(30)}
-              disabled={scan.isPending}
-              className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
-            >
-              <Zap size={16} />
-              {scan.isPending ? "Scanning..." : "Scan Sessions"}
-            </button>
-            <Link
-              href="/onboarding"
-              className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
-            >
-              View setup guide →
-            </Link>
-          </div>
-        </div>
-      )}
-
+      {/* Scan result banner */}
       {scan.isSuccess && (
         <div className="bg-sf-accent-bg border border-sf-accent/20 rounded-sf-lg p-4 mb-6">
           <p className="text-sf-accent text-sm">
-            Scan complete: {scan.data?.scanned ?? 0} files scanned, {(scan.data?.new ?? 0) + (scan.data?.updated ?? 0)} sessions indexed
+            Scan complete: {scan.data?.scanned ?? 0} files scanned,{" "}
+            {(scan.data?.new ?? 0) + (scan.data?.updated ?? 0)} sessions indexed
           </p>
         </div>
       )}
+
+      {/* Stats row — clickable cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <StatCard
+          icon={ScrollText}
+          label="Sessions"
+          value={sessions.data?.total ?? sessionList.length}
+          sub="indexed sessions"
+          href={`/${workspace}/sessions`}
+        />
+        <StatCard
+          icon={Lightbulb}
+          label="Insights"
+          value={insightList.length}
+          sub={
+            insightList.length > 0
+              ? `avg score ${(insightList.reduce((s: number, i: Record<string, unknown>) => s + ((i.compositeScore as number) || 0), 0) / insightList.length).toFixed(1)}`
+              : undefined
+          }
+          href={`/${workspace}/insights`}
+        />
+        <StatCard
+          icon={FileText}
+          label="Content"
+          value={contentList.length}
+          sub={drafts.length > 0 ? `${drafts.length} drafts` : undefined}
+          href={`/${workspace}/content`}
+        />
+      </div>
+
+      {/* Activity Log */}
+      <div className="mb-6">
+        <ActivityLog
+          events={activity.data?.events ?? []}
+          workspace={workspace}
+          isLoading={activity.isLoading}
+        />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4">
+        <h2 className="text-sm font-semibold text-sf-text-primary uppercase tracking-wide mb-3">
+          Quick Actions
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/${workspace}/sessions`}
+            className="flex items-center gap-2 px-3 py-2 rounded-sf bg-sf-bg-tertiary text-sf-text-secondary text-sm hover:text-sf-accent hover:bg-sf-accent/10 transition-colors"
+          >
+            <Zap size={14} />
+            Scan Sessions
+          </Link>
+          <Link
+            href={`/${workspace}/content/new`}
+            className="flex items-center gap-2 px-3 py-2 rounded-sf bg-sf-bg-tertiary text-sf-text-secondary text-sm hover:text-sf-accent hover:bg-sf-accent/10 transition-colors"
+          >
+            <PenTool size={14} />
+            Generate Content
+          </Link>
+          <Link
+            href={`/${workspace}/content?view=calendar`}
+            className="flex items-center gap-2 px-3 py-2 rounded-sf bg-sf-bg-tertiary text-sf-text-secondary text-sm hover:text-sf-accent hover:bg-sf-accent/10 transition-colors"
+          >
+            <CalendarDays size={14} />
+            Content Calendar
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

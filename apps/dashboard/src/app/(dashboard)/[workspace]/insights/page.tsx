@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useInsights } from "@/hooks/use-insights";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { useState, useCallback } from "react";
-import { Lightbulb, SlidersHorizontal, X, Sparkles } from "lucide-react";
+import { Lightbulb, SlidersHorizontal, X, Sparkles, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MultiSelectToolbar } from "@/components/batch/multi-select-toolbar";
 import { JobProgressModal } from "@/components/batch/job-progress-modal";
@@ -239,6 +239,19 @@ export default function InsightsPage() {
             </button>
           </MultiSelectToolbar>
         </div>
+      )}
+
+      {insightList.length > 0 && selectedIds.size === 0 && (
+        <Link
+          href={`/${workspace}/content/new`}
+          className="flex items-center justify-between bg-sf-accent-bg border border-sf-accent/20 rounded-sf-lg px-4 py-3 mb-4 group hover:border-sf-accent/40 transition-colors"
+        >
+          <span className="text-sm text-sf-accent">
+            {insightList.length} insights available.{" "}
+            <span className="font-medium">Generate Content</span> from your best discoveries.
+          </span>
+          <ArrowRight size={16} className="text-sf-accent opacity-60 group-hover:opacity-100 transition-opacity" />
+        </Link>
       )}
 
       <div className="space-y-3">

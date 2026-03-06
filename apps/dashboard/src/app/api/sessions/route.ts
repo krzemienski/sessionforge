@@ -99,7 +99,7 @@ export async function GET(req: Request) {
     ]);
 
     return NextResponse.json({
-      data: rows,
+      sessions: rows,
       total: Number(countResult[0]?.count ?? 0),
       limit,
       offset,

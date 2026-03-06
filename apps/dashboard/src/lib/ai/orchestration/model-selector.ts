@@ -13,6 +13,7 @@ import type { AgentType } from "./tool-registry";
  */
 const OPUS_AGENTS: AgentType[] = [
   "insight-extractor",
+  "corpus-analyzer",
   "blog-writer",
   "social-writer",
   "changelog-writer",

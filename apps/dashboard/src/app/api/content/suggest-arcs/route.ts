@@ -16,6 +16,7 @@ import { parseBody } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
+import { instrumentQuery } from "@/lib/observability/instrument-query";
 
 delete process.env.CLAUDECODE;
 
@@ -113,14 +114,16 @@ Reply with ONLY the JSON array, no other text.`;
 
   try {
     let text = "";
-    for await (const message of query({
-      prompt,
-      options: { model, maxTurns: 1 },
-    })) {
-      if ("result" in message) {
-        text = message.result ?? "";
+    await instrumentQuery("arc-suggester", "system", async () => {
+      for await (const message of query({
+        prompt,
+        options: { model, maxTurns: 1 },
+      })) {
+        if ("result" in message) {
+          text = message.result ?? "";
+        }
       }
-    }
+    });
 
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (jsonMatch) {

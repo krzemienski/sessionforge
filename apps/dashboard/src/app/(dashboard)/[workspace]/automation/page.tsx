@@ -62,6 +62,7 @@ export default function AutomationPage() {
   const [contentType, setContentType] = useState("blog_post");
   const [cron, setCron] = useState("0 9 * * MON");
   const [debounceMinutes, setDebounceMinutes] = useState(30);
+  const [lookbackWindow, setLookbackWindow] = useState("last_7_days");
 
   const triggers = useQuery({
     queryKey: ["triggers", workspace],
@@ -153,7 +154,7 @@ export default function AutomationPage() {
       {showForm && (
         <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 mb-6 space-y-3">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Trigger name" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary" />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <select value={triggerType} onChange={(e) => setTriggerType(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
               <option value="manual">Manual</option>
               <option value="scheduled">Scheduled</option>
@@ -162,33 +163,21 @@ export default function AutomationPage() {
             <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
               <option value="blog_post">Blog Post</option>
               <option value="twitter_thread">Twitter Thread</option>
+              <option value="linkedin_post">LinkedIn Post</option>
+              <option value="devto_post">Dev.to Article</option>
               <option value="changelog">Changelog</option>
-              <option value="social_analytics_sync">Social Analytics Sync</option>
+              <option value="newsletter">Newsletter</option>
+              <option value="custom">Custom</option>
+            </select>
+            <select value={lookbackWindow} onChange={(e) => setLookbackWindow(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
+              <option value="current_day">Current Day</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="last_7_days">Last 7 Days</option>
+              <option value="last_14_days">Last 14 Days</option>
+              <option value="last_30_days">Last 30 Days</option>
             </select>
           </div>
-          {triggerType === "scheduled" && contentType === "social_analytics_sync" && (
-            <div className="space-y-2">
-              <p className="text-xs text-sf-text-secondary">Sync schedule preset</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCron("0 * * * *")}
-                  className={cn("px-3 py-1.5 rounded-sf text-xs font-medium border transition-colors", cron === "0 * * * *" ? "bg-sf-accent text-sf-bg-primary border-sf-accent" : "bg-sf-bg-tertiary text-sf-text-secondary border-sf-border hover:border-sf-accent")}
-                >
-                  Hourly
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCron("0 0 * * *")}
-                  className={cn("px-3 py-1.5 rounded-sf text-xs font-medium border transition-colors", cron === "0 0 * * *" ? "bg-sf-accent text-sf-bg-primary border-sf-accent" : "bg-sf-bg-tertiary text-sf-text-secondary border-sf-border hover:border-sf-accent")}
-                >
-                  Daily
-                </button>
-              </div>
-              <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="Cron expression" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code" />
-            </div>
-          )}
-          {triggerType === "scheduled" && contentType !== "social_analytics_sync" && (
+          {triggerType === "scheduled" && (
             <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="Cron expression" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code" />
           )}
           {triggerType === "file_watch" && (
@@ -198,7 +187,7 @@ export default function AutomationPage() {
             </div>
           )}
           <div className="flex gap-2">
-            <button onClick={() => create.mutate({ name, triggerType, contentType, cronExpression: triggerType === "scheduled" ? cron : undefined, debounceMinutes: triggerType === "file_watch" ? debounceMinutes : undefined })} className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium">Save</button>
+            <button onClick={() => create.mutate({ name, triggerType, contentType, lookbackWindow, cronExpression: triggerType === "scheduled" ? cron : undefined, debounceMinutes: triggerType === "file_watch" ? debounceMinutes : undefined })} className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium">Save</button>
             <button onClick={() => setShowForm(false)} className="text-sf-text-secondary px-4 py-2 text-sm">Cancel</button>
           </div>
         </div>
@@ -305,7 +294,16 @@ export default function AutomationPage() {
         {triggerList.length === 0 && !triggers.isLoading && (
           <div className="text-center py-12">
             <Zap size={40} className="mx-auto text-sf-text-muted mb-3" />
-            <p className="text-sf-text-secondary">No automation triggers yet. Create one to automate content generation.</p>
+            <p className="text-sf-text-primary font-medium mb-1">No automation triggers yet</p>
+            <p className="text-sf-text-secondary text-sm mb-6">
+              Create a trigger to automatically generate content on a schedule or when new sessions arrive.
+            </p>
+            <button
+              onClick={() => setShowForm(true)}
+              className="inline-flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+            >
+              <Plus size={16} /> Create First Trigger
+            </button>
           </div>
         )}
       </div>

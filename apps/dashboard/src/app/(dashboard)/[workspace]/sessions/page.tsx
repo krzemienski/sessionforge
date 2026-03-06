@@ -7,7 +7,7 @@ import { useSessions, useScanSessions, useStreamingScan, useUploadSessions, Scan
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { timeAgo, formatDuration, cn } from "@/lib/utils";
 import { useState, useCallback } from "react";
-import { Zap, ScrollText, SlidersHorizontal, X, RotateCcw, Sparkles } from "lucide-react";
+import { Zap, ScrollText, SlidersHorizontal, X, RotateCcw, Sparkles, ArrowRight } from "lucide-react";
 import { MultiSelectToolbar } from "@/components/batch/multi-select-toolbar";
 import { JobProgressModal } from "@/components/batch/job-progress-modal";
 import { useExtractInsightsBatch } from "@/hooks/use-batch-operations";
@@ -66,7 +66,7 @@ export default function SessionsPage() {
   const scan = useScanSessions(workspace);
   const streamingScan = useStreamingScan(workspace);
   const upload = useUploadSessions();
-  const sessionList = sessions.data?.data ?? [];
+  const sessionList = sessions.data?.sessions ?? [];
 
   const extractInsightsBatch = useExtractInsightsBatch(workspace as string);
 
@@ -252,6 +252,14 @@ export default function SessionsPage() {
             <span className="text-sm font-medium text-sf-accent">
               {streamProgress.type === "start" && `Scanning ${streamProgress.total} files...`}
               {streamProgress.type === "progress" && `Scanning file ${streamProgress.current} of ${streamProgress.total}`}
+              {streamProgress.type === "analyzing" && (
+                <span className="flex items-center gap-2">
+                  <Sparkles size={14} className="animate-pulse" />
+                  {streamProgress.message}
+                </span>
+              )}
+              {streamProgress.type === "analysis_complete" && `Analysis complete — ${streamProgress.insightCount} insights found`}
+              {streamProgress.type === "analysis_error" && `Analysis skipped: ${streamProgress.message}`}
             </span>
             <button onClick={streamingScan.cancel} className="text-xs text-sf-text-muted hover:text-sf-text-secondary">Cancel</button>
           </div>
@@ -268,6 +276,11 @@ export default function SessionsPage() {
               </p>
             </>
           )}
+          {streamProgress.type === "analyzing" && (
+            <div className="w-full bg-sf-bg-tertiary rounded-full h-1.5 overflow-hidden">
+              <div className="bg-sf-accent h-1.5 rounded-full w-full animate-pulse" />
+            </div>
+          )}
         </div>
       )}
 
@@ -283,6 +296,11 @@ export default function SessionsPage() {
           <span className="text-sf-text-secondary">
             <span className="text-sf-text-primary font-medium">{streamProgress.updated}</span> updated
           </span>
+          {streamProgress.insightsFound != null && streamProgress.insightsFound > 0 && (
+            <span className="text-sf-text-secondary">
+              <span className="text-sf-text-primary font-medium">{streamProgress.insightsFound}</span> insights
+            </span>
+          )}
           {streamProgress.errors.length > 0 && (
             <span className="text-red-400">{streamProgress.errors.length} errors</span>
           )}
@@ -316,6 +334,20 @@ export default function SessionsPage() {
             {(lastScanResult.durationMs / 1000).toFixed(1)}s
           </span>
         </div>
+      )}
+
+      {/* Flow banner: guide users to extract insights */}
+      {sessionList.length > 0 && !isBusy && (
+        <Link
+          href={`/${workspace}/insights`}
+          className="flex items-center justify-between bg-sf-accent-bg border border-sf-accent/20 rounded-sf-lg px-4 py-3 mb-4 group hover:border-sf-accent/40 transition-colors"
+        >
+          <span className="text-sm text-sf-accent">
+            {sessions.data?.total ?? sessionList.length} sessions indexed.{" "}
+            <span className="font-medium">Extract Insights</span> to surface patterns and discoveries.
+          </span>
+          <ArrowRight size={16} className="text-sf-accent opacity-60 group-hover:opacity-100 transition-opacity" />
+        </Link>
       )}
 
       <div className="mb-4">

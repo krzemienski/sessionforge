@@ -195,7 +195,8 @@ export async function recordUsage(
   userId: string,
   workspaceId: string,
   eventType: UsageEventType,
-  costUsd?: number
+  costUsd?: number,
+  count: number = 1
 ): Promise<void> {
   const month = currentMonthKey();
   const cost = costUsd ?? 0;
@@ -207,11 +208,11 @@ export async function recordUsage(
     costUsd: cost,
   });
 
-  const sessionScansIncrement = eventType === "session_scan" ? 1 : 0;
+  const sessionScansIncrement = eventType === "session_scan" ? count : 0;
   const insightExtractionsIncrement =
-    eventType === "insight_extraction" ? 1 : 0;
+    eventType === "insight_extraction" ? count : 0;
   const contentGenerationsIncrement =
-    eventType === "content_generation" ? 1 : 0;
+    eventType === "content_generation" ? count : 0;
 
   const existing = await db
     .select({

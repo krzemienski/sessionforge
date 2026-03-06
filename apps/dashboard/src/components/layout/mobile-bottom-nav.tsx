@@ -6,20 +6,16 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   ScrollText,
-  Lightbulb,
-  BarChart3,
-  FolderOpen,
   FileText,
+  Zap,
   Settings,
 } from "lucide-react";
 
 const tabs = [
   { label: "Home", icon: LayoutDashboard, href: "" },
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
-  { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
-  { label: "Analytics", icon: BarChart3, href: "/analytics" },
-  { label: "Collections", icon: FolderOpen, href: "/collections" },
+  { label: "Automation", icon: Zap, href: "/automation" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 

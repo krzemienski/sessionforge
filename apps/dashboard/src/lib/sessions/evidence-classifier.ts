@@ -7,6 +7,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
+import { instrumentQuery } from "@/lib/observability/instrument-query";
 
 delete process.env.CLAUDECODE;
 import type { SearchHit } from "./miner";
@@ -99,14 +100,16 @@ Reply with ONLY the JSON array, no other text.`;
   try {
     const model = getHaikuModel();
     let text = "";
-    for await (const message of query({
-      prompt,
-      options: { model, maxTurns: 1 },
-    })) {
-      if ("result" in message) {
-        text = message.result ?? "";
+    await instrumentQuery("evidence-classifier", "system", async () => {
+      for await (const message of query({
+        prompt,
+        options: { model, maxTurns: 1 },
+      })) {
+        if ("result" in message) {
+          text = message.result ?? "";
+        }
       }
-    }
+    });
 
     // Extract JSON array from response (strip any markdown fences)
     const jsonMatch = text.match(/\[[\s\S]*\]/);

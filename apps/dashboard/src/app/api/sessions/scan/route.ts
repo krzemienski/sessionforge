@@ -75,13 +75,9 @@ export async function POST(req: Request) {
       .set({ lastScanAt: scanStartTime })
       .where(eq(workspaces.id, ws.id));
 
-    // Record usage for newly indexed sessions
+    // Record usage for newly indexed sessions (single call, not N parallel)
     if (result.new > 0) {
-      void Promise.all(
-        Array.from({ length: result.new }, () =>
-          recordUsage(session.user.id, ws.id, "session_scan")
-        )
-      );
+      void recordUsage(session.user.id, ws.id, "session_scan", undefined, result.new);
     }
 
     return NextResponse.json({

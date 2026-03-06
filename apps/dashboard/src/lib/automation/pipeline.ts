@@ -1,19 +1,19 @@
 import { db } from "@/lib/db";
 import {
   automationRuns,
-  claudeSessions,
   contentTriggers,
   insights,
   workspaces,
 } from "@sessionforge/db";
-import { and, eq, gte, isNull } from "drizzle-orm/sql";
+import { and, eq, gte } from "drizzle-orm/sql";
 import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";
 import { indexSessions } from "@/lib/sessions/indexer";
-import { extractInsight } from "@/lib/ai/agents/insight-extractor";
-import { generateContent } from "@/lib/automation/content-generator";
+import { analyzeCorpus } from "@/lib/ai/agents/corpus-analyzer";
+import { generateContent, type ContentType } from "@/lib/automation/content-generator";
 import { fireWebhookEvent } from "@/lib/webhooks/events";
+import { createPipelineInstrumentation } from "@/lib/observability/instrument-pipeline";
 
 type ContentTrigger = typeof contentTriggers.$inferSelect;
 type Workspace = typeof workspaces.$inferSelect;
@@ -43,9 +43,13 @@ export async function executePipeline(
   workspace: Workspace
 ): Promise<void> {
   const pipelineStart = Date.now();
+  const obs = createPipelineInstrumentation("automation-pipeline", workspace.id);
 
   try {
+    obs.start({ runId, triggerId: trigger.id, contentType: trigger.contentType });
+
     // ── SCAN ──────────────────────────────────────────────────────────────
+    obs.stage("scanning");
     await db
       .update(automationRuns)
       .set({ status: "scanning" })
@@ -72,49 +76,28 @@ export async function executePipeline(
       .set({ sessionsScanned: scanResult.scanned })
       .where(eq(automationRuns.id, runId));
 
-    // ── EXTRACT ───────────────────────────────────────────────────────────
+    // ── EXTRACT (corpus analysis) ──────────────────────────────────────────
+    obs.stage("extracting");
     await db
       .update(automationRuns)
       .set({ status: "extracting" })
       .where(eq(automationRuns.id, runId));
 
-    const cutoff = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
-
-    // Find sessions in the lookback window that have no associated insights
-    const sessionsWithoutInsights = await db
-      .select({
-        id: claudeSessions.id,
-        sessionId: claudeSessions.sessionId,
-      })
-      .from(claudeSessions)
-      .leftJoin(insights, eq(insights.sessionId, claudeSessions.id))
-      .where(
-        and(
-          eq(claudeSessions.workspaceId, workspace.id),
-          gte(claudeSessions.startedAt, cutoff),
-          isNull(insights.id)
-        )
-      );
-
     const extractionStartedAt = new Date();
     let insightsExtracted = 0;
+    let corpusSummary: string | null = null;
 
-    for (const session of sessionsWithoutInsights) {
-      try {
-        await extractInsight({
-          workspaceId: workspace.id,
-          sessionId: session.sessionId,
-        });
-        insightsExtracted++;
-      } catch {
-        // Partial extraction is acceptable — continue to next session
-      }
+    try {
+      const corpusResult = await analyzeCorpus({
+        workspaceId: workspace.id,
+        lookbackDays,
+        traceId: obs.traceId,
+      });
+      insightsExtracted = corpusResult.insightCount;
+      corpusSummary = corpusResult.text;
+    } catch {
+      // Corpus analysis failure is non-fatal — continue to generation
     }
-
-    await db
-      .update(automationRuns)
-      .set({ insightsExtracted })
-      .where(eq(automationRuns.id, runId));
 
     // Collect IDs of insights created during this extraction run
     const newInsightsRows = await db
@@ -129,24 +112,31 @@ export async function executePipeline(
 
     const newInsightIds = newInsightsRows.map((row) => row.id);
 
+    // Use actual DB count as source of truth — tool name matching may miss insights
+    if (newInsightIds.length > insightsExtracted) {
+      insightsExtracted = newInsightIds.length;
+    }
+
+    await db
+      .update(automationRuns)
+      .set({ insightsExtracted })
+      .where(eq(automationRuns.id, runId));
+
     // ── GENERATE ──────────────────────────────────────────────────────────
+    obs.stage("generating", { insightsExtracted, insightIds: newInsightIds.length });
     await db
       .update(automationRuns)
       .set({ status: "generating" })
       .where(eq(automationRuns.id, runId));
 
-    // Cast to the content types supported by generateContent
-    const contentType = trigger.contentType as
-      | "blog_post"
-      | "twitter_thread"
-      | "linkedin_post"
-      | "changelog";
+    const contentType = trigger.contentType as ContentType;
 
     const generateResult = await generateContent({
       workspaceId: workspace.id,
       contentType,
       insightIds: newInsightIds,
       lookbackDays,
+      corpusSummary: corpusSummary ?? undefined,
     });
 
     const completedAt = new Date();
@@ -166,6 +156,8 @@ export async function executePipeline(
       .update(contentTriggers)
       .set({ lastRunAt: completedAt, lastRunStatus: "success" })
       .where(eq(contentTriggers.id, trigger.id));
+
+    obs.complete({ sessionsScanned: scanResult.scanned, insightsExtracted, postId: generateResult?.postId ?? null, durationMs });
 
     void fireWebhookEvent(workspace.id, "automation.completed", {
       runId,
@@ -196,6 +188,8 @@ export async function executePipeline(
       .update(contentTriggers)
       .set({ lastRunAt: completedAt, lastRunStatus: "failed" })
       .where(eq(contentTriggers.id, trigger.id));
+
+    obs.error(error);
 
     void fireWebhookEvent(workspace.id, "automation.completed", {
       runId,

@@ -5,6 +5,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { instrumentQuery } from "@/lib/observability/instrument-query";
 
 delete process.env.CLAUDECODE;
 
@@ -76,18 +77,20 @@ export async function analyzeWritingStyle(
 
   // 4. Call Claude via Agent SDK (non-streaming, no tools)
   let responseText: string | null = null;
-  for await (const message of query({
-    prompt: userMessage,
-    options: {
-      systemPrompt: STYLE_LEARNER_PROMPT,
-      model: getOpusModel(),
-      maxTurns: 1,
-    },
-  })) {
-    if ("result" in message) {
-      responseText = message.result;
+  await instrumentQuery("style-learner", workspaceId, async () => {
+    for await (const message of query({
+      prompt: userMessage,
+      options: {
+        systemPrompt: STYLE_LEARNER_PROMPT,
+        model: getOpusModel(),
+        maxTurns: 1,
+      },
+    })) {
+      if ("result" in message) {
+        responseText = message.result;
+      }
     }
-  }
+  });
 
   if (!responseText) {
     return null;

@@ -16,6 +16,7 @@ import { githubContextTools } from "../tools/github-context";
 /** Union of all recognised agent identifiers in the system. */
 export type AgentType =
   | "insight-extractor"
+  | "corpus-analyzer"
   | "blog-writer"
   | "social-writer"
   | "changelog-writer"
@@ -62,6 +63,7 @@ const ALL_TOOLS: Record<string, AnthropicTool[]> = {
  */
 const AGENT_TOOL_SETS: Partial<Record<AgentType, (keyof typeof ALL_TOOLS)[]>> = {
   "insight-extractor": ["session", "insight"],
+  "corpus-analyzer": ["session", "insight"],
   "blog-writer": ["session", "insight", "post", "skill", "github"],
   "social-writer": ["session", "insight", "post"],
   "changelog-writer": ["session", "post", "github"],

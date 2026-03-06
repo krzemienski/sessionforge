@@ -10,14 +10,8 @@ import {
   FileText,
   Zap,
   BarChart3,
-  FolderOpen,
-  TrendingUp,
   Settings,
-  Palette,
-  KeyRound,
-  Link2,
   LogOut,
-  List,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -27,18 +21,12 @@ const mainNav = [
   { label: "Sessions", icon: ScrollText, href: "/sessions" },
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Content", icon: FileText, href: "/content" },
-  { label: "Series", icon: List, href: "/series" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
-  { label: "Collections", icon: FolderOpen, href: "/collections" },
-  { label: "Recommendations", icon: TrendingUp, href: "/recommendations" },
   { label: "Automation", icon: Zap, href: "/automation" },
 ];
 
 const settingsNav = [
   { label: "Settings", icon: Settings, href: "/settings" },
-  { label: "Style", icon: Palette, href: "/settings/style" },
-  { label: "API Keys", icon: KeyRound, href: "/settings/api-keys" },
-  { label: "Integrations", icon: Link2, href: "/settings/integrations" },
 ];
 
 export function AppSidebar({

@@ -15,6 +15,9 @@ import { db } from "@/lib/db";
 import { agentRuns } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import type { AgentType } from "./orchestration/tool-registry";
+import { eventBus } from "@/lib/observability/event-bus";
+import { createAgentEvent } from "@/lib/observability/event-types";
+import { generateTraceId } from "@/lib/observability/trace-context";
 
 // Allow the Agent SDK to spawn Claude subprocesses even when running
 // inside a Claude Code session (which sets CLAUDECODE env var).
@@ -42,6 +45,8 @@ export interface AgentRunOptions {
   trackRun?: boolean;
   /** Tool names to pre-approve (glob patterns supported). */
   allowedTools?: string[];
+  /** Trace ID for observability correlation. Auto-generated if absent. */
+  traceId?: string;
 }
 
 /** Result from a non-streaming agent run. */
@@ -122,6 +127,7 @@ export function runAgentStreaming(
   const { stream, send, close } = createSSEStream();
 
   const run = async () => {
+    const traceId = opts.traceId ?? generateTraceId();
     let agentRunId: string | undefined;
     if (opts.trackRun !== false) {
       agentRunId = await createAgentRunRecord(
@@ -131,8 +137,18 @@ export function runAgentStreaming(
       );
     }
 
+    const emitObs = (
+      eventType: Parameters<typeof createAgentEvent>[3],
+      payload: Record<string, unknown> = {},
+    ) => {
+      eventBus.emit(
+        createAgentEvent(traceId, opts.workspaceId, opts.agentType, eventType, payload, { agentRunId })
+      );
+    };
+
     try {
-      send("status", { phase: "starting", message: "Initializing agent..." });
+      emitObs("agent:start", { model: resolveModel(opts), systemPrompt: opts.systemPrompt.slice(0, 200) });
+      send("status", { phase: "starting", message: "Initializing agent...", traceId });
 
       let finalText = "";
 
@@ -150,15 +166,16 @@ export function runAgentStreaming(
 
         switch (msg.type) {
           case "assistant": {
-            // BetaMessage content blocks: text and tool_use
             const betaMsg = msg.message as { content?: Array<{ type: string; text?: string; name?: string; input?: unknown }> } | undefined;
             if (betaMsg?.content) {
               for (const block of betaMsg.content) {
                 if (block.type === "text" && block.text) {
                   send("text", { content: block.text });
                   finalText += block.text;
+                  emitObs("text:chunk", { length: block.text.length });
                 } else if (block.type === "tool_use") {
                   send("tool_use", { tool: block.name, input: block.input });
+                  emitObs("tool:call", { tool: block.name, input: block.input });
                 }
               }
             }
@@ -178,6 +195,7 @@ export function runAgentStreaming(
               tool: "summary",
               summary: msg.summary as string,
             });
+            emitObs("tool:result", { tool: "summary", summary: (msg.summary as string).slice(0, 500) });
             break;
           }
 
@@ -187,7 +205,6 @@ export function runAgentStreaming(
             }
             break;
           }
-          // system, rate_limit_event, etc. — skip silently
         }
       }
 
@@ -195,7 +212,8 @@ export function runAgentStreaming(
         await updateAgentRun(agentRunId, "completed");
       }
 
-      send("complete", { message: "Agent completed successfully" });
+      emitObs("agent:complete", { textLength: finalText.length });
+      send("complete", { message: "Agent completed successfully", traceId });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -203,6 +221,7 @@ export function runAgentStreaming(
         await updateAgentRun(agentRunId, "failed", { errorMessage });
       }
 
+      emitObs("agent:error", { error: errorMessage });
       send("error", { message: errorMessage });
     } finally {
       close();
@@ -228,6 +247,7 @@ export async function runAgent(
     throw new Error("AI features are disabled in this environment. Set DISABLE_AI_AGENTS=false or remove the variable to enable them.");
   }
 
+  const traceId = opts.traceId ?? generateTraceId();
   let agentRunId: string | undefined;
   if (opts.trackRun !== false) {
     agentRunId = await createAgentRunRecord(
@@ -237,9 +257,19 @@ export async function runAgent(
     );
   }
 
+  const emitObs = (
+    eventType: Parameters<typeof createAgentEvent>[3],
+    payload: Record<string, unknown> = {},
+  ) => {
+    eventBus.emit(
+      createAgentEvent(traceId, opts.workspaceId, opts.agentType, eventType, payload, { agentRunId })
+    );
+  };
+
   const toolResults: Array<{ tool: string; result: unknown }> = [];
 
   try {
+    emitObs("agent:start", { model: resolveModel(opts), systemPrompt: opts.systemPrompt.slice(0, 200) });
     let finalText: string | null = null;
 
     for await (const message of query({
@@ -260,8 +290,10 @@ export async function runAgent(
           for (const block of betaMsg.content) {
             if (block.type === "text" && block.text) {
               finalText = (finalText ?? "") + block.text;
+              emitObs("text:chunk", { length: block.text.length });
             } else if (block.type === "tool_use" && block.name) {
               toolResults.push({ tool: block.name, result: block.input });
+              emitObs("tool:call", { tool: block.name, input: block.input });
             }
           }
         }
@@ -274,6 +306,7 @@ export async function runAgent(
       await updateAgentRun(agentRunId, "completed");
     }
 
+    emitObs("agent:complete", { textLength: finalText?.length ?? 0, toolCount: toolResults.length });
     return { text: finalText, toolResults };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -282,6 +315,7 @@ export async function runAgent(
       await updateAgentRun(agentRunId, "failed", { errorMessage });
     }
 
+    emitObs("agent:error", { error: errorMessage });
     throw error;
   }
 }

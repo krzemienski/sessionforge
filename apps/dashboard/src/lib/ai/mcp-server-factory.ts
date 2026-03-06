@@ -84,6 +84,7 @@ const TOOL_NAME_TO_GROUP: Record<string, string> = {
 
 const AGENT_TOOL_GROUPS: Record<AgentType, string[]> = {
   "insight-extractor": ["session", "insight"],
+  "corpus-analyzer": ["session", "insight"],
   "blog-writer": ["session", "insight", "post", "skill"],
   "social-writer": ["session", "insight", "post"],
   "changelog-writer": ["session", "post"],

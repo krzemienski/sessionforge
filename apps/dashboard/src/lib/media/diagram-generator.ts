@@ -1,5 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
+import { instrumentQuery } from "@/lib/observability/instrument-query";
 
 delete process.env.CLAUDECODE;
 
@@ -45,14 +46,16 @@ export async function generateDiagrams(
   const prompt = `${SYSTEM_PROMPT}\n\nAnalyze this blog post and generate Mermaid diagrams for concepts that would benefit from visualization:\n\n${truncatedContent}`;
 
   let text = "";
-  for await (const message of query({
-    prompt,
-    options: { model, maxTurns: 1 },
-  })) {
-    if ("result" in message) {
-      text = message.result ?? "";
+  await instrumentQuery("diagram-generator", "system", async () => {
+    for await (const message of query({
+      prompt,
+      options: { model, maxTurns: 1 },
+    })) {
+      if ("result" in message) {
+        text = message.result ?? "";
+      }
     }
-  }
+  });
 
   try {
     const cleaned = text
