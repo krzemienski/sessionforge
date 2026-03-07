@@ -30,6 +30,8 @@ export function lookbackWindowToDays(window: string): number {
       return 14;
     case "last_30_days":
       return 30;
+    case "all_time":
+      return 36500;
     case "custom":
       return 7;
     default:

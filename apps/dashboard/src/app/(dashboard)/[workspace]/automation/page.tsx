@@ -2,11 +2,13 @@
 
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Zap, Plus, Trash2, Play, Clock, Eye, PauseCircle, AlertCircle } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Zap, Plus, Trash2, Play, Clock, Eye, PauseCircle, AlertCircle, Layers } from "lucide-react";
 import Link from "next/link";
 import { cn, timeAgo } from "@/lib/utils";
 import { getNextRunTime, formatNextRun } from "@/lib/automation/cron-utils";
+import { useGenerateContentBatch } from "@/hooks/use-batch-operations";
+import { JobProgressModal } from "@/components/batch/job-progress-modal";
 
 const ACTIVE_STATUSES = ["pending", "scanning", "extracting", "generating"];
 
@@ -63,6 +65,13 @@ export default function AutomationPage() {
   const [cron, setCron] = useState("0 9 * * MON");
   const [debounceMinutes, setDebounceMinutes] = useState(30);
   const [lookbackWindow, setLookbackWindow] = useState("last_7_days");
+
+  // Batch generate state
+  const [batchContentType, setBatchContentType] = useState("blog_post");
+  const [batchCount, setBatchCount] = useState(3);
+  const [batchJobId, setBatchJobId] = useState<string | null>(null);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const generateBatch = useGenerateContentBatch(workspace);
 
   const triggers = useQuery({
     queryKey: ["triggers", workspace],
@@ -146,49 +155,56 @@ export default function AutomationPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold font-display">Automation</h1>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors">
-          <Plus size={16} /> New Trigger
-        </button>
+        {triggerList.length > 0 && (
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors">
+            <Plus size={16} /> New Trigger
+          </button>
+        )}
       </div>
 
+      {/* Create Trigger Dialog */}
       {showForm && (
-        <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 mb-6 space-y-3">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Trigger name" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary" />
-          <div className="grid grid-cols-3 gap-3">
-            <select value={triggerType} onChange={(e) => setTriggerType(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
-              <option value="manual">Manual</option>
-              <option value="scheduled">Scheduled</option>
-              <option value="file_watch">File Watch</option>
-            </select>
-            <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
-              <option value="blog_post">Blog Post</option>
-              <option value="twitter_thread">Twitter Thread</option>
-              <option value="linkedin_post">LinkedIn Post</option>
-              <option value="devto_post">Dev.to Article</option>
-              <option value="changelog">Changelog</option>
-              <option value="newsletter">Newsletter</option>
-              <option value="custom">Custom</option>
-            </select>
-            <select value={lookbackWindow} onChange={(e) => setLookbackWindow(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
-              <option value="current_day">Current Day</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="last_7_days">Last 7 Days</option>
-              <option value="last_14_days">Last 14 Days</option>
-              <option value="last_30_days">Last 30 Days</option>
-            </select>
-          </div>
-          {triggerType === "scheduled" && (
-            <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="Cron expression" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code" />
-          )}
-          {triggerType === "file_watch" && (
-            <div className="flex items-center gap-3">
-              <label className="text-sm text-sf-text-secondary whitespace-nowrap">Debounce window (minutes)</label>
-              <input type="number" min={1} value={debounceMinutes} onChange={(e) => setDebounceMinutes(Number(e.target.value))} className="w-24 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowForm(false)}>
+          <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 w-full max-w-lg mx-4 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-sf-text-primary font-display">New Trigger</h2>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Trigger name" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary" />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <select value={triggerType} onChange={(e) => setTriggerType(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
+                <option value="manual">Manual</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="file_watch">File Watch</option>
+              </select>
+              <select value={contentType} onChange={(e) => setContentType(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
+                <option value="blog_post">Blog Post</option>
+                <option value="twitter_thread">Twitter Thread</option>
+                <option value="linkedin_post">LinkedIn Post</option>
+                <option value="devto_post">Dev.to Article</option>
+                <option value="changelog">Changelog</option>
+                <option value="newsletter">Newsletter</option>
+                <option value="custom">Custom</option>
+              </select>
+              <select value={lookbackWindow} onChange={(e) => setLookbackWindow(e.target.value)} className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary">
+                <option value="current_day">Current Day</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="last_7_days">Last 7 Days</option>
+                <option value="last_14_days">Last 14 Days</option>
+                <option value="last_30_days">Last 30 Days</option>
+                <option value="all_time">All Time</option>
+              </select>
             </div>
-          )}
-          <div className="flex gap-2">
-            <button onClick={() => create.mutate({ name, triggerType, contentType, lookbackWindow, cronExpression: triggerType === "scheduled" ? cron : undefined, debounceMinutes: triggerType === "file_watch" ? debounceMinutes : undefined })} className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium">Save</button>
-            <button onClick={() => setShowForm(false)} className="text-sf-text-secondary px-4 py-2 text-sm">Cancel</button>
+            {triggerType === "scheduled" && (
+              <input value={cron} onChange={(e) => setCron(e.target.value)} placeholder="Cron expression" className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code" />
+            )}
+            {triggerType === "file_watch" && (
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-sf-text-secondary whitespace-nowrap">Debounce (min)</label>
+                <input type="number" min={1} value={debounceMinutes} onChange={(e) => setDebounceMinutes(Number(e.target.value))} className="w-24 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary" />
+              </div>
+            )}
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => create.mutate({ name, triggerType, contentType, lookbackWindow, cronExpression: triggerType === "scheduled" ? cron : undefined, debounceMinutes: triggerType === "file_watch" ? debounceMinutes : undefined })} className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium hover:bg-sf-accent-dim transition-colors">Create Trigger</button>
+              <button onClick={() => setShowForm(false)} className="text-sf-text-secondary px-4 py-2 text-sm hover:text-sf-text-primary transition-colors">Cancel</button>
+            </div>
           </div>
         </div>
       )}
@@ -307,6 +323,87 @@ export default function AutomationPage() {
           </div>
         )}
       </div>
+
+      {/* Batch Generate Section */}
+      <div className="mt-8 bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Layers size={18} className="text-sf-accent" />
+          <h2 className="text-lg font-semibold text-sf-text-primary font-display">Batch Generate</h2>
+        </div>
+        <p className="text-sm text-sf-text-secondary mb-4">
+          Generate multiple posts from your latest insights in one batch.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs text-sf-text-muted mb-1">Content Type</label>
+            <select
+              value={batchContentType}
+              onChange={(e) => setBatchContentType(e.target.value)}
+              className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary"
+            >
+              <option value="blog_post">Blog Post</option>
+              <option value="twitter_thread">Twitter Thread</option>
+              <option value="linkedin_post">LinkedIn Post</option>
+              <option value="devto_post">Dev.to Article</option>
+              <option value="changelog">Changelog</option>
+              <option value="newsletter">Newsletter</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-sf-text-muted mb-1">Count</label>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={batchCount}
+              onChange={(e) => setBatchCount(Math.min(10, Math.max(1, Number(e.target.value))))}
+              className="w-20 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary"
+            />
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                // Fetch latest insight IDs to feed the batch
+                const res = await fetch(`/api/insights?workspace=${workspace}&limit=${batchCount}`);
+                if (!res.ok) throw new Error("Failed to fetch insights");
+                const data = await res.json();
+                const insightIds = (data.insights ?? []).map((i: { id: string }) => i.id);
+                if (insightIds.length === 0) {
+                  alert("No insights available. Run a pipeline first to extract insights.");
+                  return;
+                }
+                const result = await generateBatch.mutateAsync({
+                  insightIds,
+                  contentType: batchContentType,
+                });
+                setBatchJobId(result.jobId);
+                setShowBatchModal(true);
+              } catch {
+                // mutation error handled by TanStack Query
+              }
+            }}
+            disabled={generateBatch.isPending}
+            className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+          >
+            <Play size={14} />
+            {generateBatch.isPending ? "Starting..." : "Generate Batch"}
+          </button>
+        </div>
+        {generateBatch.isError && (
+          <p className="text-sm text-red-400 mt-2">{generateBatch.error.message}</p>
+        )}
+      </div>
+
+      <JobProgressModal
+        jobId={batchJobId}
+        title="Batch Content Generation"
+        isOpen={showBatchModal}
+        onClose={useCallback(() => {
+          setShowBatchModal(false);
+          setBatchJobId(null);
+          qc.invalidateQueries({ queryKey: ["posts"] });
+        }, [qc])}
+      />
     </div>
   );
 }

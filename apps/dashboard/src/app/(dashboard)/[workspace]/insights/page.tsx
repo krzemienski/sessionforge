@@ -5,11 +5,12 @@ import Link from "next/link";
 import { useInsights } from "@/hooks/use-insights";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { useState, useCallback } from "react";
-import { Lightbulb, SlidersHorizontal, X, Sparkles, ArrowRight } from "lucide-react";
+import { Lightbulb, SlidersHorizontal, X, Sparkles, ArrowRight, Check, XCircle, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MultiSelectToolbar } from "@/components/batch/multi-select-toolbar";
 import { JobProgressModal } from "@/components/batch/job-progress-modal";
 import { useGenerateContentBatch } from "@/hooks/use-batch-operations";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const CATEGORIES: Record<string, { label: string; color: string }> = {
   novel_problem_solving: { label: "Novel", color: "text-purple-400 bg-purple-400/10" },
@@ -56,6 +57,32 @@ export default function InsightsPage() {
   const [jobModalOpen, setJobModalOpen] = useState(false);
 
   const generateContentBatch = useGenerateContentBatch(workspace as string);
+
+  // Recommendations
+  const queryClient = useQueryClient();
+  const recommendations = useQuery<{ recommendations: any[] }>({
+    queryKey: ["recommendations", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/content/recommendations?workspace=${workspace}&status=active&limit=10`);
+      if (!res.ok) throw new Error("Failed to fetch recommendations");
+      return res.json();
+    },
+    enabled: !!workspace,
+  });
+  const recList = recommendations.data?.recommendations ?? [];
+
+  const patchRecommendation = useMutation({
+    mutationFn: async ({ recommendationId, action }: { recommendationId: string; action: "accepted" | "dismissed" }) => {
+      const res = await fetch(`/api/content/recommendations?workspace=${workspace}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recommendationId, action }),
+      });
+      if (!res.ok) throw new Error("Failed to update recommendation");
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recommendations", workspace] }),
+  });
 
   const handleCheckboxClick = useCallback(
     (e: React.MouseEvent, insightId: string, index: number) => {
@@ -218,6 +245,66 @@ export default function InsightsPage() {
               className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary placeholder:text-sf-text-muted focus:border-sf-border-focus focus:outline-none min-h-[44px]"
             />
           </div>
+        </div>
+      )}
+
+      {/* Suggested Topics from Recommendations */}
+      {recList.length > 0 && (
+        <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Target size={16} className="text-sf-accent" />
+            <h3 className="font-semibold text-sf-text-primary text-sm">Suggested Topics</h3>
+            <span className="text-xs text-sf-text-muted">({recList.length})</span>
+          </div>
+          <div className="space-y-2">
+            {recList.map((rec: any) => (
+              <div
+                key={rec.id}
+                className="flex items-center gap-3 bg-sf-bg-tertiary rounded-sf px-3 py-2.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-sf-text-primary truncate">{rec.title}</p>
+                  {rec.description && (
+                    <p className="text-xs text-sf-text-secondary line-clamp-1 mt-0.5">{rec.description}</p>
+                  )}
+                </div>
+                <span className={cn(
+                  "shrink-0 px-2 py-0.5 rounded-sf-full text-xs font-medium",
+                  rec.priority >= 7 ? "text-red-400 bg-red-400/10" :
+                  rec.priority >= 4 ? "text-yellow-400 bg-yellow-400/10" :
+                  "text-green-400 bg-green-400/10"
+                )}>
+                  {rec.priority >= 7 ? "High" : rec.priority >= 4 ? "Medium" : "Low"}
+                </span>
+                <button
+                  onClick={() => {
+                    patchRecommendation.mutate({ recommendationId: rec.id, action: "accepted" });
+                    router.push(`/${workspace}/content/new?topic=${encodeURIComponent(rec.title)}`);
+                  }}
+                  disabled={patchRecommendation.isPending}
+                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 bg-sf-accent text-sf-bg-primary text-xs font-medium rounded-sf hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+                >
+                  <Check size={12} />
+                  Accept
+                </button>
+                <button
+                  onClick={() => patchRecommendation.mutate({ recommendationId: rec.id, action: "dismissed" })}
+                  disabled={patchRecommendation.isPending}
+                  className="shrink-0 p-1.5 text-sf-text-muted hover:text-sf-error transition-colors disabled:opacity-50"
+                  title="Dismiss"
+                >
+                  <XCircle size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recList.length === 0 && !recommendations.isLoading && insightList.length > 0 && (
+        <div className="flex items-center gap-2 bg-sf-bg-secondary border border-sf-border rounded-sf px-4 py-3 mb-4 text-sm text-sf-text-muted">
+          <Target size={14} />
+          No suggested topics. Extract more insights to generate recommendations.
         </div>
       )}
 

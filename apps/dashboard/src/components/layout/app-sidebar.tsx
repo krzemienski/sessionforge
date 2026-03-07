@@ -10,6 +10,7 @@ import {
   FileText,
   Zap,
   BarChart3,
+  Activity,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const mainNav = [
   { label: "Content", icon: FileText, href: "/content" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Automation", icon: Zap, href: "/automation" },
+  { label: "Pipeline", icon: Activity, href: "/observability" },
 ];
 
 const settingsNav = [

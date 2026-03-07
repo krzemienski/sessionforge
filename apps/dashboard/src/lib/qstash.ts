@@ -1,5 +1,19 @@
 import { Client, Receiver } from "@upstash/qstash";
 
+// Required env vars for scheduled triggers:
+//   UPSTASH_QSTASH_TOKEN
+//   UPSTASH_QSTASH_CURRENT_SIGNING_KEY
+//   UPSTASH_QSTASH_NEXT_SIGNING_KEY
+//   NEXT_PUBLIC_APP_URL (webhook callback URL)
+
+const isPlaceholderToken = !process.env.UPSTASH_QSTASH_TOKEN;
+
+if (isPlaceholderToken) {
+  console.warn(
+    "[qstash] UPSTASH_QSTASH_TOKEN not set — using placeholder. Scheduled triggers will fail at runtime."
+  );
+}
+
 const qstashToken =
   process.env.UPSTASH_QSTASH_TOKEN ?? "placeholder-qstash-token";
 

@@ -20,6 +20,7 @@ export const lookbackWindowEnum = pgEnum("lookback_window", [
   "last_7_days",
   "last_14_days",
   "last_30_days",
+  "all_time",
   "custom",
 ]);
 

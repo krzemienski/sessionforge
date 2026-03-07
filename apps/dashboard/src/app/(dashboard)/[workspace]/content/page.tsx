@@ -5,29 +5,15 @@ import Link from "next/link";
 import { useContent, useContentStreak, useExportContent } from "@/hooks/use-content";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, CalendarDays, LayoutGrid, List, Download, X, Loader2 } from "lucide-react";
+import { CalendarDays, LayoutGrid, List, Download, Zap } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { CalendarView } from "@/components/content/calendar-view";
 import { PipelineView } from "@/components/content/pipeline-view";
-import { ExportDropdown } from "@/components/content/export-dropdown";
-
-const STATUS_COLORS: Record<string, string> = {
-  idea: "text-sf-text-muted bg-sf-bg-tertiary",
-  draft: "text-sf-info bg-sf-info/10",
-  in_review: "text-sf-warning bg-sf-warning/10",
-  published: "text-sf-success bg-sf-success/10",
-  archived: "text-sf-text-muted bg-sf-bg-tertiary",
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  blog_post: "Blog Post",
-  twitter_thread: "Twitter Thread",
-  linkedin_post: "LinkedIn Post",
-  changelog: "Changelog",
-  newsletter: "Newsletter",
-  devto_post: "Dev.to Post",
-  custom: "Custom",
-};
+import { useSeries, useCollections } from "@/hooks/use-series-collections";
+import { ManageGroupDialog } from "@/components/content/manage-group-dialog";
+import { useSearchParams } from "next/navigation";
+import { ExportPanel } from "@/components/content/export-panel";
+import { ContentListView } from "@/components/content/content-list-view";
 
 type ViewTab = "calendar" | "pipeline" | "list";
 
@@ -37,40 +23,53 @@ const VIEW_TABS: { label: string; value: ViewTab; icon: React.ReactNode }[] = [
   { label: "List", value: "list", icon: <List size={15} /> },
 ];
 
-const STATUS_TABS = [
-  { label: "All", value: "" },
-  { label: "Ideas", value: "idea" },
-  { label: "Drafts", value: "draft" },
-  { label: "In Review", value: "in_review" },
-  { label: "Published", value: "published" },
-  { label: "Archived", value: "archived" },
-];
-
-function getSeoScoreColor(score: number): string {
-  if (score >= 70) return "text-sf-success bg-sf-success/10";
-  if (score >= 40) return "text-sf-warning bg-sf-warning/10";
-  return "text-sf-error bg-sf-error/10";
-}
-
-function SeoScoreBadge({ post }: { post: any }) {
-  const score: number | undefined = post.seoAnalysis?.compositeScore ?? post.geoScore ?? undefined;
-  if (score === undefined || score === null) return null;
-  const rounded = Math.round(score);
-  return (
-    <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium", getSeoScoreColor(rounded))}>
-      SEO {rounded}
-    </span>
-  );
-}
-
 export default function ContentPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [activeTab, setActiveTab] = useState<ViewTab | null>(null);
 
+  // Series & Collections filtering
+  const [seriesFilter, setSeriesFilter] = useState<string>("");
+  const [collectionFilter, setCollectionFilter] = useState<string>("");
+  const [showManageSeries, setShowManageSeries] = useState(false);
+  const [showManageCollections, setShowManageCollections] = useState(false);
+
+  const seriesData = useSeries(workspace);
+  const collectionsData = useCollections(workspace);
+  const seriesList = seriesData.data?.series ?? [];
+  const collectionsList = collectionsData.data?.collections ?? [];
+
+  // Handle ?filter= from redirect URLs
+  useEffect(() => {
+    const filter = searchParams.get("filter");
+    if (filter === "series" && seriesList.length > 0 && !seriesFilter) {
+      setSeriesFilter(seriesList[0].id);
+    } else if (filter === "collections" && collectionsList.length > 0 && !collectionFilter) {
+      setCollectionFilter(collectionsList[0].id);
+    }
+  }, [searchParams, seriesList, collectionsList, seriesFilter, collectionFilter]);
+
   const content = useContent(workspace, { limit: 50, status: statusFilter || undefined });
-  const contentList = content.data?.posts ?? [];
+  const rawContentList = content.data?.posts ?? [];
+
+  // Client-side filtering by series/collection
+  const contentList = rawContentList.filter((post: any) => {
+    if (seriesFilter) {
+      const s = seriesList.find((s) => s.id === seriesFilter);
+      if (!s) return false;
+      const postIds = s.seriesPosts?.map((sp) => sp.post.id) ?? [];
+      if (!postIds.includes(post.id)) return false;
+    }
+    if (collectionFilter) {
+      const c = collectionsList.find((c) => c.id === collectionFilter);
+      if (!c) return false;
+      const postIds = c.collectionPosts?.map((cp) => cp.post.id) ?? [];
+      if (!postIds.includes(post.id)) return false;
+    }
+    return true;
+  });
 
   const streak = useContentStreak(workspace);
   const streakCount: number | undefined = streak.data?.streak;
@@ -84,6 +83,18 @@ export default function ContentPage() {
     },
     enabled: !!workspace,
   });
+
+  const runs = useQuery({
+    queryKey: ["runs", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/automation/runs?workspace=${workspace}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!workspace,
+  });
+
+  const lastRun = (runs.data?.runs ?? []).find((r: any) => r.status === "complete") as any | undefined;
 
   // Smart default: Calendar when automation triggers exist, otherwise List
   useEffect(() => {
@@ -133,90 +144,36 @@ export default function ContentPage() {
         </button>
       </div>
 
-      {showExport && (
-        <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 mb-6 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-sf-text-primary text-sm">Export Options</h3>
-            <button onClick={() => setShowExport(false)} className="text-sf-text-muted hover:text-sf-text-secondary">
-              <X size={16} />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <select
-              value={exportType}
-              onChange={(e) => setExportType(e.target.value)}
-              className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary min-h-[44px]"
-            >
-              <option value="">All Types</option>
-              {Object.entries(TYPE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-            <select
-              value={exportStatus}
-              onChange={(e) => setExportStatus(e.target.value)}
-              className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary min-h-[44px]"
-            >
-              <option value="">All Statuses</option>
-              <option value="idea">Idea</option>
-              <option value="draft">Draft</option>
-              <option value="in_review">In Review</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-sf-text-muted mb-1">From</label>
-              <input
-                type="date"
-                value={exportDateFrom}
-                onChange={(e) => setExportDateFrom(e.target.value)}
-                className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary min-h-[44px]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-sf-text-muted mb-1">To</label>
-              <input
-                type="date"
-                value={exportDateTo}
-                onChange={(e) => setExportDateTo(e.target.value)}
-                className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary min-h-[44px]"
-              />
-            </div>
-          </div>
-          {exportCount !== null && exportCount >= 50 && !isExporting && (
-            <p className="text-xs text-sf-text-muted">
-              {exportCount} files — large exports may take a moment to prepare.
-            </p>
-          )}
-          {isExporting && (
-            <p className="text-xs text-sf-text-muted flex items-center gap-1.5">
-              <Loader2 size={12} className="animate-spin" /> Building zip archive…
-            </p>
-          )}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <button
-              onClick={handleExport}
-              disabled={isExporting}
-              className="flex items-center justify-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium disabled:opacity-50 transition-opacity w-full sm:w-auto min-h-[44px]"
-            >
-              {isExporting ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" /> Exporting…
-                </>
-              ) : (
-                <>
-                  <Download size={14} /> Download ZIP
-                </>
-              )}
-            </button>
-            <button onClick={() => setShowExport(false)} className="text-sf-text-secondary px-4 py-2 text-sm w-full sm:w-auto min-h-[44px]">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Pipeline status line */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary mb-4">
+        <Zap size={13} className="text-sf-text-muted flex-shrink-0" />
+        {lastRun ? (
+          <span>
+            Last pipeline: {timeAgo(lastRun.completedAt || lastRun.startedAt)}
+            {lastRun.sessionCount != null && ` — ${lastRun.sessionCount} sessions`}
+            {lastRun.insightCount != null && ` → ${lastRun.insightCount} insights`}
+            {lastRun.contentType && ` → 1 ${lastRun.contentType.replace(/_/g, " ")}`}
+          </span>
+        ) : (
+          <span>No pipeline runs yet. <Link href={`/${workspace}/automation`} className="text-sf-accent hover:underline">Set up automation</Link> to generate content automatically.</span>
+        )}
+      </div>
+
+      <ExportPanel
+        showExport={showExport}
+        onClose={() => setShowExport(false)}
+        exportType={exportType}
+        setExportType={setExportType}
+        exportStatus={exportStatus}
+        setExportStatus={setExportStatus}
+        exportDateFrom={exportDateFrom}
+        setExportDateFrom={setExportDateFrom}
+        exportDateTo={exportDateTo}
+        setExportDateTo={setExportDateTo}
+        isExporting={isExporting}
+        exportCount={exportCount}
+        onExport={handleExport}
+      />
 
       {/* View tabs */}
       <div className="flex gap-1 mb-6 bg-sf-bg-tertiary rounded-sf p-0.5 w-fit">
@@ -252,83 +209,44 @@ export default function ContentPage() {
 
       {/* List view */}
       {activeTab === "list" && (
-        <>
-          <div className="flex gap-2 flex-wrap mb-4">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => setStatusFilter(tab.value)}
-                className={cn(
-                  "px-3 py-1.5 text-sm rounded-sf transition-colors",
-                  statusFilter === tab.value
-                    ? "bg-sf-accent-bg text-sf-accent"
-                    : "text-sf-text-secondary hover:bg-sf-bg-hover"
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="space-y-3">
-            {contentList.map((post: any) => (
-              <div
-                key={post.id}
-                onClick={() => router.push(`/${workspace}/content/${post.id}`)}
-                className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status] || "")}>
-                    {post.status}
-                  </span>
-                  <span className="px-2 py-0.5 bg-sf-bg-tertiary rounded-sf-full text-xs text-sf-text-secondary">
-                    {TYPE_LABELS[post.contentType] || post.contentType}
-                  </span>
-                  <SeoScoreBadge post={post} />
-                  <div className="ml-auto flex items-center gap-2">
-                    <span className="text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
-                    <ExportDropdown markdown={post.markdown || ""} title={post.title || ""} />
-                  </div>
-                </div>
-                <h3 className="font-semibold text-sf-text-primary mb-1">{post.title}</h3>
-                <p className="text-sm text-sf-text-secondary line-clamp-2">
-                  {post.markdown?.slice(0, 150)}...
-                </p>
-                {post.wordCount && (
-                  <p className="text-xs text-sf-text-muted mt-2">{post.wordCount} words</p>
-                )}
-              </div>
-            ))}
-
-            {contentList.length === 0 && !content.isLoading && (
-              <div className="text-center py-12">
-                <FileText size={40} className="mx-auto text-sf-text-muted mb-3" />
-                <p className="text-sf-text-primary font-medium mb-1">No content yet</p>
-                <p className="text-sf-text-secondary text-sm mb-6">Generate content from your insights or create a post manually.</p>
-                <div className="flex items-center justify-center gap-3">
-                  <Link
-                    href={`/${workspace}/insights`}
-                    className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
-                  >
-                    View Insights →
-                  </Link>
-                  <Link
-                    href={`/${workspace}/content/new`}
-                    className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
-                  >
-                    Create manually →
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
+        <ContentListView
+          workspace={workspace}
+          contentList={contentList}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          seriesFilter={seriesFilter}
+          setSeriesFilter={setSeriesFilter}
+          collectionFilter={collectionFilter}
+          setCollectionFilter={setCollectionFilter}
+          seriesList={seriesList}
+          collectionsList={collectionsList}
+          onManageSeries={() => setShowManageSeries(true)}
+          onManageCollections={() => setShowManageCollections(true)}
+          isLoading={content.isLoading}
+          onNavigateToPost={(postId) => router.push(`/${workspace}/content/${postId}`)}
+        />
       )}
 
       {/* Loading state while determining default view */}
       {activeTab === null && (
         <div className="text-center py-12 text-sm text-sf-text-muted">Loading...</div>
       )}
+
+      {/* Manage Series/Collections dialogs */}
+      <ManageGroupDialog
+        type="series"
+        workspace={workspace}
+        items={seriesList}
+        isOpen={showManageSeries}
+        onClose={() => setShowManageSeries(false)}
+      />
+      <ManageGroupDialog
+        type="collections"
+        workspace={workspace}
+        items={collectionsList}
+        isOpen={showManageCollections}
+        onClose={() => setShowManageCollections(false)}
+      />
     </div>
   );
 }

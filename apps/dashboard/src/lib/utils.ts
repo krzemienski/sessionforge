@@ -20,6 +20,12 @@ export function formatDuration(seconds: number) {
   return `${h}h ${m}m`;
 }
 
+export function formatMs(ms: number) {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60000).toFixed(1)}m`;
+}
+
 export function timeAgo(date: string | Date) {
   const ms = Date.now() - new Date(date).getTime();
   const seconds = Math.floor(ms / 1000);

@@ -1,261 +1,70 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
-import { Settings, Save, PlayCircle, Copy, Check, Upload, Clock, FileCheck } from "lucide-react";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { Settings } from "lucide-react";
+import { GeneralTab } from "@/components/settings/general-tab";
+import { StyleTab } from "@/components/settings/style-tab";
+import { ApiKeysTab } from "@/components/settings/api-keys-tab";
+import { IntegrationsTab } from "@/components/settings/integrations-tab";
+import { WebhooksTab } from "@/components/settings/webhooks-tab";
+
+const TABS = [
+  { id: "general", label: "General" },
+  { id: "style", label: "Style" },
+  { id: "api-keys", label: "API Keys" },
+  { id: "integrations", label: "Integrations" },
+  { id: "webhooks", label: "Webhooks" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
 
 export default function SettingsPage() {
   const { workspace } = useParams<{ workspace: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const qc = useQueryClient();
 
-  const ws = useQuery({
-    queryKey: ["workspace", workspace],
-    queryFn: async () => {
-      const res = await fetch(`/api/workspace/${workspace}`);
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-  });
+  const rawTab = searchParams.get("tab") || "general";
+  const activeTab: TabId = TABS.some((t) => t.id === rawTab) ? (rawTab as TabId) : "general";
 
-  const uploadActivity = useQuery({
-    queryKey: ["workspace", workspace, "activity"],
-    queryFn: async () => {
-      const res = await fetch(`/api/workspace/${workspace}/activity`);
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    enabled: !!workspace,
-  });
-
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [scanPaths, setScanPaths] = useState("");
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (ws.data) {
-      setName(ws.data.name || "");
-      setSlug(ws.data.slug || "");
-      setScanPaths((ws.data.scanPaths ?? []).join("\n"));
+  const setTab = (tab: TabId) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "general") {
+      params.delete("tab");
+    } else {
+      params.set("tab", tab);
     }
-  }, [ws.data]);
-
-  const update = useMutation({
-    mutationFn: async (data: Record<string, unknown>) => {
-      const res = await fetch(`/api/workspace/${workspace}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workspace"] }),
-  });
-
-  const handleCopy = (text: string, field: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
-    });
+    const qs = params.toString();
+    router.replace(`/${workspace}/settings${qs ? `?${qs}` : ""}`, { scroll: false });
   };
-
-  const workspaceSlug = ws.data?.slug || workspace;
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const rssUrl = `${origin}/api/feed/${workspaceSlug}.xml`;
-  const atomUrl = `${origin}/api/feed/${workspaceSlug}.atom`;
-
-  if (ws.isLoading) {
-    return <div className="animate-pulse space-y-4"><div className="h-8 bg-sf-bg-tertiary rounded w-1/3" /></div>;
-  }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center gap-2 mb-6">
+        <Settings size={22} className="text-sf-accent" />
         <h1 className="text-2xl font-bold font-display">Settings</h1>
       </div>
 
-      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-5">
-        <div>
-          <label className="block text-sm font-medium text-sf-text-secondary mb-1">Workspace Name</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary focus:outline-none focus:border-sf-border-focus"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-sf-text-secondary mb-1">Slug</label>
-          <input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none focus:border-sf-border-focus"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-sf-text-secondary mb-1">Session Scan Paths</label>
-          <textarea
-            value={scanPaths}
-            onChange={(e) => setScanPaths(e.target.value)}
-            rows={4}
-            placeholder="One path per line, e.g. ~/.claude/projects/"
-            className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code resize-none focus:outline-none focus:border-sf-border-focus"
-          />
-          <p className="text-xs text-sf-text-muted mt-1">One path per line. Leave empty for default scan paths.</p>
-        </div>
-
-        <button
-          onClick={() =>
-            update.mutate({
-              name,
-              slug,
-              scanPaths: scanPaths.split("\n").map((s) => s.trim()).filter(Boolean),
-            })
-          }
-          disabled={update.isPending}
-          className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
-        >
-          <Save size={16} />
-          {update.isPending ? "Saving..." : "Save Changes"}
-        </button>
-
-        {update.isSuccess && <p className="text-sm text-sf-success">Settings saved.</p>}
+      <div className="flex items-center gap-1 border-b border-sf-border mb-6 overflow-x-auto">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setTab(tab.id)}
+            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+              activeTab === tab.id
+                ? "border-sf-accent text-sf-accent"
+                : "border-transparent text-sf-text-secondary hover:text-sf-text-primary hover:border-sf-border"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 mt-6">
-        <h2 className="text-base font-semibold font-display mb-1">Setup Wizard</h2>
-        <p className="text-sm text-sf-text-secondary mb-4">
-          Re-run the onboarding wizard to update your workspace configuration or connect new integrations.
-        </p>
-        <button
-          onClick={() => router.push("/onboarding")}
-          className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf font-medium text-sm hover:border-sf-border-focus transition-colors"
-        >
-          <PlayCircle size={16} />
-          Resume Setup Wizard
-        </button>
-      </div>
-
-      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-4 mt-6">
-        <div>
-          <h2 className="text-base font-semibold text-sf-text-primary mb-1">RSS Feeds</h2>
-          <p className="text-xs text-sf-text-muted">Subscribe to your workspace&apos;s published posts via RSS or Atom feeds.</p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-sf-text-secondary mb-1">RSS 2.0</label>
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={rssUrl}
-              className="flex-1 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none"
-            />
-            <button
-              onClick={() => handleCopy(rssUrl, "rss")}
-              className="flex items-center gap-1.5 px-3 py-2 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-secondary hover:bg-sf-bg-hover hover:text-sf-text-primary transition-colors"
-            >
-              {copiedField === "rss" ? <Check size={14} className="text-sf-success" /> : <Copy size={14} />}
-              {copiedField === "rss" ? "Copied!" : "Copy"}
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-sf-text-secondary mb-1">Atom</label>
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={atomUrl}
-              className="flex-1 bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary font-code focus:outline-none"
-            />
-            <button
-              onClick={() => handleCopy(atomUrl, "atom")}
-              className="flex items-center gap-1.5 px-3 py-2 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-secondary hover:bg-sf-bg-hover hover:text-sf-text-primary transition-colors"
-            >
-              {copiedField === "atom" ? <Check size={14} className="text-sf-success" /> : <Copy size={14} />}
-              {copiedField === "atom" ? "Copied!" : "Copy"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-4 mt-6">
-        <div>
-          <h2 className="text-base font-semibold text-sf-text-primary mb-1">Upload History</h2>
-          <p className="text-xs text-sf-text-muted">Recent session file uploads to this workspace.</p>
-        </div>
-
-        {uploadActivity.isLoading ? (
-          <div className="animate-pulse space-y-3">
-            <div className="h-12 bg-sf-bg-tertiary rounded" />
-            <div className="h-12 bg-sf-bg-tertiary rounded" />
-          </div>
-        ) : uploadActivity.data && uploadActivity.data.length > 0 ? (
-          <div className="space-y-2">
-            {uploadActivity.data.map((activity: any) => {
-              const metadata = activity.metadata || {};
-              const filesUploaded = metadata.filesUploaded || 0;
-              const sessionsNew = metadata.sessionsNew || 0;
-              const sessionsUpdated = metadata.sessionsUpdated || 0;
-              const hasErrors = metadata.errors && metadata.errors.length > 0;
-              const timestamp = new Date(activity.createdAt).toLocaleString();
-
-              return (
-                <div
-                  key={activity.id}
-                  className="flex items-start gap-3 p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf"
-                >
-                  <div className="flex-shrink-0 mt-0.5">
-                    <Upload size={16} className="text-sf-text-secondary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-sf-text-primary">
-                        {filesUploaded} {filesUploaded === 1 ? "file" : "files"} uploaded
-                      </span>
-                      <span className="text-xs text-sf-text-muted flex items-center gap-1">
-                        <Clock size={12} />
-                        {timestamp}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-sf-text-secondary">
-                      {sessionsNew > 0 && (
-                        <span className="flex items-center gap-1">
-                          <FileCheck size={12} className="text-sf-success" />
-                          {sessionsNew} new
-                        </span>
-                      )}
-                      {sessionsUpdated > 0 && (
-                        <span className="flex items-center gap-1">
-                          <FileCheck size={12} className="text-sf-accent" />
-                          {sessionsUpdated} updated
-                        </span>
-                      )}
-                      {hasErrors && (
-                        <span className="text-sf-error">
-                          {metadata.errors.length} {metadata.errors.length === 1 ? "error" : "errors"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <Upload size={32} className="mx-auto text-sf-text-muted mb-2" />
-            <p className="text-sm text-sf-text-muted">No uploads yet</p>
-            <p className="text-xs text-sf-text-muted mt-1">
-              Upload session files from the Sessions page to see them here.
-            </p>
-          </div>
-        )}
-      </div>
+      {activeTab === "general" && <GeneralTab workspace={workspace} />}
+      {activeTab === "style" && <StyleTab workspace={workspace} />}
+      {activeTab === "api-keys" && <ApiKeysTab workspace={workspace} />}
+      {activeTab === "integrations" && <IntegrationsTab workspace={workspace} />}
+      {activeTab === "webhooks" && <WebhooksTab workspace={workspace} />}
     </div>
   );
 }

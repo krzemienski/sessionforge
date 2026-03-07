@@ -5,7 +5,7 @@
  */
 
 import { db } from "@/lib/db";
-import { insights, posts } from "@sessionforge/db";
+import { contentAssets, insights, posts } from "@sessionforge/db";
 import { and, desc, eq } from "drizzle-orm/sql";
 import { BLOG_TECHNICAL_PROMPT } from "../ai/prompts/blog/technical";
 import { TWITTER_THREAD_PROMPT } from "../ai/prompts/social/twitter-thread";
@@ -260,13 +260,35 @@ export async function generateContent(
   // Query the DB for the most recently created post by this workspace
   try {
     const [latest] = await db
-      .select({ id: posts.id })
+      .select({ id: posts.id, title: posts.title })
       .from(posts)
       .where(eq(posts.workspaceId, input.workspaceId))
       .orderBy(desc(posts.createdAt))
       .limit(1);
 
     if (latest) {
+      // Generate hero/OG image for the new post
+      try {
+        const { generateHeroImage } = await import("@/lib/media/hero-image-generator");
+        const imgBuffer = await generateHeroImage(latest.title ?? "Untitled", input.contentType);
+        const dataUrl = `data:image/png;base64,${imgBuffer.toString("base64")}`;
+
+        await db.insert(contentAssets).values({
+          postId: latest.id,
+          workspaceId: input.workspaceId,
+          assetType: "hero_image",
+          content: dataUrl,
+          altText: `Hero image for: ${latest.title}`,
+        });
+
+        await db
+          .update(posts)
+          .set({ ogImage: dataUrl })
+          .where(eq(posts.id, latest.id));
+      } catch {
+        // Hero image generation failure is non-fatal
+      }
+
       return { postId: latest.id };
     }
   } catch {
