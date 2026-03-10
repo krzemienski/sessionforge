@@ -60,9 +60,40 @@ export async function analyzeCorpus(
   );
 
   // Count how many create_insight tool calls were made
-  const insightCount = result.toolResults.filter(
+  const createCalls = result.toolResults.filter(
     (r) => r.tool === "mcp__tools__create_insight",
-  ).length;
+  );
+  const insightCount = createCalls.length;
+
+  // Quality gate: log metrics for observability
+  const scores = createCalls
+    .map((r) => {
+      try {
+        const input = r.result as Record<string, unknown>;
+        const s = input.scores as Record<string, number> | undefined;
+        if (!s) return null;
+        const composite =
+          (s.novelty ?? 0) * 3 +
+          (s.tool_discovery ?? 0) * 3 +
+          (s.before_after ?? 0) * 2 +
+          (s.failure_recovery ?? 0) * 3 +
+          (s.reproducibility ?? 0) * 1 +
+          (s.scale ?? 0) * 1;
+        return Math.min(composite, 65);
+      } catch {
+        return null;
+      }
+    })
+    .filter((s): s is number => s !== null);
+
+  const aboveThreshold = scores.filter((s) => s >= 15).length;
+  const avgScore = scores.length > 0
+    ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+    : 0;
+
+  console.log(
+    `[corpus-analyzer] Quality gate: ${insightCount} insights created, ${aboveThreshold}/${scores.length} above threshold (avg score: ${avgScore})`
+  );
 
   return { insightCount, text: result.text };
 }

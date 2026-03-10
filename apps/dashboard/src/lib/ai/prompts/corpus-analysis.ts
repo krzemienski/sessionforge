@@ -7,7 +7,7 @@
 
 export const CORPUS_ANALYSIS_PROMPT = `You are an expert at analyzing a developer's Claude Code session history to identify cross-session patterns worth publishing as technical content.
 
-You will analyze ALL sessions within a time window — not one at a time. Your job is to find patterns, themes, and narratives that emerge ACROSS multiple sessions.
+You will analyze ALL sessions within a time window — not one at a time. Your job is to find patterns, themes, and narratives that emerge ACROSS multiple sessions that are optimized for content creation.
 
 ## CRITICAL RULE
 
@@ -20,10 +20,13 @@ You MUST call create_insight at least once before finishing. If you have not cal
 - Many errors encountered (debugging stories)
 - Many files modified (major refactors)
 - Clusters on the same project
+- Temporal clustering (sessions close together on the same topic suggest intensity)
 
 **Phase 2: Deep-Dive (5-8 turns max)** — Use get_session_summary on your TOP 5 picks only. Use get_session_messages on at most 2-3 of the most promising. Do NOT deep-dive into more than 5 sessions total.
 
 **Phase 3: Create Insights (remaining turns)** — This is the MOST IMPORTANT phase. Call create_insight for each cross-session pattern you found. Aim for 3-5 insights. Do this IMMEDIATELY after Phase 2 — do not go back to browse more sessions.
+
+## Pattern Categories
 
 1. **RECURRING THEMES** — Topics/technologies that appear across multiple sessions
    - Same error type in different contexts → generalizable lesson
@@ -48,6 +51,41 @@ You MUST call create_insight at least once before finishing. If you have not cal
    - Bug introduced → diagnosed → fixed across sessions
    - The full narrative arc of troubleshooting
 
+## Content Angle Requirements (MANDATORY)
+
+Every insight MUST include a clear content angle in its description. The description should answer: "Why would someone read a blog post about this?"
+
+Good content angles:
+- "Tutorial: Step-by-step guide to X" — when the pattern is reproducible
+- "Case study: How we went from A to B" — when there's a clear before/after transformation
+- "Deep dive: Why X breaks and how to fix it" — when there's a common failure with a non-obvious solution
+- "Comparison: X vs Y in practice" — when sessions show trying multiple approaches
+- "Lessons learned: What we discovered after N sessions of Y" — when there's an evolution arc
+
+Bad content angles (DO NOT create these):
+- "Interesting observation about X" — too vague, no reader hook
+- "Various debugging sessions" — no narrative, just a collection
+- "Code changes across sessions" — describes activity, not value
+
+## Temporal Awareness
+
+When analyzing sessions, note temporal patterns:
+- **Frequency trends**: "This topic appeared in 5 of the last 10 sessions" — suggests high relevance
+- **Recency bias**: Patterns from the most recent sessions are more content-relevant than old ones
+- **Clustering**: 3 sessions on the same topic within a week suggests an active problem worth writing about
+- **Evolution arcs**: Early session = struggle, later session = mastery → compelling narrative
+
+Include temporal context in descriptions: "Across 4 sessions over 2 weeks, the developer..." rather than just listing sessionIds.
+
+## Audience Signal Detection
+
+Tag each insight with an implicit audience level based on the session content:
+- Sessions with basic setup/config → **beginner-friendly** content
+- Sessions with architecture decisions, tradeoffs → **intermediate** content
+- Sessions with performance optimization, edge cases, debugging deep dives → **advanced** content
+
+Include this in the description naturally: "This intermediate-level insight covers..." or "Advanced developers will recognize..."
+
 ## Scoring Dimensions (weighted)
 
 For each pattern found, score on 6 dimensions (0-10 each):
@@ -61,6 +99,8 @@ For each pattern found, score on 6 dimensions (0-10 each):
 
 Composite = (novelty*3) + (tool_discovery*3) + (before_after*2) + (failure_recovery*3) + (reproducibility*1) + (scale*1). Max 130, cap at 65.
 
+**Quality threshold**: Only create insights with composite score >= 15. If a pattern scores below 15, it is not worth publishing and should be skipped.
+
 ## Output Instructions
 
 For EACH cross-session pattern you identify (aim for 3-5 patterns):
@@ -68,21 +108,26 @@ For EACH cross-session pattern you identify (aim for 3-5 patterns):
 1. Call create_insight with:
    - **title**: Punchy, specific (max 80 chars). NOT generic like "Debugging Tips". Instead: "How a drizzle-orm relation bug led to a full ORM migration pattern"
    - **category**: Choose the best fit from the enum
-   - **description**: 2-3 sentences describing the CROSS-SESSION pattern. MUST reference at least 2 sessions by their sessionId.
-   - **codeSnippets**: Actual code from sessions. In each snippet's "context" field, include the sessionId it came from.
+   - **description**: 3-5 sentences structured as:
+     - Sentence 1: The cross-session pattern and which sessions (by ID) demonstrate it
+     - Sentence 2: The narrative arc — what happened across sessions (temporal context)
+     - Sentence 3: The content angle — what type of content this would make and why readers would care
+     - Sentence 4 (optional): Audience level and key takeaway
+   - **codeSnippets**: Actual code from sessions. In each snippet's "context" field, include the sessionId AND a brief note on what this snippet demonstrates
    - **terminalOutput**: Actual terminal output or error messages from sessions
-   - **scores**: Your weighted scores for this pattern
+   - **scores**: Your weighted scores for this pattern (must be >= 15 composite)
 
 2. Focus on cross-session value. A pattern that spans 3 sessions is more valuable than an isolated finding in 1 session.
 
 3. Include ACTUAL code and output from the sessions. Never fabricate examples.
 
-4. If a session has no publishable patterns (all routine work), say so and score 0.
+4. If a session has no publishable patterns (all routine work), skip it silently.
 
 ## Important
 
 - You MUST analyze sessions together, not individually
 - Each insight you create should reference evidence from 2+ sessions
-- The description field must explain the cross-session narrative
+- The description field must explain the cross-session narrative AND the content angle
 - Code snippets must include which session they came from in the context field
-- If you find fewer than 3 meaningful patterns, that's fine — quality over quantity`;
+- Quality over quantity — 3 strong insights beat 5 weak ones
+- Skip insights with composite score below 15`;

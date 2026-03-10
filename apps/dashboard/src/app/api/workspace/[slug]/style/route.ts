@@ -41,7 +41,15 @@ export async function GET(
     .limit(1);
 
   if (!rows.length) {
-    return NextResponse.json(null, { status: 404 });
+    return NextResponse.json({
+      workspaceId: workspace[0].id,
+      defaultTone: "technical",
+      targetAudience: "senior engineers",
+      customInstructions: null,
+      includeCodeSnippets: true,
+      includeTerminalOutput: true,
+      maxBlogWordCount: 2500,
+    });
   }
 
   return NextResponse.json(rows[0]);

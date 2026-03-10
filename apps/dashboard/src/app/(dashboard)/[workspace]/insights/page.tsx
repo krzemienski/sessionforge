@@ -4,12 +4,14 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useInsights } from "@/hooks/use-insights";
 import { useFilterParams } from "@/hooks/use-filter-params";
-import { useState, useCallback } from "react";
-import { Lightbulb, SlidersHorizontal, X, Sparkles, ArrowRight, Check, XCircle, Target } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { Lightbulb, SlidersHorizontal, X, Sparkles, ArrowRight, Check, XCircle, Target, Play, Code2, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MultiSelectToolbar } from "@/components/batch/multi-select-toolbar";
 import { JobProgressModal } from "@/components/batch/job-progress-modal";
 import { useGenerateContentBatch } from "@/hooks/use-batch-operations";
+import { useAnalysisPipeline } from "@/hooks/use-analysis-pipeline";
+import { PipelineProgress } from "@/components/pipeline/pipeline-progress";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const CATEGORIES: Record<string, { label: string; color: string }> = {
@@ -33,6 +35,19 @@ export default function InsightsPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
+  const [showLookback, setShowLookback] = useState(false);
+  const [lookbackDays, setLookbackDays] = useState(90);
+
+  const pipeline = useAnalysisPipeline(workspace as string);
+  const queryClient = useQueryClient();
+
+  // Auto-refresh insights when analysis completes
+  useEffect(() => {
+    if (pipeline.currentStage === "complete") {
+      queryClient.invalidateQueries({ queryKey: ["insights", workspace] });
+      queryClient.invalidateQueries({ queryKey: ["recommendations", workspace] });
+    }
+  }, [pipeline.currentStage, workspace, queryClient]);
 
   const [filters, setFilter, resetFilters] = useFilterParams(FILTER_DEFAULTS);
 
@@ -59,7 +74,6 @@ export default function InsightsPage() {
   const generateContentBatch = useGenerateContentBatch(workspace as string);
 
   // Recommendations
-  const queryClient = useQueryClient();
   const recommendations = useQuery<{ recommendations: any[] }>({
     queryKey: ["recommendations", workspace],
     queryFn: async () => {
@@ -138,24 +152,84 @@ export default function InsightsPage() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold font-display">Insights</h1>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={cn(
-            "relative flex items-center justify-center gap-2 border px-4 py-2.5 rounded-sf font-medium text-sm transition-colors w-full sm:w-auto min-h-[44px]",
-            showFilters
-              ? "bg-sf-accent-bg border-sf-accent text-sf-accent"
-              : "bg-sf-bg-secondary border-sf-border text-sf-text-primary hover:bg-sf-bg-hover"
-          )}
-        >
-          <SlidersHorizontal size={16} />
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-sf-accent text-sf-bg-primary text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Start Analysis button with lookback selector */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                if (pipeline.isRunning) return;
+                setShowLookback(!showLookback);
+              }}
+              disabled={pipeline.isRunning}
+              className={cn(
+                "flex items-center gap-2 border px-4 py-2.5 rounded-sf font-medium text-sm transition-colors min-h-[44px]",
+                pipeline.isRunning
+                  ? "bg-sf-accent/20 border-sf-accent/40 text-sf-accent cursor-wait"
+                  : "bg-sf-accent text-sf-bg-primary border-sf-accent hover:bg-sf-accent-dim"
+              )}
+            >
+              <Play size={14} />
+              {pipeline.isRunning ? "Analyzing..." : "Start Analysis"}
+            </button>
+            {showLookback && !pipeline.isRunning && (
+              <div className="absolute right-0 top-full mt-2 bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-3 shadow-lg z-20 min-w-[200px]">
+                <label className="block text-xs text-sf-text-muted mb-2">Lookback Window</label>
+                <select
+                  value={lookbackDays}
+                  onChange={(e) => setLookbackDays(Number(e.target.value))}
+                  className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary mb-3"
+                >
+                  <option value={7}>Last 7 days</option>
+                  <option value={14}>Last 14 days</option>
+                  <option value={30}>Last 30 days</option>
+                  <option value={90}>Last 90 days</option>
+                  <option value={36500}>All time</option>
+                </select>
+                <button
+                  onClick={() => {
+                    setShowLookback(false);
+                    pipeline.startAnalysis(lookbackDays);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                >
+                  <Play size={14} />
+                  Start
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(
+              "relative flex items-center justify-center gap-2 border px-4 py-2.5 rounded-sf font-medium text-sm transition-colors min-h-[44px]",
+              showFilters
+                ? "bg-sf-accent-bg border-sf-accent text-sf-accent"
+                : "bg-sf-bg-secondary border-sf-border text-sf-text-primary hover:bg-sf-bg-hover"
+            )}
+          >
+            <SlidersHorizontal size={16} />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-sf-accent text-sf-bg-primary text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Pipeline progress trace-back view */}
+      {(pipeline.isRunning || pipeline.currentStage === "complete" || pipeline.currentStage === "failed") && (
+        <div className="mb-6">
+          <PipelineProgress
+            events={pipeline.events}
+            currentStage={pipeline.currentStage}
+            isRunning={pipeline.isRunning}
+            error={pipeline.error}
+            result={pipeline.result}
+          />
+        </div>
+      )}
 
       {showFilters && (
         <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 mb-6 space-y-3">
@@ -372,42 +446,62 @@ export default function InsightsPage() {
                 </span>
               </div>
               <h3 className="font-semibold text-sf-text-primary mb-1">{ins.title}</h3>
-              <p className="text-sm text-sf-text-secondary line-clamp-2">{ins.description}</p>
-              <div className="flex gap-1 mt-3">
-                {[
-                  { score: ins.noveltyScore, w: 3 },
-                  { score: ins.toolPatternScore, w: 3 },
-                  { score: ins.transformationScore, w: 2 },
-                  { score: ins.failureRecoveryScore, w: 3 },
-                  { score: ins.reproducibilityScore, w: 1 },
-                  { score: ins.scaleScore, w: 1 },
-                ].map((d, i) => (
-                  <div key={i} className="h-2 flex-1 bg-sf-bg-tertiary rounded-full overflow-hidden">
-                    <div className="h-full bg-sf-accent rounded-full" style={{ width: `${((d.score || 0) / 5) * 100}%` }} />
-                  </div>
-                ))}
+              <p className="text-sm text-sf-text-secondary line-clamp-3">{ins.description}</p>
+              <div className="flex items-center gap-3 mt-3">
+                {/* Evidence indicators */}
+                {Array.isArray(ins.codeSnippets) && ins.codeSnippets.length > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-sf-text-muted" title="Code evidence">
+                    <Code2 size={12} />
+                    {ins.codeSnippets.length} snippet{ins.codeSnippets.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {Array.isArray(ins.terminalOutput) && ins.terminalOutput.length > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-sf-text-muted" title="Terminal evidence">
+                    <FileText size={12} />
+                    {ins.terminalOutput.length} output{ins.terminalOutput.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {/* Score bars */}
+                <div className="flex gap-1 flex-1 ml-auto">
+                  {[
+                    { score: ins.noveltyScore, w: 3 },
+                    { score: ins.toolPatternScore, w: 3 },
+                    { score: ins.transformationScore, w: 2 },
+                    { score: ins.failureRecoveryScore, w: 3 },
+                    { score: ins.reproducibilityScore, w: 1 },
+                    { score: ins.scaleScore, w: 1 },
+                  ].map((d, i) => (
+                    <div key={i} className="h-2 flex-1 bg-sf-bg-tertiary rounded-full overflow-hidden">
+                      <div className="h-full bg-sf-accent rounded-full" style={{ width: `${((d.score || 0) / 5) * 100}%` }} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           );
         })}
 
-        {insightList.length === 0 && !insights.isLoading && (
+        {insightList.length === 0 && !insights.isLoading && !pipeline.isRunning && (
           <div className="text-center py-12">
             <Lightbulb size={40} className="mx-auto text-sf-text-muted mb-3" />
             <p className="text-sf-text-primary font-medium mb-1">No insights yet</p>
-            <p className="text-sf-text-secondary mb-6 text-sm">Extract insights from your sessions to surface patterns, decisions, and discoveries.</p>
+            <p className="text-sf-text-secondary mb-6 text-sm max-w-md mx-auto">
+              Start your first analysis to discover content-worthy patterns, recurring themes, and actionable insights across your sessions.
+            </p>
             <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => pipeline.startAnalysis(90)}
+                disabled={pipeline.isRunning}
+                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+              >
+                <Play size={14} />
+                Start Analysis (90 days)
+              </button>
               <Link
                 href={`/${workspace}/sessions`}
-                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
-              >
-                View Sessions →
-              </Link>
-              <Link
-                href="/onboarding"
                 className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
               >
-                View setup guide →
+                View Sessions →
               </Link>
             </div>
           </div>

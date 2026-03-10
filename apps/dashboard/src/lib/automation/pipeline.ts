@@ -21,6 +21,20 @@ import { createPipelineInstrumentation } from "@/lib/observability/instrument-pi
 type ContentTrigger = typeof contentTriggers.$inferSelect;
 type Workspace = typeof workspaces.$inferSelect;
 
+export interface PipelineEvent {
+  stage: "scanning" | "extracting" | "generating" | "complete" | "failed";
+  message: string;
+  data?: Record<string, unknown>;
+}
+
+export interface ExecutePipelineOptions {
+  runId: string;
+  trigger?: ContentTrigger;
+  workspace: Workspace;
+  lookbackDays?: number;
+  onProgress?: (event: PipelineEvent) => void;
+}
+
 export function lookbackWindowToDays(window: string): number {
   switch (window) {
     case "current_day":
@@ -33,6 +47,8 @@ export function lookbackWindowToDays(window: string): number {
       return 14;
     case "last_30_days":
       return 30;
+    case "last_90_days":
+      return 90;
     case "all_time":
       return 36500;
     case "custom":
@@ -43,15 +59,37 @@ export function lookbackWindowToDays(window: string): number {
 }
 
 export async function executePipeline(
+  opts: ExecutePipelineOptions
+): Promise<void>;
+export async function executePipeline(
   runId: string,
   trigger: ContentTrigger,
   workspace: Workspace
+): Promise<void>;
+export async function executePipeline(
+  runIdOrOpts: string | ExecutePipelineOptions,
+  trigger?: ContentTrigger,
+  workspace?: Workspace
 ): Promise<void> {
+  // Normalize arguments — support both old 3-arg and new options signatures
+  const opts: ExecutePipelineOptions =
+    typeof runIdOrOpts === "string"
+      ? { runId: runIdOrOpts, trigger: trigger!, workspace: workspace! }
+      : runIdOrOpts;
+
+  const { runId, onProgress } = opts;
+  const ws = opts.workspace;
+  const trig = opts.trigger;
+
+  const emit = (event: PipelineEvent) => {
+    onProgress?.(event);
+  };
+
   const pipelineStart = Date.now();
-  const obs = createPipelineInstrumentation("automation-pipeline", workspace.id);
+  const obs = createPipelineInstrumentation("automation-pipeline", ws.id);
 
   try {
-    obs.start({ runId, triggerId: trigger.id, contentType: trigger.contentType });
+    obs.start({ runId, triggerId: trig?.id ?? null, contentType: trig?.contentType ?? "blog_post" });
 
     // ── SCAN ──────────────────────────────────────────────────────────────
     obs.stage("scanning");
@@ -60,16 +98,18 @@ export async function executePipeline(
       .set({ status: "scanning" })
       .where(eq(automationRuns.id, runId));
 
-    const lookbackDays = lookbackWindowToDays(
-      trigger.lookbackWindow ?? "last_7_days"
+    const lookbackDays = opts.lookbackDays ?? lookbackWindowToDays(
+      trig?.lookbackWindow ?? "last_90_days"
     );
-    const basePath = workspace.sessionBasePath ?? "~/.claude";
+
+    emit({ stage: "scanning", message: `Scanning sessions from last ${lookbackDays} days...` });
+    const basePath = ws.sessionBasePath ?? "~/.claude";
 
     // Pre-fetch already-indexed sessionIds to skip expensive re-parsing
     const existingRows = await db
       .select({ sessionId: claudeSessions.sessionId })
       .from(claudeSessions)
-      .where(eq(claudeSessions.workspaceId, workspace.id));
+      .where(eq(claudeSessions.workspaceId, ws.id));
     const indexedIds = new Set(existingRows.map((r) => r.sessionId));
 
     // Run local file discovery and SSH source query in parallel
@@ -80,7 +120,7 @@ export async function executePipeline(
         .from(scanSources)
         .where(
           and(
-            eq(scanSources.workspaceId, workspace.id),
+            eq(scanSources.workspaceId, ws.id),
             eq(scanSources.enabled, true)
           )
         ),
@@ -146,7 +186,13 @@ export async function executePipeline(
       }
     }
 
-    const scanResult = await indexSessions(workspace.id, normalized);
+    const scanResult = await indexSessions(ws.id, normalized);
+
+    emit({
+      stage: "scanning",
+      message: `Found ${scanResult.scanned} sessions (${newLocalFiles.length} local, ${normalized.length - newLocalFiles.length} remote)`,
+      data: { scanned: scanResult.scanned },
+    });
 
     await db
       .update(automationRuns)
@@ -160,13 +206,15 @@ export async function executePipeline(
       .set({ status: "extracting" })
       .where(eq(automationRuns.id, runId));
 
+    emit({ stage: "extracting", message: "Analyzing session corpus for patterns..." });
+
     const extractionStartedAt = new Date();
     let insightsExtracted = 0;
     let corpusSummary: string | null = null;
 
     try {
       const corpusResult = await analyzeCorpus({
-        workspaceId: workspace.id,
+        workspaceId: ws.id,
         lookbackDays,
         traceId: obs.traceId,
       });
@@ -174,7 +222,7 @@ export async function executePipeline(
       corpusSummary = corpusResult.text;
     } catch (err) {
       console.error("[pipeline] Corpus analysis failed:", err instanceof Error ? err.message : err);
-      // Corpus analysis failure is non-fatal — continue to generation
+      emit({ stage: "extracting", message: "Corpus analysis failed — continuing to generation" });
     }
 
     // Collect IDs of insights created during this extraction run
@@ -183,7 +231,7 @@ export async function executePipeline(
       .from(insights)
       .where(
         and(
-          eq(insights.workspaceId, workspace.id),
+          eq(insights.workspaceId, ws.id),
           gte(insights.createdAt, extractionStartedAt)
         )
       );
@@ -194,6 +242,12 @@ export async function executePipeline(
     if (newInsightIds.length > insightsExtracted) {
       insightsExtracted = newInsightIds.length;
     }
+
+    emit({
+      stage: "extracting",
+      message: `Created ${insightsExtracted} insights from corpus analysis`,
+      data: { insightsExtracted },
+    });
 
     await db
       .update(automationRuns)
@@ -207,10 +261,12 @@ export async function executePipeline(
       .set({ status: "generating" })
       .where(eq(automationRuns.id, runId));
 
-    const contentType = trigger.contentType as ContentType;
+    const contentType = (trig?.contentType ?? "blog_post") as ContentType;
+
+    emit({ stage: "generating", message: `Generating ${contentType} from ${insightsExtracted} insights...` });
 
     const generateResult = await generateContent({
-      workspaceId: workspace.id,
+      workspaceId: ws.id,
       contentType,
       insightIds: newInsightIds,
       lookbackDays,
@@ -230,14 +286,23 @@ export async function executePipeline(
       })
       .where(eq(automationRuns.id, runId));
 
-    await db
-      .update(contentTriggers)
-      .set({ lastRunAt: completedAt, lastRunStatus: "success" })
-      .where(eq(contentTriggers.id, trigger.id));
+    // Update trigger status if this was a trigger-initiated run
+    if (trig) {
+      await db
+        .update(contentTriggers)
+        .set({ lastRunAt: completedAt, lastRunStatus: "success" })
+        .where(eq(contentTriggers.id, trig.id));
+    }
 
     obs.complete({ sessionsScanned: scanResult.scanned, insightsExtracted, postId: generateResult?.postId ?? null, durationMs });
 
-    void fireWebhookEvent(workspace.id, "automation.completed", {
+    emit({
+      stage: "complete",
+      message: `Pipeline complete: ${scanResult.scanned} sessions → ${insightsExtracted} insights`,
+      data: { sessionsScanned: scanResult.scanned, insightsExtracted, durationMs, postId: generateResult?.postId ?? null },
+    });
+
+    void fireWebhookEvent(ws.id, "automation.completed", {
       runId,
       status: "complete",
       sessionsScanned: scanResult.scanned,
@@ -262,14 +327,22 @@ export async function executePipeline(
       })
       .where(eq(automationRuns.id, runId));
 
-    await db
-      .update(contentTriggers)
-      .set({ lastRunAt: completedAt, lastRunStatus: "failed" })
-      .where(eq(contentTriggers.id, trigger.id));
+    if (trig) {
+      await db
+        .update(contentTriggers)
+        .set({ lastRunAt: completedAt, lastRunStatus: "failed" })
+        .where(eq(contentTriggers.id, trig.id));
+    }
 
     obs.error(error);
 
-    void fireWebhookEvent(workspace.id, "automation.completed", {
+    emit({
+      stage: "failed",
+      message: `Pipeline failed: ${errorMessage}`,
+      data: { error: errorMessage, durationMs },
+    });
+
+    void fireWebhookEvent(ws.id, "automation.completed", {
       runId,
       status: "failed",
       error: errorMessage,

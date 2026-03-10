@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentTemplates, workspaces } from "@sessionforge/db";
-import { eq, or, and, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getBuiltInTemplates } from "@/lib/templates";
 
 export const dynamic = "force-dynamic";
@@ -22,58 +22,72 @@ export async function GET(request: Request) {
     );
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
+  try {
+    const workspace = await db.query.workspaces.findFirst({
+      where: eq(workspaces.slug, workspaceSlug),
+    });
 
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+    if (!workspace || workspace.ownerId !== session.user.id) {
+      return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+    }
+
+    // Fetch workspace-specific custom templates from the database
+    let dbTemplates: Array<Record<string, unknown>> = [];
+    try {
+      dbTemplates = await db.query.contentTemplates.findMany({
+        where: eq(contentTemplates.workspaceId, workspace.id),
+        with: {
+          creator: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          workspace: {
+            columns: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      });
+    } catch (dbErr) {
+      // Table may not exist in the live DB — return built-in templates only
+      console.warn("[templates] DB query failed, returning built-in only:", dbErr);
+    }
+
+    // Merge built-in TypeScript templates (using slug as stable ID for agent lookups)
+    const builtInTemplates = getBuiltInTemplates().map((t) => ({
+      id: t.slug,
+      workspaceId: null,
+      name: t.name,
+      slug: t.slug,
+      templateType: "built_in" as const,
+      contentType: t.contentType,
+      description: t.description,
+      structure: t.structure,
+      toneGuidance: t.toneGuidance,
+      exampleContent: t.exampleContent,
+      isActive: true,
+      createdBy: null,
+      usageCount: 0,
+      createdAt: null,
+      updatedAt: null,
+      creator: null,
+      workspace: null,
+    }));
+
+    const templates = [...builtInTemplates, ...dbTemplates];
+    return NextResponse.json({ templates });
+  } catch (err) {
+    console.error("[templates] GET error:", err);
+    return NextResponse.json(
+      { error: "Failed to load templates" },
+      { status: 500 }
+    );
   }
-
-  // Fetch workspace-specific custom templates from the database
-  const dbTemplates = await db.query.contentTemplates.findMany({
-    where: eq(contentTemplates.workspaceId, workspace.id),
-    with: {
-      creator: {
-        columns: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      workspace: {
-        columns: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      },
-    },
-  });
-
-  // Merge built-in TypeScript templates (using slug as stable ID for agent lookups)
-  const builtInTemplates = getBuiltInTemplates().map((t) => ({
-    id: t.slug,
-    workspaceId: null,
-    name: t.name,
-    slug: t.slug,
-    templateType: "built_in" as const,
-    contentType: t.contentType,
-    description: t.description,
-    structure: t.structure,
-    toneGuidance: t.toneGuidance,
-    exampleContent: t.exampleContent,
-    isActive: true,
-    createdBy: null,
-    usageCount: 0,
-    createdAt: null,
-    updatedAt: null,
-    creator: null,
-    workspace: null,
-  }));
-
-  const templates = [...builtInTemplates, ...dbTemplates];
-  return NextResponse.json({ templates });
 }
 
 export async function POST(request: Request) {

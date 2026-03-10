@@ -20,8 +20,15 @@ export const lookbackWindowEnum = pgEnum("lookback_window", [
   "last_7_days",
   "last_14_days",
   "last_30_days",
+  "last_90_days",
   "all_time",
   "custom",
+]);
+
+export const pipelineSourceEnum = pgEnum("pipeline_source", [
+  "manual",
+  "trigger",
+  "scheduled",
 ]);
 
 export const postStatusEnum = pgEnum("post_status", [
@@ -1008,11 +1015,11 @@ export const automationRuns = pgTable(
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     triggerId: text("trigger_id")
-      .notNull()
       .references(() => contentTriggers.id, { onDelete: "cascade" }),
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    source: pipelineSourceEnum("source").notNull().default("trigger"),
     status: automationRunStatusEnum("status").notNull().default("pending"),
     sessionsScanned: integer("sessions_scanned").notNull().default(0),
     insightsExtracted: integer("insights_extracted").notNull().default(0),
