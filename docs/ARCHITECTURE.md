@@ -1,7 +1,7 @@
 # SessionForge Architecture
 
-**Version:** 0.5.0-alpha
-**Updated:** 2026-03-05
+**Version:** 0.5.1-alpha
+**Updated:** 2026-03-09
 
 ---
 
@@ -12,11 +12,14 @@
 3. [Tech Stack](#tech-stack)
 4. [Session Scanning Pipeline](#session-scanning-pipeline)
 5. [AI Agent Pipeline](#ai-agent-pipeline)
-6. [Content Lifecycle](#content-lifecycle)
-7. [Database Schema](#database-schema)
-8. [API Routes](#api-routes)
-9. [Integration Architecture](#integration-architecture)
-10. [Key Design Decisions](#key-design-decisions)
+6. [Shared Modules](#shared-modules)
+7. [Content Lifecycle](#content-lifecycle)
+8. [Database Schema](#database-schema)
+9. [Navigation & UI](#navigation--ui)
+10. [API Routes](#api-routes)
+11. [Integration Architecture](#integration-architecture)
+12. [Automation & Pipeline Visualization](#automation--pipeline-visualization)
+13. [Key Design Decisions](#key-design-decisions)
 
 ---
 
@@ -31,14 +34,15 @@ graph TB
         Analytics[Social Analytics Dashboard]
     end
 
-    subgraph Server["Next.js API Routes (100+ endpoints)"]
+    subgraph Server["Next.js API Routes (148 route files)"]
         Auth[better-auth]
-        SessionAPI[Sessions]
+        SessionAPI[Sessions + SSH Scanner]
         ContentAPI[Content CRUD]
         AgentAPI[AI Agents - SSE]
         IntAPI[Integrations - 7 platforms]
         SchedAPI[Schedule / Queue]
         SEOAPI[SEO / Analytics]
+        ObsAPI[Observability + Events]
     end
 
     subgraph AI["AI Layer (claude-agent-sdk)"]
@@ -51,7 +55,7 @@ graph TB
     end
 
     subgraph Data["Data Layer"]
-        DB[(PostgreSQL - Neon\n59 tables)]
+        DB[(PostgreSQL - Neon\n61 tables)]
         Redis[(Upstash Redis)]
         QStash[Upstash QStash]
     end
@@ -81,19 +85,15 @@ sessionforge/
 │           ├── app/
 │           │   ├── (auth)/             # Login / signup
 │           │   ├── (dashboard)/[workspace]/
-│           │   │   ├── sessions/       # Session browser
+│           │   │   ├── sessions/       # Session browser + SSH scanner
 │           │   │   ├── insights/       # Ranked insights
 │           │   │   ├── content/        # Library + editor (list/calendar/pipeline)
-│           │   │   ├── calendar/       # Standalone calendar
-│           │   │   ├── series/         # Content series
-│           │   │   ├── collections/    # Content collections
 │           │   │   ├── analytics/      # Social media analytics
-│           │   │   ├── recommendations/# AI recommendations
-│           │   │   ├── automation/     # Trigger management
-│           │   │   ├── schedule/       # Publish queue
-│           │   │   └── settings/       # Workspace, style, API keys,
-│           │   │                       # integrations, skills, webhooks, wordpress
-│           │   └── api/                # 100+ Route Handlers
+│           │   │   ├── automation/     # Trigger management + pipeline runs
+│           │   │   ├── observability/  # Pipeline status + visualization
+│           │   │   └── settings/       # General, Style, API Keys,
+│           │   │                       # Integrations, Webhooks, Sources
+│           │   └── api/                # 148 route files
 │           ├── components/             # React components
 │           └── lib/
 │               ├── sessions/           # Scanner -> Parser -> Normalizer -> Indexer
@@ -105,7 +105,7 @@ sessionforge/
 │
 └── packages/
     └── db/                             # Drizzle ORM schema + client
-        └── src/schema.ts               # 59 tables, enums, relations
+        └── src/schema.ts               # 61 tables, enums, relations
 ```
 
 ---
@@ -118,7 +118,7 @@ sessionforge/
 | UI Library | shadcn/ui + flat-black design tokens |
 | Editor | Lexical (rich text, markdown import/export) |
 | Server State | TanStack Query v5 |
-| Client State | Zustand |
+| Client State | React Context + useState |
 | Auth | better-auth (email + GitHub OAuth) |
 | Database | PostgreSQL via Drizzle ORM (Neon serverless) |
 | Queue | Upstash QStash (scheduled job execution) |
@@ -132,7 +132,9 @@ sessionforge/
 
 ## Session Scanning Pipeline
 
-The pipeline converts raw JSONL files from `~/.claude/` into structured database records.
+The pipeline converts session data from multiple sources into structured database records.
+
+### Local JSONL Pipeline
 
 ```mermaid
 flowchart TD
@@ -146,9 +148,19 @@ flowchart TD
     FS --> S --> P --> N --> I --> DB
 ```
 
+### SSH Session Scanner
+
+`lib/sessions/ssh-scanner.ts` — Discovers and scans Claude sessions on remote SSH servers:
+- SSH connection with key-based auth
+- Find sessions in `~/.claude/projects/*/sessions/` and `~/.claude/sessions/`
+- Stream JSONL files over SSH
+- Parse and index into local database
+- Configured via Settings > Sources tab
+
 **Trigger points:**
 - **Manual:** POST `/api/sessions/scan` from dashboard
 - **Upload:** Drag-drop JSONL files on Sessions page
+- **SSH Scan:** POST `/api/scan-sources/` from Sources settings
 - **Scheduled:** Cron via QStash -> POST `/api/automation/execute`
 
 ---
@@ -165,7 +177,13 @@ All agents use `@anthropic-ai/claude-agent-sdk`, which inherits authentication f
 | `blog-writer` | POST `/api/agents/blog` | Opus | SSE stream | session, insight, post, skill |
 | `social-writer` | POST `/api/agents/social` | Opus | SSE stream | session, insight, post |
 | `changelog-writer` | POST `/api/agents/changelog` | Haiku | SSE stream | session, post |
+| `newsletter-writer` | POST `/api/agents/newsletter` | Opus | SSE stream | session, post |
+| `repurpose-writer` | POST `/api/agents/repurpose` | Opus | SSE stream | post, markdown |
+| `evidence-writer` | POST `/api/agents/evidence` | Opus | SSE stream | session, post |
 | `editor-chat` | POST `/api/agents/chat` | Opus | SSE stream | post, markdown |
+| `content-strategist` | Internal | Opus | JSON | analytics, session analysis |
+| `corpus-analyzer` | Internal | Opus | JSON | session corpus analysis |
+| `recommendations-analyzer` | Internal | Opus | JSON | performance analysis |
 | `style-learner` | Internal | Opus | JSON | workspace style analysis |
 
 ### Agentic Loop Pattern
@@ -218,6 +236,23 @@ event: error        { message }
 
 ---
 
+## Shared Modules
+
+**Core utilities** extracted to reduce duplication across components and pages:
+
+| Module | Exports | Used By |
+|---|---|---|
+| `lib/pipeline-status.ts` | `RunStatus`, `PipelineRun`, `statusBadgeClass()`, `statusLabel()` | Automation + Observability pages |
+| `lib/content-constants.tsx` | `STATUS_COLORS`, `TYPE_LABELS`, `STATUS_TABS`, `SeoScoreBadge` | Content page, list view, card components |
+
+**Content page components** (src/components/content/):
+- `ExportPanel` — Export + batch operations
+- `ContentListView` — Filtered post list with status tabs
+- `CalendarView` — Monthly calendar grid
+- `PipelineView` — Kanban-style columns
+
+---
+
 ## Content Lifecycle
 
 ```mermaid
@@ -248,15 +283,15 @@ stateDiagram-v2
 
 | View | Description |
 |---|---|
-| **List** | All posts with status tabs (All/Ideas/Drafts/In Review/Published/Archived), streak indicator |
+| **List** | All posts with status tabs (All/Ideas/Drafts/In Review/Published/Archived), streak indicator, series/collection filtering |
 | **Calendar** | Monthly grid with posts on dates, Published/Draft/AI Suggested Slot legend |
-| **Pipeline** | Kanban board: Idea -> Draft -> In Review -> Published columns |
+| **Pipeline** | Kanban board: Idea → Draft → In Review → Published columns with drag-and-drop |
 
 ---
 
 ## Database Schema
 
-59 tables in PostgreSQL via Drizzle ORM. Schema at `packages/db/src/schema.ts`.
+61 tables in PostgreSQL via Drizzle ORM. Schema at `packages/db/src/schema.ts`.
 
 ### Entity Relationship (Key Tables)
 
@@ -295,9 +330,31 @@ erDiagram
 
 ---
 
+## Navigation & UI
+
+### Sidebar (Desktop)
+**Main nav:** Dashboard → Sessions → Insights → Content → Analytics → Automation → Pipeline (Observability)
+**Settings:** Settings (gear icon, bottom)
+
+### Mobile Bottom Nav (4 items + More sheet)
+**Bottom bar:** Home → Sessions → Content → Automation → More (button)
+**More sheet:** Insights, Analytics, Pipeline (Observability), Settings
+
+### Middleware Redirects (Legacy route support)
+- `/[workspace]/series` → `/[workspace]/content?filter=series`
+- `/[workspace]/collections` → `/[workspace]/content?filter=collections`
+- `/[workspace]/recommendations` → `/[workspace]/insights`
+- `/[workspace]/settings/style` → `/[workspace]/settings?tab=style`
+- `/[workspace]/settings/api-keys` → `/[workspace]/settings?tab=api-keys`
+- `/[workspace]/settings/integrations` → `/[workspace]/settings?tab=integrations`
+- `/[workspace]/settings/webhooks` → `/[workspace]/settings?tab=webhooks`
+- `/[workspace]/settings/wordpress` → `/[workspace]/settings?tab=integrations`
+
+---
+
 ## API Routes
 
-100+ Route Handlers under `apps/dashboard/src/app/api/`.
+148 route files under `apps/dashboard/src/app/api/`.
 
 ### Core Routes
 
@@ -319,33 +376,65 @@ erDiagram
 |---|---|---|
 | GET/POST | `/api/schedule` | Publish queue management |
 | GET/POST | `/api/automation/triggers` | Trigger CRUD |
+| GET/POST | `/api/automation/runs` | Pipeline run tracking |
 | POST | `/api/automation/execute` | QStash webhook endpoint |
 | GET | `/api/content/streak` | Publishing streak data |
+
+### Observability & Events
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/observability/stream` | SSE stream for real-time pipeline events |
+| GET | `/api/observability/events` | Query historical observability events |
+
+### Scan Sources
+
+| Method | Path | Description |
+|---|---|---|
+| GET/POST | `/api/scan-sources` | List, add SSH scan sources |
+| PUT/DELETE | `/api/scan-sources/[id]` | Update, delete source |
+| POST | `/api/scan-sources/[id]/check` | Test source connectivity |
+
+### Cron
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/cron/automation` | Process all triggers (cron runner) |
 
 ### Integrations
 
 | Method | Path | Description |
 |---|---|---|
-| GET/POST/DELETE | `/api/integrations/hashnode` | Hashnode PAT |
 | GET/POST/DELETE | `/api/integrations/devto` | Dev.to API key |
+| POST | `/api/integrations/devto/publish` | Publish to Dev.to |
 | GET/POST/DELETE | `/api/integrations/medium` | Medium token |
+| GET | `/api/integrations/medium/oauth` | Medium OAuth initiation |
+| GET | `/api/integrations/medium/callback` | Medium OAuth callback |
+| POST | `/api/integrations/medium/publish` | Publish to Medium |
 | GET/POST/DELETE | `/api/integrations/ghost` | Ghost Admin API |
+| POST | `/api/integrations/ghost/publish` | Publish to Ghost |
 | GET/DELETE | `/api/integrations/github` | GitHub OAuth |
+| GET | `/api/integrations/github/repos` | List GitHub repos |
+| POST | `/api/integrations/github/sync` | Sync GitHub data |
 | GET/DELETE | `/api/integrations/twitter` | Twitter OAuth |
+| GET | `/api/integrations/twitter/oauth` | Twitter OAuth initiation |
+| GET | `/api/integrations/twitter/callback` | Twitter OAuth callback |
 | GET/DELETE | `/api/integrations/linkedin` | LinkedIn OAuth |
-| GET | `/api/integrations/*/oauth` | OAuth initiation |
-| GET | `/api/integrations/*/callback` | OAuth callback |
+| GET | `/api/integrations/linkedin/oauth` | LinkedIn OAuth initiation |
+| GET | `/api/integrations/linkedin/callback` | LinkedIn OAuth callback |
+| GET/PUT | `/api/workspace/[slug]/integrations` | Hashnode PAT (via workspace settings) |
 
 ### Analytics & Content Intelligence
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/analytics` | Social engagement metrics |
+| GET | `/api/analytics/social` | Social media performance stats |
+| POST | `/api/analytics/social/sync` | Sync social analytics |
 | GET/POST | `/api/series` | Series CRUD |
 | GET/POST | `/api/collections` | Collections CRUD |
 | GET/POST | `/api/recommendations` | AI recommendations |
-| GET | `/api/feed/[slug].xml` | RSS 2.0 feed |
-| GET | `/api/feed/[slug].atom` | Atom feed |
+| GET | `/api/feed/[...slug]` | RSS/Atom feed of published content |
 
 ---
 
@@ -377,6 +466,38 @@ flowchart LR
 **Token-based integrations** store credentials in per-workspace integration tables. Users paste tokens directly in Settings > Integrations.
 
 **OAuth integrations** use redirect-based flows. Twitter uses PKCE; LinkedIn uses standard OAuth 2.0. Tokens are stored after callback and used for analytics sync and publishing.
+
+---
+
+## Automation & Pipeline Visualization
+
+### Pipeline Runs
+
+Tracks end-to-end automation execution with granular status updates:
+
+```
+Status progression: pending → scanning → extracting → generating → complete (or failed)
+```
+
+Stores in `automation_pipeline_runs` table:
+- `status` — Current phase
+- `sessionsScanned` — Count of indexed sessions
+- `insightsExtracted` — Count of extracted insights
+- `postId` — Generated content ID (if applicable)
+- `durationMs` — Total execution time
+- `triggerName` — Source trigger name
+
+**Display:** Observability page shows real-time PipelineFlow visualization with status cards, historical run list, and event stream.
+
+### Shared Instrumentation
+
+`lib/observability/` — Event bus and instrumentation helpers:
+- `event-bus.ts` — In-process EventEmitter for pipeline stages
+- `instrument-query.ts` — Wrap Agent SDK queries with observability events
+- `instrument-pipeline.ts` — Emit stage-transition events during scanning/extraction/generation
+- `event-types.ts` — Structured event schema
+- `trace-context.ts` — Distributed tracing context propagation
+- `sse-broadcaster.ts` — Real-time SSE stream to frontend
 
 ---
 
