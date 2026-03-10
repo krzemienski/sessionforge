@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, triggerCreateSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
-import { createTriggerSchedule, createFileWatchSchedule } from "@/lib/qstash";
+import { createTriggerSchedule, createFileWatchSchedule, isQStashAvailable } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
 
@@ -69,38 +69,39 @@ export async function POST(req: Request) {
       })
       .returning();
 
-    let qstashScheduleId: string | null = null;
+    // Register with QStash if available, otherwise cron runner handles scheduling
+    if (isQStashAvailable()) {
+      let qstashScheduleId: string | null = null;
 
-    if (triggerType === "scheduled" && cronExpression) {
-      try {
-        qstashScheduleId = await createTriggerSchedule(trigger.id, cronExpression);
-
-        const [updated] = await db
-          .update(contentTriggers)
-          .set({ qstashScheduleId })
-          .where(eq(contentTriggers.id, trigger.id))
-          .returning();
-
-        return NextResponse.json(updated, { status: 201 });
-      } catch {
-        // QStash schedule creation failed — return trigger without scheduleId
+      if (triggerType === "scheduled" && cronExpression) {
+        try {
+          qstashScheduleId = await createTriggerSchedule(trigger.id, cronExpression);
+          const [updated] = await db
+            .update(contentTriggers)
+            .set({ qstashScheduleId })
+            .where(eq(contentTriggers.id, trigger.id))
+            .returning();
+          return NextResponse.json(updated, { status: 201 });
+        } catch (err) {
+          console.error("[triggers] QStash schedule creation failed:", err);
+        }
       }
-    }
 
-    if (triggerType === "file_watch") {
-      try {
-        qstashScheduleId = await createFileWatchSchedule(trigger.id);
-
-        const [updated] = await db
-          .update(contentTriggers)
-          .set({ qstashScheduleId, watchStatus: "watching" })
-          .where(eq(contentTriggers.id, trigger.id))
-          .returning();
-
-        return NextResponse.json(updated, { status: 201 });
-      } catch {
-        // QStash schedule creation failed — return trigger without scheduleId
+      if (triggerType === "file_watch") {
+        try {
+          qstashScheduleId = await createFileWatchSchedule(trigger.id);
+          const [updated] = await db
+            .update(contentTriggers)
+            .set({ qstashScheduleId, watchStatus: "watching" })
+            .where(eq(contentTriggers.id, trigger.id))
+            .returning();
+          return NextResponse.json(updated, { status: 201 });
+        } catch (err) {
+          console.error("[triggers] QStash file-watch schedule creation failed:", err);
+        }
       }
+    } else if (triggerType === "scheduled" && cronExpression) {
+      console.log(`[triggers] QStash unavailable — trigger "${trigger.name}" will be executed by /api/cron/automation`);
     }
 
     return NextResponse.json(trigger, { status: 201 });

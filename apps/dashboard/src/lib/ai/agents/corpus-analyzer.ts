@@ -49,7 +49,7 @@ export async function analyzeCorpus(
       systemPrompt: CORPUS_ANALYSIS_PROMPT,
       userMessage,
       mcpServer,
-      maxTurns: 25,
+      maxTurns: 35,
       traceId: input.traceId,
     },
     {

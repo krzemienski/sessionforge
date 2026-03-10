@@ -1,15 +1,18 @@
 import { db } from "@/lib/db";
 import {
   automationRuns,
+  claudeSessions,
   contentTriggers,
   insights,
+  scanSources,
   workspaces,
 } from "@sessionforge/db";
 import { and, eq, gte } from "drizzle-orm/sql";
 import { scanSessionFiles } from "@/lib/sessions/scanner";
-import { parseSessionFile } from "@/lib/sessions/parser";
-import { normalizeSession } from "@/lib/sessions/normalizer";
+import { parseSessionFile, parseSessionBuffer } from "@/lib/sessions/parser";
+import { normalizeSession, type NormalizedSession } from "@/lib/sessions/normalizer";
 import { indexSessions } from "@/lib/sessions/indexer";
+import { scanRemoteSessions } from "@/lib/sessions/ssh-scanner";
 import { analyzeCorpus } from "@/lib/ai/agents/corpus-analyzer";
 import { generateContent, type ContentType } from "@/lib/automation/content-generator";
 import { fireWebhookEvent } from "@/lib/webhooks/events";
@@ -62,14 +65,86 @@ export async function executePipeline(
     );
     const basePath = workspace.sessionBasePath ?? "~/.claude";
 
-    const files = await scanSessionFiles(lookbackDays, basePath);
+    // Pre-fetch already-indexed sessionIds to skip expensive re-parsing
+    const existingRows = await db
+      .select({ sessionId: claudeSessions.sessionId })
+      .from(claudeSessions)
+      .where(eq(claudeSessions.workspaceId, workspace.id));
+    const indexedIds = new Set(existingRows.map((r) => r.sessionId));
 
-    const normalized = await Promise.all(
-      files.map(async (meta) => {
-        const parsed = await parseSessionFile(meta.filePath);
-        return normalizeSession(meta, parsed);
-      })
+    // Run local file discovery and SSH source query in parallel
+    const [localFiles, remoteSrcRows] = await Promise.all([
+      scanSessionFiles(lookbackDays, basePath),
+      db
+        .select()
+        .from(scanSources)
+        .where(
+          and(
+            eq(scanSources.workspaceId, workspace.id),
+            eq(scanSources.enabled, true)
+          )
+        ),
+    ]);
+
+    // Filter out already-indexed local files before parsing
+    const newLocalFiles = localFiles.filter((f) => !indexedIds.has(f.sessionId));
+    console.log(
+      `[pipeline] Local: ${localFiles.length} found, ${newLocalFiles.length} new (${indexedIds.size} already indexed)`
     );
+
+    // Parse new local files in batches to limit memory pressure
+    const normalized: NormalizedSession[] = [];
+    const BATCH = 50;
+    for (let i = 0; i < newLocalFiles.length; i += BATCH) {
+      const batch = newLocalFiles.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map(async (meta) => {
+          try {
+            const parsed = await parseSessionFile(meta.filePath);
+            return normalizeSession(meta, parsed);
+          } catch {
+            return null;
+          }
+        })
+      );
+      for (const r of results) {
+        if (r) normalized.push(r);
+      }
+    }
+
+    // Scan remote SSH sources
+    for (const src of remoteSrcRows) {
+      try {
+        const { meta: remoteMeta, buffers } = await scanRemoteSessions(
+          {
+            host: src.host,
+            port: src.port ?? 22,
+            username: src.username,
+            encryptedPassword: src.encryptedPassword,
+            basePath: src.basePath ?? "~/.claude",
+            label: src.label,
+          },
+          lookbackDays,
+          indexedIds,
+        );
+        for (const m of remoteMeta) {
+          const buf = buffers.get(m.filePath);
+          if (buf) {
+            const parsed = await parseSessionBuffer(buf);
+            normalized.push(normalizeSession(m, parsed));
+          }
+        }
+        console.log(
+          `[pipeline] SSH ${src.label}: ${remoteMeta.length} new sessions downloaded`
+        );
+        await db
+          .update(scanSources)
+          .set({ lastScannedAt: new Date() })
+          .where(eq(scanSources.id, src.id));
+      } catch (err) {
+        console.error(`[pipeline] SSH scan failed for ${src.label} (${src.host}):`, err);
+      }
+    }
 
     const scanResult = await indexSessions(workspace.id, normalized);
 
@@ -97,7 +172,8 @@ export async function executePipeline(
       });
       insightsExtracted = corpusResult.insightCount;
       corpusSummary = corpusResult.text;
-    } catch {
+    } catch (err) {
+      console.error("[pipeline] Corpus analysis failed:", err instanceof Error ? err.message : err);
       // Corpus analysis failure is non-fatal — continue to generation
     }
 

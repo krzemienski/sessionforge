@@ -6,12 +6,19 @@ import { Client, Receiver } from "@upstash/qstash";
 //   UPSTASH_QSTASH_NEXT_SIGNING_KEY
 //   NEXT_PUBLIC_APP_URL (webhook callback URL)
 
-const isPlaceholderToken = !process.env.UPSTASH_QSTASH_TOKEN;
+const isPlaceholderToken =
+  !process.env.UPSTASH_QSTASH_TOKEN ||
+  process.env.UPSTASH_QSTASH_TOKEN === "placeholder";
 
 if (isPlaceholderToken) {
   console.warn(
-    "[qstash] UPSTASH_QSTASH_TOKEN not set — using placeholder. Scheduled triggers will fail at runtime."
+    "[qstash] QStash credentials not configured — scheduled triggers use /api/cron/automation fallback."
   );
+}
+
+/** Returns true when real QStash credentials are configured. */
+export function isQStashAvailable(): boolean {
+  return !isPlaceholderToken;
 }
 
 const qstashToken =

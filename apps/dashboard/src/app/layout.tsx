@@ -13,14 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var s=localStorage.getItem('sf-theme');var d=s==='dark'||(!s||s==='system')&&window.matchMedia('(prefers-color-scheme: dark)').matches;if(d){document.documentElement.classList.add('dark');}else{document.documentElement.classList.remove('dark');}})();`,
-          }}
-        />
-      </head>
+    <html lang="en" className="dark">
+      <head />
       <body className="bg-sf-bg-primary text-sf-text-primary antialiased">
         <Providers>{children}</Providers>
       </body>

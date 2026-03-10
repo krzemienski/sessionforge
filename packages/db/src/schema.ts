@@ -503,6 +503,28 @@ export const contentTriggers = pgTable(
   (table) => [index("triggers_workspaceId_idx").on(table.workspaceId)]
 );
 
+export const scanSources = pgTable(
+  "scan_sources",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    host: text("host").notNull(),
+    port: integer("port").default(22),
+    username: text("username").notNull(),
+    encryptedPassword: text("encrypted_password").notNull(),
+    basePath: text("base_path").default("~/.claude"),
+    enabled: boolean("enabled").default(true),
+    lastScannedAt: timestamp("last_scanned_at"),
+    hostFingerprint: text("host_fingerprint"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [index("scanSources_workspaceId_idx").on(table.workspaceId)]
+);
+
 export const apiKeys = pgTable(
   "api_keys",
   {
@@ -1621,6 +1643,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   twitterPublications: many(twitterPublications),
   linkedinPublications: many(linkedinPublications),
   socialAnalytics: many(socialAnalytics),
+  scanSources: many(scanSources),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -2355,3 +2378,10 @@ export const socialAnalyticsRelations = relations(
     }),
   })
 );
+
+export const scanSourcesRelations = relations(scanSources, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [scanSources.workspaceId],
+    references: [workspaces.id],
+  }),
+}));

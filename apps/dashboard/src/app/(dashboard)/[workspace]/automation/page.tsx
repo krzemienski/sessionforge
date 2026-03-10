@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
-import { Zap, Plus, Trash2, Play, Clock, Eye, PauseCircle, AlertCircle, Layers } from "lucide-react";
+import { Zap, Plus, Trash2, Play, Clock, Eye, PauseCircle, AlertCircle, Layers, Server } from "lucide-react";
 import Link from "next/link";
 import { cn, timeAgo } from "@/lib/utils";
 import { getNextRunTime, formatNextRun } from "@/lib/automation/cron-utils";
@@ -72,6 +72,16 @@ export default function AutomationPage() {
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const generateBatch = useGenerateContentBatch(workspace);
+
+  const sources = useQuery({
+    queryKey: ["scan-sources", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/scan-sources?workspace=${workspace}`);
+      if (!res.ok) return { sources: [] };
+      return res.json();
+    },
+  });
+  const sourceCount = (sources.data?.sources ?? []).filter((s: any) => s.enabled).length;
 
   const triggers = useQuery({
     queryKey: ["triggers", workspace],
@@ -155,11 +165,24 @@ export default function AutomationPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold font-display">Automation</h1>
-        {triggerList.length > 0 && (
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors">
-            <Plus size={16} /> New Trigger
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/${workspace}/settings?tab=sources`}
+            className="flex items-center gap-1.5 text-xs text-sf-text-muted hover:text-sf-text-primary transition-colors"
+          >
+            <Server size={13} />
+            {sourceCount > 0 ? (
+              <span><span className="text-sf-accent font-medium">{sourceCount}</span> remote source{sourceCount !== 1 ? "s" : ""}</span>
+            ) : (
+              <span>No remote sources</span>
+            )}
+          </Link>
+          {triggerList.length > 0 && (
+            <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors">
+              <Plus size={16} /> New Trigger
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Create Trigger Dialog */}
@@ -287,6 +310,12 @@ export default function AutomationPage() {
                           </span>
                           <span className="text-sf-text-muted">{run.startedAt ? timeAgo(run.startedAt) : "—"}</span>
                           {duration && <span className="text-sf-text-muted">· {duration}</span>}
+                          {run.sessionsScanned != null && (
+                            <span className="text-sf-text-muted">· {run.sessionsScanned} sessions</span>
+                          )}
+                          {run.insightsExtracted != null && run.insightsExtracted > 0 && (
+                            <span className="text-sf-text-muted">· {run.insightsExtracted} insights</span>
+                          )}
                           {run.postId && (
                             <Link href={`/${workspace}/content/${run.postId}`} className="text-sf-accent hover:underline ml-1">
                               View post →

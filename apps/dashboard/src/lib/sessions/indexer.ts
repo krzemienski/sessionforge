@@ -74,6 +74,8 @@ export async function indexSessions(
         startedAt: s.startedAt,
         endedAt: s.endedAt,
         durationSeconds: s.durationSeconds,
+        summary: s.summary,
+        rawMetadata: s.rawMetadata,
         scannedAt: new Date(),
       };
 

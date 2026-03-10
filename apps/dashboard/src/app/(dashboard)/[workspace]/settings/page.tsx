@@ -7,6 +7,7 @@ import { StyleTab } from "@/components/settings/style-tab";
 import { ApiKeysTab } from "@/components/settings/api-keys-tab";
 import { IntegrationsTab } from "@/components/settings/integrations-tab";
 import { WebhooksTab } from "@/components/settings/webhooks-tab";
+import { SourcesTab } from "@/components/settings/sources-tab";
 
 const TABS = [
   { id: "general", label: "General" },
@@ -14,6 +15,7 @@ const TABS = [
   { id: "api-keys", label: "API Keys" },
   { id: "integrations", label: "Integrations" },
   { id: "webhooks", label: "Webhooks" },
+  { id: "sources", label: "Sources" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -65,6 +67,7 @@ export default function SettingsPage() {
       {activeTab === "api-keys" && <ApiKeysTab workspace={workspace} />}
       {activeTab === "integrations" && <IntegrationsTab workspace={workspace} />}
       {activeTab === "webhooks" && <WebhooksTab workspace={workspace} />}
+      {activeTab === "sources" && <SourcesTab workspace={workspace} />}
     </div>
   );
 }

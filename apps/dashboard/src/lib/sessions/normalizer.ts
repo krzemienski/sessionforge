@@ -8,7 +8,7 @@
 
 import path from "path";
 import type { SessionFileMeta } from "./scanner";
-import type { ParsedSession } from "./parser";
+import type { ParsedSession, SampleMessage } from "./parser";
 
 /** A fully normalised session record combining file metadata and parsed content. */
 export interface NormalizedSession {
@@ -36,6 +36,10 @@ export interface NormalizedSession {
   endedAt: Date | null;
   /** Wall-clock duration in seconds, or `null` if start/end times are unavailable. */
   durationSeconds: number | null;
+  /** Auto-generated summary from the first user message(s) and metadata. */
+  summary: string | null;
+  /** Sample messages for corpus analysis, stored as rawMetadata in the DB. */
+  rawMetadata: { messages: SampleMessage[] } | null;
 }
 
 /**
@@ -82,5 +86,9 @@ export function normalizeSession(
     startedAt,
     endedAt,
     durationSeconds,
+    summary: parsed.summary,
+    rawMetadata: parsed.sampleMessages.length > 0
+      ? { messages: parsed.sampleMessages }
+      : null,
   };
 }

@@ -27,6 +27,10 @@ export function middleware(request: NextRequest) {
   if (segments.length < 2) return NextResponse.next();
 
   const workspace = segments[0];
+
+  // Never redirect API routes — /:workspace/ matchers can match /api/*
+  if (workspace === "api" || workspace === "_next") return NextResponse.next();
+
   const route = segments[1];
 
   // Top-level redirects: /:ws/series, /:ws/collections, /:ws/recommendations

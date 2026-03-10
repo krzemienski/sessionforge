@@ -26,7 +26,8 @@ const STAGES = [
     statusKey: "scanning" as RunStatus,
     description: "Discover and parse session files",
     agents: [
-      { name: "scanSessionFiles", role: "Find session files in lookback window" },
+      { name: "scanSessionFiles", role: "Find local session files in lookback window" },
+      { name: "ssh-scanner", role: "Scan remote hosts via SSH/SFTP" },
       { name: "parseSessionFile", role: "Parse JSONL transcripts" },
       { name: "normalizeSession", role: "Normalize metadata + content" },
       { name: "indexSessions", role: "Store in database with deduplication" },

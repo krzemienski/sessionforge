@@ -110,7 +110,8 @@ export async function listSessionsByTimeframe(
     })
     .from(claudeSessions)
     .where(and(...conditions))
-    .orderBy(desc(claudeSessions.startedAt));
+    .orderBy(desc(claudeSessions.startedAt))
+    .limit(500);
 
   if (projectFilter) {
     return results

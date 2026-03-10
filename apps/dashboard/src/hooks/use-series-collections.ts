@@ -18,7 +18,7 @@ export function useSeries(workspace: string) {
   return useQuery<{ series: GroupItem[] }>({
     queryKey: ["series", workspace],
     queryFn: async () => {
-      const res = await fetch(`/api/series?workspace=${workspace}`);
+      const res = await fetch(`/api/series?workspace=${workspace}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch series");
       return res.json();
     },
@@ -30,7 +30,7 @@ export function useCollections(workspace: string) {
   return useQuery<{ collections: GroupItem[] }>({
     queryKey: ["collections", workspace],
     queryFn: async () => {
-      const res = await fetch(`/api/collections?workspace=${workspace}`);
+      const res = await fetch(`/api/collections?workspace=${workspace}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch collections");
       return res.json();
     },

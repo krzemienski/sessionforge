@@ -9,6 +9,13 @@ import readline from "readline";
 import { createReadStream } from "fs";
 import { Readable } from "stream";
 
+/** A compact user/assistant message extracted from the session for corpus analysis. */
+export interface SampleMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+}
+
 /** Structured summary of the events recorded in a single Claude session file. */
 export interface ParsedSession {
   /** Total number of human and assistant messages in the session. */
@@ -25,6 +32,10 @@ export interface ParsedSession {
   startedAt: Date | null;
   /** Timestamp of the latest event in the file, or `null` if none found. */
   endedAt: Date | null;
+  /** Auto-generated summary from the first user message(s). */
+  summary: string | null;
+  /** Sample messages for corpus analysis (first 3 user + first 2 assistant, truncated). */
+  sampleMessages: SampleMessage[];
 }
 
 /**
@@ -49,11 +60,20 @@ function extractTimestamp(entry: Record<string, unknown>): Date | null {
   return null;
 }
 
+/** Max chars per sample message to keep DB size manageable. */
+const MAX_MESSAGE_LENGTH = 800;
+/** Max user messages to sample. */
+const MAX_USER_SAMPLES = 3;
+/** Max assistant messages to sample. */
+const MAX_ASSISTANT_SAMPLES = 2;
+
 /** Internal mutable state used during line-by-line parsing. */
 interface ParseState {
   result: ParsedSession;
   toolsSet: Set<string>;
   filesSet: Set<string>;
+  userSamples: SampleMessage[];
+  assistantSamples: SampleMessage[];
 }
 
 function createParseState(): ParseState {
@@ -66,9 +86,13 @@ function createParseState(): ParseState {
       costUsd: 0,
       startedAt: null,
       endedAt: null,
+      summary: null,
+      sampleMessages: [],
     },
     toolsSet: new Set<string>(),
     filesSet: new Set<string>(),
+    userSamples: [],
+    assistantSamples: [],
   };
 }
 
@@ -94,13 +118,56 @@ function processLine(line: string, state: ParseState): void {
     if (!state.result.endedAt || ts > state.result.endedAt) state.result.endedAt = ts;
   }
 
-  if (type === "human" || type === "assistant") {
+  if (type === "human" || type === "user" || type === "assistant") {
     state.result.messageCount++;
+
+    if (type === "human" || type === "user") {
+      // Capture sample user messages for corpus analysis
+      if (state.userSamples.length < MAX_USER_SAMPLES) {
+        const msg = entry.message as string | Record<string, unknown> | undefined;
+        let text = "";
+        if (typeof msg === "string") {
+          text = msg;
+        } else if (msg && typeof msg === "object") {
+          const content = (msg as Record<string, unknown>).content;
+          if (typeof content === "string") {
+            text = content;
+          } else if (Array.isArray(content)) {
+            text = content
+              .filter((b: unknown) => typeof b === "object" && b !== null && (b as Record<string, unknown>).type === "text")
+              .map((b: unknown) => (b as Record<string, unknown>).text as string)
+              .join("\n");
+          }
+        }
+        if (text.length > 0) {
+          state.userSamples.push({
+            role: "user",
+            content: text.slice(0, MAX_MESSAGE_LENGTH),
+            timestamp: ts?.toISOString(),
+          });
+        }
+      }
+    }
 
     if (type === "assistant") {
       const msg = entry.message as Record<string, unknown> | undefined;
       const content = msg?.content;
       if (Array.isArray(content)) {
+        // Capture sample assistant text for corpus analysis
+        if (state.assistantSamples.length < MAX_ASSISTANT_SAMPLES) {
+          const textBlocks = content
+            .filter((b: unknown) => typeof b === "object" && b !== null && (b as Record<string, unknown>).type === "text")
+            .map((b: unknown) => (b as Record<string, unknown>).text as string);
+          const text = textBlocks.join("\n");
+          if (text.length > 0) {
+            state.assistantSamples.push({
+              role: "assistant",
+              content: text.slice(0, MAX_MESSAGE_LENGTH),
+              timestamp: ts?.toISOString(),
+            });
+          }
+        }
+
         for (const block of content) {
           if (!block || typeof block !== "object") continue;
           const b = block as Record<string, unknown>;
@@ -134,12 +201,38 @@ function processLine(line: string, state: ParseState): void {
   }
 }
 
-/** Finalizes parse state by converting sets to arrays. */
+/** Finalizes parse state by converting sets to arrays and generating summary. */
 function finalizeState(state: ParseState): ParsedSession {
+  // Interleave user/assistant samples in conversation order
+  const sampleMessages: SampleMessage[] = [];
+  const maxLen = Math.max(state.userSamples.length, state.assistantSamples.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < state.userSamples.length) sampleMessages.push(state.userSamples[i]);
+    if (i < state.assistantSamples.length) sampleMessages.push(state.assistantSamples[i]);
+  }
+
+  // Generate summary from first user message + metadata
+  const firstUserMsg = state.userSamples[0]?.content ?? "";
+  const toolsList = Array.from(state.toolsSet);
+  const filesList = Array.from(state.filesSet);
+
+  let summary: string | null = null;
+  if (firstUserMsg.length > 0) {
+    const parts = [`Task: ${firstUserMsg.slice(0, 300)}`];
+    if (toolsList.length > 0) parts.push(`Tools: ${toolsList.slice(0, 10).join(", ")}`);
+    if (filesList.length > 0) parts.push(`Files modified: ${filesList.slice(0, 8).join(", ")}`);
+    if (state.result.errorsEncountered.length > 0) {
+      parts.push(`Errors: ${state.result.errorsEncountered.slice(0, 3).join("; ").slice(0, 200)}`);
+    }
+    summary = parts.join(". ");
+  }
+
   return {
     ...state.result,
-    toolsUsed: Array.from(state.toolsSet),
-    filesModified: Array.from(state.filesSet),
+    toolsUsed: toolsList,
+    filesModified: filesList,
+    summary,
+    sampleMessages,
   };
 }
 
