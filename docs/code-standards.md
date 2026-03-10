@@ -450,6 +450,125 @@ When adding new shared utilities, place them in the appropriate existing module 
 
 ---
 
+## Design Patterns
+
+### SSE Streaming Pattern
+
+Server-sent events for real-time progress updates in long-running operations. Used for pipeline analysis, agent execution, and content generation.
+
+**Server side** (`api/pipeline/analyze/route.ts`):
+```typescript
+// Create ReadableStream with TextEncoder
+const encoder = new TextEncoder();
+const stream = new ReadableStream({
+  start(controller) {
+    const send = (event: PipelineEvent) => {
+      const data = JSON.stringify({ ...event, runId: newRun.id });
+      controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+    };
+
+    // Start async work, emit progress via send()
+    executePipeline({ runId, workspace, onProgress: send })
+      .then(() => controller.close())
+      .catch((err) => {
+        send({ stage: "failed", message: err.message });
+        controller.close();
+      });
+  },
+});
+
+return new Response(stream, {
+  headers: {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  },
+});
+```
+
+**Client side** (`hooks/use-analysis-pipeline.ts`):
+- Use `fetch()` with AbortController for stream management
+- TextDecoder to parse incoming chunks
+- Split on `\n\n` boundaries and parse `data: ` prefix
+- Update React state with each event (immutable state updates)
+- Call `reader.read()` in loop until `done` flag
+
+**When to use:** Long operations (30s+) where users need live feedback. Not suitable for quick operations or batch processing.
+
+### Pipeline Orchestration with onProgress Callback
+
+Decouple progress emission from execution. Pass `onProgress` callback to executors.
+
+**Pattern** (`lib/automation/pipeline.ts`):
+```typescript
+export interface PipelineEvent {
+  stage: "scanning" | "extracting" | "generating" | "complete" | "failed";
+  message: string;
+  data?: Record<string, unknown>;
+}
+
+export interface ExecutePipelineOptions {
+  runId: string;
+  workspace: Workspace;
+  lookbackDays?: number;
+  onProgress?: (event: PipelineEvent) => void;
+}
+
+export async function executePipeline(opts: ExecutePipelineOptions) {
+  const emit = (event: PipelineEvent) => opts.onProgress?.(event);
+
+  // At each stage transition
+  emit({ stage: "scanning", message: "Starting..." });
+  // Do work
+  emit({ stage: "scanning", message: "Found X sessions", data: { count: X } });
+  // Next stage
+  emit({ stage: "extracting", message: "..." });
+}
+```
+
+**Advantages:** Callback is optional, enables both polling and streaming, testable without mocks.
+
+### Quality Gate Scoring Pattern
+
+Composite score across multiple weighted dimensions. Used in insights and content analysis.
+
+**Pattern** (from mcp-server-factory.ts create_insight schema):
+```typescript
+scores: z.object({
+  novelty: z.number(),              // 0-100 domain novelty
+  tool_discovery: z.number(),        // 0-100 new tools/patterns
+  before_after: z.number(),          // 0-100 transformation clarity
+  failure_recovery: z.number(),      // 0-100 learning value
+  reproducibility: z.number(),       // 0-100 repeatable steps
+  scale: z.number(),                 // 0-100 impact/scope
+})
+```
+
+Compute composite as weighted average of dimensions. Normalized to 0-100 range. Store individual scores for UI filtering and trending analysis.
+
+### Graceful Database Fallback Pattern
+
+Try database operation, fall back to defaults on failure without blocking user.
+
+**Pattern** (from templates route, seo generator):
+```typescript
+try {
+  const templates = await db.query.templates.findMany({ ... });
+  return NextResponse.json({ templates });
+} catch (err) {
+  console.error("[templates] DB query failed:", err);
+  // Return built-in templates as fallback
+  return NextResponse.json({
+    templates: getBuiltInTemplates(),
+    cached: true
+  });
+}
+```
+
+**When to use:** Read operations where failure is non-critical. Cache busts on DB recovery. Never use for writes.
+
+---
+
 ## UI Library
 
 - **Component library:** shadcn/ui (Radix primitives + Tailwind)

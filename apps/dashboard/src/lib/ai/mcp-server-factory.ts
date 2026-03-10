@@ -270,6 +270,13 @@ const TOOL_SCHEMAS: Record<string, { description: string; schema: z.AnyZodObject
 
 /**
  * Creates an MCP tool instance that routes to the appropriate handler.
+ * Wraps handler functions with Zod schema validation and error handling.
+ *
+ * @param toolName - Name of the tool (e.g., "get_session_messages").
+ * @param workspaceId - Workspace ID passed to the handler.
+ * @returns Agent SDK tool() instance ready for query().
+ * @throws {Error} If toolName has no schema or group mapping.
+ * @private
  */
 function createMcpTool(
   toolName: string,
@@ -311,6 +318,12 @@ function createMcpTool(
 
 /**
  * Returns the list of tool names for a given tool group.
+ *
+ * @param group - Tool group identifier (e.g., "session", "insight", "post").
+ * @returns Array of tool names belonging to the group.
+ * @example
+ * getToolNamesForGroup("session") // ["get_session_messages", "get_session_summary", ...]
+ * @private
  */
 function getToolNamesForGroup(group: string): string[] {
   return Object.entries(TOOL_NAME_TO_GROUP)
@@ -320,10 +333,21 @@ function getToolNamesForGroup(group: string): string[] {
 
 /**
  * Creates an MCP server configured with the appropriate tools for the given agent type.
+ * Looks up the agent's tool groups from AGENT_TOOL_GROUPS and bundles all required tools.
  *
- * @param agentType - The agent whose tools should be provided.
+ * @param agentType - The agent type (e.g., "blog-writer", "corpus-analyzer").
  * @param workspaceId - The workspace context for tool execution.
- * @returns A configured MCP server ready to pass to query().
+ * @returns Configured Agent SDK MCP server ready for query().
+ * @throws {Error} If agentType is unknown.
+ * @example
+ * const mcpServer = createAgentMcpServer("blog-writer", workspaceId);
+ * const result = await runAgentStreaming({
+ *   agentType: "blog-writer",
+ *   workspaceId,
+ *   systemPrompt: "...",
+ *   userMessage: "...",
+ *   mcpServer,
+ * });
  */
 export function createAgentMcpServer(agentType: AgentType, workspaceId: string) {
   const groups = AGENT_TOOL_GROUPS[agentType];
@@ -343,11 +367,14 @@ export function createAgentMcpServer(agentType: AgentType, workspaceId: string) 
 
 /**
  * Creates an MCP server with a custom set of tool groups.
- * Useful for non-standard agent configurations (e.g., content-generator, API route).
+ * Useful for non-standard agent configurations (e.g., content-generator, API routes).
  *
- * @param name - Server name for identification.
- * @param toolGroups - Array of tool group names to include.
+ * @param name - Server name for identification (used in logs and observability).
+ * @param toolGroups - Array of tool group identifiers to include (e.g., ["session", "insight", "post"]).
  * @param workspaceId - The workspace context for tool execution.
+ * @returns Configured Agent SDK MCP server ready for query().
+ * @example
+ * const mcpServer = createCustomMcpServer("content-gen", ["session", "insight", "post"], workspaceId);
  */
 export function createCustomMcpServer(
   name: string,

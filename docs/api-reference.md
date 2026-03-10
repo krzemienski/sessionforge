@@ -1,6 +1,6 @@
 # SessionForge API Reference
 
-The SessionForge dashboard provides 148 route files across 15 functional domains. This reference documents the key endpoints and authentication mechanisms.
+The SessionForge dashboard provides 150+ route files across 16 functional domains. This reference documents the key endpoints and authentication mechanisms.
 
 ## Authentication
 
@@ -334,7 +334,131 @@ Monitor active pipeline runs and observe system state.
 
 ---
 
-## 14. Other Endpoints
+## 13a. Pipeline
+
+Execute unified content analysis pipelines with streaming progress events.
+
+| Route | Method | Auth | Streaming | Purpose |
+|-------|--------|------|-----------|---------|
+| `/api/pipeline/analyze` | POST | Session | SSE | Analyze sessions and generate content (unified pipeline) |
+
+**Request body (POST /api/pipeline/analyze):**
+```json
+{
+  "workspaceSlug": "my-workspace",
+  "lookbackDays": 90
+}
+```
+
+**Response: SSE stream with stage events**
+```json
+{
+  "stage": "scanning",
+  "message": "Pipeline started",
+  "runId": "uuid"
+}
+```
+
+**Pipeline stages:** `scanning`, `extracting`, `generating`, `complete`, `failed`
+
+**Error responses:**
+- `409 Conflict` — Analysis already in progress for workspace
+- Returns `runId` of existing active run
+
+---
+
+## 14. Templates
+
+Manage content templates: built-in templates and workspace-specific custom templates.
+
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/templates` | GET | Session | List built-in and custom templates |
+| `/api/templates` | POST | Session | Create custom template |
+
+**Request (GET /api/templates):**
+```
+Query params: workspaceSlug (required)
+```
+
+**Response (GET /api/templates):**
+```json
+{
+  "templates": [
+    {
+      "id": "blog-post",
+      "workspaceId": null,
+      "name": "Blog Post",
+      "slug": "blog-post",
+      "templateType": "built_in",
+      "contentType": "blog_post",
+      "description": "Structure for technical blog posts",
+      "structure": "...",
+      "toneGuidance": "...",
+      "exampleContent": "...",
+      "isActive": true,
+      "createdBy": null,
+      "usageCount": 0
+    },
+    {
+      "id": "uuid",
+      "workspaceId": "workspace-id",
+      "name": "Custom Template",
+      "slug": "custom-template",
+      "templateType": "custom",
+      "contentType": "blog_post",
+      "description": "My custom template",
+      "structure": "...",
+      "toneGuidance": "...",
+      "exampleContent": "...",
+      "isActive": true,
+      "createdBy": "user-id",
+      "usageCount": 0
+    }
+  ]
+}
+```
+
+**Request body (POST /api/templates):**
+```json
+{
+  "workspaceSlug": "my-workspace",
+  "name": "My Custom Template",
+  "slug": "my-custom-template",
+  "contentType": "blog_post",
+  "description": "Custom template for technical posts",
+  "structure": "Optional structure guide...",
+  "toneGuidance": "Optional tone guidance...",
+  "exampleContent": "Optional example content..."
+}
+```
+
+**Response (POST /api/templates):**
+```json
+{
+  "template": {
+    "id": "uuid",
+    "workspaceId": "workspace-id",
+    "name": "My Custom Template",
+    "slug": "my-custom-template",
+    "templateType": "custom",
+    "contentType": "blog_post",
+    "description": "Custom template for technical posts",
+    "structure": "...",
+    "toneGuidance": "...",
+    "exampleContent": "...",
+    "isActive": true,
+    "createdBy": "user-id",
+    "usageCount": 0
+  }
+}
+```
+
+**Fallback behavior:** If database query fails, GET returns built-in templates only.
+
+---
+
+## 15. Other Endpoints
 
 | Route | Method | Auth | Purpose |
 |-------|--------|------|---------|
@@ -396,4 +520,4 @@ The complete OpenAPI 3.0 schema for the v1 public API is available at `/api/v1/o
 ---
 
 **Last Updated:** March 2026
-**Total Route Files:** 148
+**Total Route Files:** 150+

@@ -9,12 +9,13 @@ SessionForge extracts technical insights from your Claude Code sessions and auto
 ## Key Features
 
 - **Session Scanning Pipeline** — Index JSONL transcripts from `~/.claude/` (local or SSH remote) into structured database records
-- **12 AI Agents** — Blog writer, social content, newsletter, changelog, evidence, content repurpose, editor chat, insight extractor, content strategist, corpus analyzer, recommendations analyzer, and style learner (powered by Claude Opus + Haiku)
+- **6 AI Agents** — Blog writer, social content, newsletter, changelog, content repurpose, and editor chat (powered by Claude Opus + Haiku)
 - **7 Content Types** — Blog posts, Twitter threads, LinkedIn posts, Dev.to articles, changelogs, newsletters, and custom formats
 - **Multi-Platform Publishing** — Hashnode, WordPress, Dev.to, Ghost, Medium, Twitter/X, LinkedIn with one-click scheduling
 - **AI-Powered Editor** — Lexical rich text with streaming AI chat, split view, and revision history
 - **SEO Analysis** — Readability scoring, keyword optimization, and meta tag generation
-- **Automation Pipeline** — QStash-scheduled scanning, extraction, and generation with observable run logs
+- **Unified Pipeline** — QStash-scheduled scanning, extraction, and generation with SSE progress streaming and observable run logs
+- **Start Analysis** — Configurable lookback window for automated content extraction and recommendations
 - **Analytics Dashboard** — Social engagement metrics and publishing streak tracking
 - **Workspace Isolation** — Multiple projects per user with per-workspace configuration
 
@@ -27,7 +28,7 @@ SessionForge extracts technical insights from your Claude Code sessions and auto
 | **Server State** | TanStack Query v5 |
 | **Client State** | React Context + useState |
 | **Auth** | better-auth (email + GitHub/LinkedIn OAuth) |
-| **Database** | PostgreSQL (Neon serverless) + Drizzle ORM (61 tables) |
+| **Database** | PostgreSQL (Neon serverless) + Drizzle ORM (30 tables) |
 | **Queue/Scheduling** | Upstash QStash |
 | **Cache** | Upstash Redis |
 | **AI** | @anthropic-ai/claude-agent-sdk (zero API keys — inherits from CLI) |
@@ -39,7 +40,7 @@ SessionForge extracts technical insights from your Claude Code sessions and auto
 ```
 sessionforge/
 ├── apps/
-│   └── dashboard/                  # Next.js 15 application
+│   └── dashboard/                  # Next.js 15 application (21 user-facing pages)
 │       ├── src/
 │       │   ├── app/
 │       │   │   ├── (auth)/         # Login / signup pages
@@ -51,11 +52,11 @@ sessionforge/
 │       │   │   │   ├── automation/    # Trigger management
 │       │   │   │   ├── observability/ # Pipeline status + visualization
 │       │   │   │   └── settings/      # General, Style, API Keys, Integrations, Webhooks, Sources
-│       │   │   └── api/            # 138 internal + 10 public v1 routes
+│       │   │   └── api/            # 149 internal + 10 public v1 routes
 │       │   ├── components/         # React UI components
 │       │   └── lib/
 │       │       ├── sessions/       # Scanner → Parser → Normalizer → Indexer + SSH scanner
-│       │       ├── ai/             # 12 agents, tools, prompts, orchestration
+│       │       ├── ai/             # 6 agents, tools, prompts, orchestration
 │       │       ├── integrations/   # Platform clients (Dev.to, Ghost, GitHub, etc)
 │       │       ├── automation/     # Pipeline execution engine
 │       │       ├── observability/  # Event bus, instrumentation, SSE broadcaster
@@ -66,7 +67,7 @@ sessionforge/
 │       └── package.json
 └── packages/
     └── db/                         # Shared Drizzle schema
-        └── src/schema.ts           # 61 tables, enums, relations
+        └── src/schema.ts           # 30 tables, enums, relations
 ```
 
 ## Getting Started
@@ -140,7 +141,7 @@ Key concepts:
 
 ## API
 
-SessionForge exposes 138 internal routes and 10 public v1 API routes for programmatic access.
+SessionForge exposes 149 internal routes and 10 public v1 API routes for programmatic access.
 
 ### Public API (v1)
 

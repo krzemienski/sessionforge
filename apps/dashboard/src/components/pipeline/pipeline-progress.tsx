@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Progress visualization component for pipeline execution.
+ * Displays a stage timeline with icons, messages, and final results.
+ * Updates in real-time as events stream in from the pipeline.
+ */
+
 import {
   Search,
   Brain,
@@ -11,6 +17,14 @@ import {
 import { cn } from "@/lib/utils";
 import type { PipelineEvent } from "@/hooks/use-analysis-pipeline";
 
+/**
+ * Props for PipelineProgress component.
+ * @property {PipelineEvent[]} events - All events received from the pipeline.
+ * @property {string | null} currentStage - Currently active stage (determines visual state).
+ * @property {boolean} isRunning - Whether pipeline is actively executing.
+ * @property {string | null} error - Error message if pipeline failed.
+ * @property {Object | null} result - Final results (null until complete).
+ */
 interface PipelineProgressProps {
   events: PipelineEvent[];
   currentStage: PipelineEvent["stage"] | null;
@@ -24,12 +38,22 @@ interface PipelineProgressProps {
   } | null;
 }
 
+/**
+ * Metadata for each pipeline stage: key, UI label, and icon component.
+ */
 const STAGE_META = [
   { key: "scanning" as const, label: "Scanning Sessions", icon: Search },
   { key: "extracting" as const, label: "Extracting Insights", icon: Brain },
   { key: "generating" as const, label: "Generating Content", icon: PenTool },
 ] as const;
 
+/**
+ * Determines the visual state of a stage based on the current pipeline progress.
+ * @param {string} stageKey - The stage identifier to check.
+ * @param {string | null} currentStage - The currently executing stage.
+ * @param {boolean} isRunning - Whether the pipeline is still running.
+ * @returns {"pending" | "active" | "done" | "failed"} Visual state for styling.
+ */
 function stageState(
   stageKey: string,
   currentStage: string | null,
@@ -48,6 +72,28 @@ function stageState(
   return "pending";
 }
 
+/**
+ * Renders a visual timeline of pipeline execution progress.
+ *
+ * Displays each stage (scanning, extracting, generating) with:
+ * - Icon and label
+ * - Active/done/failed/pending state
+ * - Messages from all events for that stage
+ * - Summary stats on completion (sessions scanned, insights extracted, duration)
+ * - Error detail if pipeline failed
+ *
+ * @component
+ * @example
+ * return (
+ *   <PipelineProgress
+ *     events={events}
+ *     currentStage={currentStage}
+ *     isRunning={isRunning}
+ *     error={error}
+ *     result={result}
+ *   />
+ * );
+ */
 export function PipelineProgress({
   events,
   currentStage,

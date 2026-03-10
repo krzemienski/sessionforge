@@ -71,10 +71,17 @@ Comprehensive reference for library modules under `apps/dashboard/src/lib/`.
 
 | Module | Purpose | Key Exports |
 |--------|---------|------------|
-| `automation/pipeline.ts` | 3-stage orchestrator: scan (local + SSH), extract (corpus analysis), generate (content). Manages run lifecycle with observability. | `executePipeline()`, `lookbackWindowToDays()` |
+| `automation/pipeline.ts` | 3-stage orchestrator: scan (local + SSH), extract (corpus analysis), generate (content). Manages run lifecycle with observability. Emits `PipelineEvent` via `onProgress` callback for real-time progress updates. | `executePipeline()`, `ExecutePipelineOptions`, `PipelineEvent`, `lookbackWindowToDays()` |
 | `automation/content-generator.ts` | Content generation engine that creates posts from insights using agent writers. | `generateContent()`, `ContentType` |
 | `automation/cron-utils.ts` | Cron expression utilities. | Cron helpers |
 | `automation/file-watcher.ts` | File system monitoring for automated triggers. | File watcher utilities |
+
+### Pipeline UI & Hooks
+
+| Module | Purpose | Key Exports |
+|--------|---------|------------|
+| `hooks/use-analysis-pipeline.ts` | React hook for pipeline SSE client integration. Manages connection, event streaming, and state lifecycle. Returns pipeline state, `startAnalysis()` callback, and abort `cancel()` function. | `useAnalysisPipeline()`, `PipelineEvent`, `AnalysisPipelineState` |
+| `components/pipeline/pipeline-progress.tsx` | Pipeline progress visualization component displaying 3-stage timeline with icons, live messages, and result summary. Renders completion/error states. | `PipelineProgress`, `PipelineProgressProps` |
 
 ### Queue & Job Management
 

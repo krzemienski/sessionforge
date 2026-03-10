@@ -1,7 +1,7 @@
 # SessionForge Architecture
 
-**Version:** 0.5.1-alpha
-**Updated:** 2026-03-09
+**Version:** 0.5.2-alpha
+**Updated:** 2026-03-10
 
 ---
 
@@ -12,14 +12,15 @@
 3. [Tech Stack](#tech-stack)
 4. [Session Scanning Pipeline](#session-scanning-pipeline)
 5. [AI Agent Pipeline](#ai-agent-pipeline)
-6. [Shared Modules](#shared-modules)
-7. [Content Lifecycle](#content-lifecycle)
-8. [Database Schema](#database-schema)
-9. [Navigation & UI](#navigation--ui)
-10. [API Routes](#api-routes)
-11. [Integration Architecture](#integration-architecture)
-12. [Automation & Pipeline Visualization](#automation--pipeline-visualization)
-13. [Key Design Decisions](#key-design-decisions)
+6. [Unified Analysis Pipeline](#unified-analysis-pipeline)
+7. [Shared Modules](#shared-modules)
+8. [Content Lifecycle](#content-lifecycle)
+9. [Database Schema](#database-schema)
+10. [Navigation & UI](#navigation--ui)
+11. [API Routes](#api-routes)
+12. [Integration Architecture](#integration-architecture)
+13. [Automation & Pipeline Visualization](#automation--pipeline-visualization)
+14. [Key Design Decisions](#key-design-decisions)
 
 ---
 
@@ -233,6 +234,108 @@ event: text         { content }
 event: complete     { usage }
 event: error        { message }
 ```
+
+---
+
+## Unified Analysis Pipeline
+
+The **Unified Analysis Pipeline** coordinates session scanning, corpus analysis, and content generation into a single workflow. Triggered from the Insights page via "Start Analysis" button or from automation triggers.
+
+### Pipeline Architecture
+
+```
+POST /api/pipeline/analyze
+↓
+Route creates run record (source: "manual" or trigger-initiated)
+↓
+Stream progress events via SSE
+↓
+executePipeline({ runId, workspace, lookbackDays, onProgress })
+  ├─ SCANNING STAGE: Scan local + SSH sources in parallel
+  │  ├─ scanSessionFiles() — Discover JSONL in ~/.claude
+  │  ├─ scanRemoteSessions() — SSH source discovery
+  │  ├─ Parse + normalize in batches (50 files per batch)
+  │  └─ indexSessions() — Upsert to DB
+  │
+  ├─ EXTRACTING STAGE: Analyze session corpus holistically
+  │  ├─ analyzeCorpus() — Claude Opus agent
+  │  ├─ Corpus Analysis Prompt — Identify cross-session patterns
+  │  ├─ Quality gate: composite score >= 15 (weighted 6-dimension scoring)
+  │  └─ create_insight tool — Agent calls to record patterns
+  │
+  └─ GENERATING STAGE: Generate content from extracted insights
+     ├─ generateContent() — Invoke content writer agents
+     ├─ Use newInsightIds from extraction phase
+     └─ Create post record and return postId
+↓
+Update run record (status, duration, counts)
+↓
+Fire automation.completed webhook
+```
+
+### Frontend Integration
+
+**Hook:** `useAnalysisPipeline(workspaceSlug)`
+- Manages SSE connection, event buffering, and state
+- Exposes `startAnalysis(lookbackDays?)`, `cancel()`, and state: `{ events, currentStage, isRunning, error, result }`
+
+**Component:** `PipelineProgress`
+- Renders 3-stage timeline (Scanning → Extracting → Generating)
+- Shows real-time event messages and result summary
+- Error detail display on failure
+- Duration counter on completion
+
+### Corpus Analysis (Extraction Phase)
+
+Enhanced analysis prompt (`lib/ai/prompts/corpus-analysis.ts`) instructs Claude Opus to:
+
+1. **Survey Phase** (1-2 turns): Call `list_sessions_by_timeframe` once, scan for top 5 sessions by:
+   - High message counts (deep work)
+   - Many errors (debugging stories)
+   - Many files (major refactors)
+   - Temporal clustering (intensity indicator)
+
+2. **Deep-Dive Phase** (5-8 turns): Call `get_session_summary` on top 5 picks, `get_session_messages` on 2-3 most promising
+
+3. **Create Insights Phase** (remaining turns): Call `create_insight` for each cross-session pattern (target 3-5 insights)
+
+### Quality Gate Scoring
+
+Each insight is scored across 6 weighted dimensions:
+
+| Dimension | Weight | Scale | Meaning |
+|---|---|---|---|
+| `novelty` | 3 | 0-10 | How novel/surprising? |
+| `tool_discovery` | 3 | 0-10 | Creative tool usage? |
+| `before_after` | 2 | 0-10 | Clear transformation? |
+| `failure_recovery` | 3 | 0-10 | Interesting recovery arc? |
+| `reproducibility` | 1 | 0-10 | Can others reproduce? |
+| `scale` | 1 | 0-10 | Real-world applicability? |
+
+**Composite = (novelty×3) + (tool_discovery×3) + (before_after×2) + (failure_recovery×3) + (reproducibility×1) + (scale×1)**
+- Max possible: 130 (capped at 65)
+- **Threshold: >= 15 to publish**
+
+### Lookback Window
+
+Default: 90 days (configurable per manual run or automation trigger)
+
+Mappings:
+- `current_day` → 1 day
+- `last_7_days` → 7 days
+- `last_30_days` → 30 days
+- `last_90_days` → 90 days
+- `all_time` → 36500 days
+
+### Database State
+
+Tracks in `automation_pipeline_runs` table:
+- `status` — pending, scanning, extracting, generating, complete, or failed
+- `sessionsScanned` — Count of indexed sessions
+- `insightsExtracted` — Count of created insights
+- `postId` — Generated content ID (if applicable)
+- `durationMs` — Total execution time
+- `errorMessage` — Error detail (if failed)
 
 ---
 

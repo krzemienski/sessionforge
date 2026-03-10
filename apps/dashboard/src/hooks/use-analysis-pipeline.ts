@@ -1,7 +1,20 @@
 "use client";
 
+/**
+ * React hook for managing pipeline analysis via SSE streaming.
+ * Handles connection to /api/pipeline/analyze, parses events,
+ * and maintains UI state (current stage, results, errors).
+ */
+
 import { useState, useCallback, useRef } from "react";
 
+/**
+ * Event emitted by the pipeline during streaming.
+ * @property {string} stage - Current pipeline stage.
+ * @property {string} message - Human-readable status message.
+ * @property {string} [runId] - Unique run identifier.
+ * @property {Record<string, unknown>} [data] - Metadata (counts, timings, IDs).
+ */
 export interface PipelineEvent {
   stage: "scanning" | "extracting" | "generating" | "complete" | "failed";
   message: string;
@@ -9,6 +22,15 @@ export interface PipelineEvent {
   data?: Record<string, unknown>;
 }
 
+/**
+ * Internal state for the analysis pipeline hook.
+ * @property {PipelineEvent[]} events - All events received so far.
+ * @property {string | null} currentStage - Current active stage.
+ * @property {boolean} isRunning - Whether pipeline is actively running.
+ * @property {string | null} error - Error message if pipeline failed.
+ * @property {string | null} runId - Unique identifier for this run.
+ * @property {Object | null} result - Final results when complete (scanned, extracted, duration, postId).
+ */
 interface AnalysisPipelineState {
   events: PipelineEvent[];
   currentStage: PipelineEvent["stage"] | null;
@@ -23,6 +45,31 @@ interface AnalysisPipelineState {
   } | null;
 }
 
+/**
+ * Hook for initiating and monitoring pipeline analysis runs.
+ *
+ * @param workspaceSlug - The workspace slug to analyze.
+ * @returns {Object} Object with state and control functions.
+ * @returns {PipelineEvent[]} events - All events received during execution.
+ * @returns {string | null} currentStage - Current pipeline stage.
+ * @returns {boolean} isRunning - Whether analysis is in progress.
+ * @returns {string | null} error - Error message if failed.
+ * @returns {string | null} runId - Unique run identifier.
+ * @returns {Object | null} result - Final results (null until complete).
+ * @returns {Function} startAnalysis - Initiates analysis; accepts optional lookbackDays.
+ * @returns {Function} cancel - Aborts the current run.
+ *
+ * @example
+ * const { isRunning, currentStage, error, result, startAnalysis, cancel } = useAnalysisPipeline("my-workspace");
+ * return (
+ *   <>
+ *     <button onClick={() => startAnalysis(30)}>Start (30 days)</button>
+ *     <button onClick={cancel} disabled={!isRunning}>Cancel</button>
+ *     {isRunning && <p>Stage: {currentStage}</p>}
+ *     {result && <p>Created {result.insightsExtracted} insights</p>}
+ *   </>
+ * );
+ */
 export function useAnalysisPipeline(workspaceSlug: string) {
   const [state, setState] = useState<AnalysisPipelineState>({
     events: [],
@@ -35,6 +82,13 @@ export function useAnalysisPipeline(workspaceSlug: string) {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  /**
+   * Initiates pipeline analysis via SSE streaming.
+   * Aborts any existing connection, resets state, and connects to /api/pipeline/analyze.
+   * Progress events update state as they arrive; on completion or error, isRunning is set to false.
+   *
+   * @param {number} [lookbackDays=90] - Number of days to scan for sessions.
+   */
   const startAnalysis = useCallback(
     async (lookbackDays = 90) => {
       // Abort any existing connection
@@ -148,6 +202,10 @@ export function useAnalysisPipeline(workspaceSlug: string) {
     [workspaceSlug]
   );
 
+  /**
+   * Cancels the running pipeline analysis.
+   * Aborts the SSE connection and marks pipeline as not running.
+   */
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     setState((prev) => ({ ...prev, isRunning: false }));

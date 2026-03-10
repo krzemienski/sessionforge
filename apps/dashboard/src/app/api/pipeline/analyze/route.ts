@@ -1,3 +1,13 @@
+/**
+ * Pipeline analysis API endpoint.
+ * Provides Server-Sent Events (SSE) streaming of pipeline progress for manual analysis runs.
+ *
+ * POST /api/pipeline/analyze
+ * - Creates a new automation run with source="manual"
+ * - Streams progress events as they occur (scanning → extracting → generating)
+ * - Returns SSE stream with PipelineEvent objects
+ */
+
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
@@ -13,6 +23,31 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
+/**
+ * POST /api/pipeline/analyze
+ *
+ * Initiates a manual pipeline run and streams progress events via SSE.
+ *
+ * @param request - HTTP request with JSON body.
+ * @body {string} workspaceSlug - Required. Workspace slug to analyze.
+ * @body {number} [lookbackDays] - Optional. Number of days to scan (default: 90).
+ *
+ * @returns {Response} SSE stream with PipelineEvent objects.
+ *
+ * @example
+ * const response = await fetch("/api/pipeline/analyze", {
+ *   method: "POST",
+ *   body: JSON.stringify({ workspaceSlug: "my-workspace", lookbackDays: 30 })
+ * });
+ * const reader = response.body.getReader();
+ * // Read SSE data: { stage, message, data, runId }
+ *
+ * Error responses:
+ * - 401 Unauthorized: No session
+ * - 400 Bad Request: Missing workspaceSlug
+ * - 404 Not Found: Workspace not found
+ * - 409 Conflict: Analysis already in progress for this workspace
+ */
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {

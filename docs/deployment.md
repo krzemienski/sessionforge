@@ -109,6 +109,8 @@ This endpoint requires a `CRON_SECRET` environment variable for verification.
 
 SessionForge uses `@anthropic-ai/claude-agent-sdk` which inherits authentication from the Claude CLI session. **No `ANTHROPIC_API_KEY` is needed.** The SDK spawns the `claude` CLI subprocess, which uses the logged-in user's credentials automatically.
 
+**Important (Development):** The dev server inherits the `CLAUDECODE` environment variable from the parent Claude Code session, which causes nested agent rejections. All agent SDK files (12 total) include `delete process.env.CLAUDECODE` before spawning agents. This is required for local development.
+
 ---
 
 ## Database Setup

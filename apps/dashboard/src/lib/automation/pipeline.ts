@@ -1,3 +1,11 @@
+/**
+ * Pipeline orchestration for automation runs.
+ * Coordinates session scanning, corpus analysis (insight extraction),
+ * and content generation into a unified workflow.
+ *
+ * Flow: Scan sessions → Extract corpus insights → Generate content
+ */
+
 import { db } from "@/lib/db";
 import {
   automationRuns,
@@ -21,12 +29,26 @@ import { createPipelineInstrumentation } from "@/lib/observability/instrument-pi
 type ContentTrigger = typeof contentTriggers.$inferSelect;
 type Workspace = typeof workspaces.$inferSelect;
 
+/**
+ * Event emitted by the pipeline during execution.
+ * @property {string} stage - Current pipeline stage: scanning, extracting, generating, complete, or failed.
+ * @property {string} message - Human-readable status message for the current stage.
+ * @property {Record<string, unknown>} [data] - Optional metadata about the stage (scanned count, insights created, etc.).
+ */
 export interface PipelineEvent {
   stage: "scanning" | "extracting" | "generating" | "complete" | "failed";
   message: string;
   data?: Record<string, unknown>;
 }
 
+/**
+ * Options for running the automation pipeline.
+ * @property {string} runId - Unique identifier for this pipeline run.
+ * @property {ContentTrigger} [trigger] - The trigger that initiated this run (if any).
+ * @property {Workspace} workspace - The workspace owning the sessions and insights.
+ * @property {number} [lookbackDays] - How many days to scan for sessions (default: inferred from trigger).
+ * @property {(event: PipelineEvent) => void} [onProgress] - Callback for progress updates during execution.
+ */
 export interface ExecutePipelineOptions {
   runId: string;
   trigger?: ContentTrigger;
@@ -35,6 +57,11 @@ export interface ExecutePipelineOptions {
   onProgress?: (event: PipelineEvent) => void;
 }
 
+/**
+ * Converts a lookback window string to number of days.
+ * @param {string} window - Lookback window identifier (e.g., "last_7_days", "all_time").
+ * @returns {number} Number of days for the window.
+ */
 export function lookbackWindowToDays(window: string): number {
   switch (window) {
     case "current_day":
@@ -58,6 +85,31 @@ export function lookbackWindowToDays(window: string): number {
   }
 }
 
+/**
+ * Orchestrates the full automation pipeline: scan → extract → generate.
+ *
+ * Scans local and SSH-configured session sources, analyzes patterns via corpus-analyzer agent,
+ * and generates content from extracted insights. Progress updates are emitted via onProgress callback.
+ * Extracted insights are persisted in the database and preserved even if generation fails.
+ *
+ * Supports both options-based and legacy 3-argument signatures for backward compatibility.
+ *
+ * @param runIdOrOpts - Either ExecutePipelineOptions object or runId string (legacy).
+ * @param trigger - (Legacy) The trigger initiating the run.
+ * @param workspace - (Legacy) The workspace context.
+ * @throws {Error} If session parsing, corpus analysis, or content generation fails.
+ * @example
+ * // Options-based (recommended)
+ * await executePipeline({
+ *   runId: "run_123",
+ *   workspace,
+ *   lookbackDays: 30,
+ *   onProgress: (event) => console.log(event.message)
+ * });
+ *
+ * // Legacy 3-arg signature
+ * await executePipeline("run_123", trigger, workspace);
+ */
 export async function executePipeline(
   opts: ExecutePipelineOptions
 ): Promise<void>;

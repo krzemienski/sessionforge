@@ -4,12 +4,21 @@
  * receives ALL sessions in a lookback window and identifies patterns
  * that span multiple sessions — recurring themes, skill evolution,
  * corrections, breakthroughs, and failure recovery arcs.
+ *
+ * Used by the automation pipeline during the "extracting" stage.
  */
 
 import { createAgentMcpServer } from "../mcp-server-factory";
 import { runAgent } from "../agent-runner";
 import { CORPUS_ANALYSIS_PROMPT } from "../prompts/corpus-analysis";
 
+/**
+ * Input parameters for corpus analysis.
+ * @property {string} workspaceId - The workspace to analyze.
+ * @property {number} lookbackDays - Number of days to scan for sessions.
+ * @property {string} [topicFilter] - Optional topic to focus analysis on.
+ * @property {string} [traceId] - Trace ID for observability correlation.
+ */
 interface AnalyzeCorpusInput {
   workspaceId: string;
   lookbackDays: number;
@@ -17,6 +26,11 @@ interface AnalyzeCorpusInput {
   traceId?: string;
 }
 
+/**
+ * Result from corpus analysis.
+ * @property {number} insightCount - Number of insights created by the agent.
+ * @property {string | null} text - Final text summary from the agent.
+ */
 interface CorpusAnalysisResult {
   insightCount: number;
   text: string | null;
@@ -25,11 +39,27 @@ interface CorpusAnalysisResult {
 /**
  * Runs the corpus-analyzer agent against all sessions in a lookback window.
  *
- * The agent:
- * 1. Loads all session summaries via list_sessions_by_timeframe
- * 2. Deep-dives into promising sessions via get_session_messages
- * 3. Identifies cross-session patterns
- * 4. Creates insights (via create_insight) backed by multi-session evidence
+ * Agent workflow:
+ * 1. Loads all session summaries via list_sessions_by_timeframe tool
+ * 2. Deep-dives into promising sessions via get_session_messages tool
+ * 3. Identifies cross-session patterns and trends
+ * 4. Creates insights (via create_insight tool) backed by multi-session evidence
+ *
+ * Quality gate: Scores each created insight using composite formula:
+ * (novelty × 3) + (tool_discovery × 3) + (before_after × 2) + (failure_recovery × 3) + (reproducibility × 1) + (scale × 1)
+ * Caps score at 65 and filters for score >= 15. Logs metrics for observability.
+ *
+ * @param {AnalyzeCorpusInput} input - Configuration for analysis.
+ * @returns {Promise<CorpusAnalysisResult>} Insight count and summary text from the agent.
+ * @throws {Error} If agent execution fails or MCP tools fail.
+ *
+ * @example
+ * const result = await analyzeCorpus({
+ *   workspaceId: "ws_123",
+ *   lookbackDays: 30,
+ *   topicFilter: "authentication"
+ * });
+ * console.log(`Created ${result.insightCount} insights`);
  */
 export async function analyzeCorpus(
   input: AnalyzeCorpusInput,

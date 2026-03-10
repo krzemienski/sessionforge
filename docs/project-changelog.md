@@ -5,6 +5,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.2-alpha] - 2026-03-10
+
+### Added
+
+- **Unified Session Scanning + Insight Generation Pipeline** — Single "Start Analysis" entry point on Insights page that coordinates scanning, corpus analysis, and content generation
+- **SSE progress streaming** for real-time pipeline stage updates (scanning → extracting → generating → complete)
+- **Pipeline Progress component** with 3-stage timeline visualization and event message streaming
+- **useAnalysisPipeline hook** for frontend state management and SSE connection handling
+- **Enhanced corpus analysis** with cross-session pattern detection (recurring themes, skill evolution, corrections & pivots, breakthroughs, failure recovery arcs)
+- **Content angle requirements** for corpus insights (tutorial, case study, deep dive, comparison, lessons learned format)
+- **Temporal awareness** in corpus analysis (frequency trends, recency bias, clustering, evolution arcs)
+- **Audience signal detection** in corpus insights (beginner-friendly, intermediate, advanced)
+- **Quality gate scoring** with 6 weighted dimensions (novelty×3, tool_discovery×3, before_after×2, failure_recovery×3, reproducibility×1, scale×1) — threshold >= 15 composite score
+- **Manual analysis trigger** from Insights page with configurable lookback window (default 90 days)
+- **Unified ARCHITECTURE.md** documenting pipeline stages, frontend integration, and quality gate scoring
+
+### Changed
+
+- POST `/api/pipeline/analyze` now primary entry point for session analysis (replaces separate scan + extract routes)
+- Pipeline runs created with `source: "manual"` for UI-triggered analysis
+- Corpus analyzer now enforces strict turn budgets: Phase 1 (1-2 turns), Phase 2 (5-8 turns), Phase 3 (remaining turns for insights)
+- lookbackWindowToDays() now supports `all_time` window (36500 days)
+
+### Fixed
+
+- Templates API 500 error with graceful fallback to built-in templates
+- Style API defaults for missing workspace settings
+- Dark-mode-only theme lock preventing light-mode selection
+
+### Verified
+
+- Full functional audit: 10 screens, 12 screenshots
+- Content editor with AI chat, split view, SEO tab, evidence tab, media generation
+- Pipeline UI with real-time progress visualization
+- All core pages responsive on mobile
+
+---
+
 ## [0.5.1-alpha] - 2026-03-07
 
 ### Added
