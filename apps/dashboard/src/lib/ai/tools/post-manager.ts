@@ -13,6 +13,7 @@ export interface CreatePostInput {
   markdown: string;
   contentType: ContentType;
   insightId?: string;
+  parentPostId?: string;
   status?: PostStatus;
   toneUsed?: ToneProfile;
   sourceMetadata?: {
@@ -70,6 +71,7 @@ export async function createPost(input: CreatePostInput) {
       markdown: input.markdown,
       contentType: input.contentType,
       insightId: input.insightId,
+      parentPostId: input.parentPostId,
       status: input.status ?? "draft",
       toneUsed: input.toneUsed,
       wordCount,
@@ -161,6 +163,7 @@ export const postManagerTools = [
         markdown: { type: "string", description: "Full markdown content" },
         contentType: { type: "string" },
         insightId: { type: "string" },
+        parentPostId: { type: "string" },
         status: { type: "string" },
         toneUsed: { type: "string" },
         sourceMetadata: { type: "object" },
