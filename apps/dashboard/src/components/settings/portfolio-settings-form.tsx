@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Globe, Palette, Link as LinkIcon, Twitter, Linkedin, Github, ExternalLink } from "lucide-react";
+import { Save, Globe, Palette, Link as LinkIcon, Twitter, Linkedin, Github, ExternalLink, Pin, Search, X } from "lucide-react";
 
 const THEME_OPTIONS = [
   {
@@ -45,6 +45,15 @@ export function PortfolioSettingsForm({ workspace }: PortfolioSettingsFormProps)
     },
   });
 
+  const posts = useQuery({
+    queryKey: ["posts", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/content?workspace=${workspace}&limit=100&status=published`);
+      if (!res.ok) throw new Error("Failed to load posts");
+      return res.json();
+    },
+  });
+
   const [isEnabled, setIsEnabled] = useState(false);
   const [bio, setBio] = useState("");
   const [theme, setTheme] = useState<"minimal" | "developer-dark" | "colorful">("minimal");
@@ -52,6 +61,8 @@ export function PortfolioSettingsForm({ workspace }: PortfolioSettingsFormProps)
   const [showRss, setShowRss] = useState(true);
   const [showPoweredBy, setShowPoweredBy] = useState(true);
   const [socialLinks, setSocialLinks] = useState<SocialLinks>({});
+  const [pinnedPostIds, setPinnedPostIds] = useState<string[]>([]);
+  const [postSearchQuery, setPostSearchQuery] = useState("");
 
   useEffect(() => {
     if (portfolioSettings.data) {
@@ -62,6 +73,7 @@ export function PortfolioSettingsForm({ workspace }: PortfolioSettingsFormProps)
       setShowRss(portfolioSettings.data.showRss ?? true);
       setShowPoweredBy(portfolioSettings.data.showPoweredBy ?? true);
       setSocialLinks(portfolioSettings.data.socialLinks || {});
+      setPinnedPostIds(portfolioSettings.data.pinnedPostIds || []);
     }
   }, [portfolioSettings.data]);
 
@@ -88,12 +100,68 @@ export function PortfolioSettingsForm({ workspace }: PortfolioSettingsFormProps)
     },
   });
 
+  const pinPost = useMutation({
+    mutationFn: async (postId: string) => {
+      const res = await fetch("/api/portfolio/pinned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceSlug: workspace, postId }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: "Failed to pin post" }));
+        throw new Error(error.message || "Failed to pin post");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setPinnedPostIds(data.pinnedPostIds || []);
+      qc.invalidateQueries({ queryKey: ["portfolio-settings", workspace] });
+    },
+  });
+
+  const unpinPost = useMutation({
+    mutationFn: async (postId: string) => {
+      const res = await fetch("/api/portfolio/pinned", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceSlug: workspace, postId }),
+      });
+      if (!res.ok) throw new Error("Failed to unpin post");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setPinnedPostIds(data.pinnedPostIds || []);
+      qc.invalidateQueries({ queryKey: ["portfolio-settings", workspace] });
+    },
+  });
+
   const updateSocialLink = (platform: keyof SocialLinks, value: string) => {
     setSocialLinks((prev) => ({
       ...prev,
       [platform]: value || undefined,
     }));
   };
+
+  const handleTogglePin = (postId: string) => {
+    if (pinnedPostIds.includes(postId)) {
+      unpinPost.mutate(postId);
+    } else {
+      if (pinnedPostIds.length >= 5) {
+        return; // Max 5 pinned posts
+      }
+      pinPost.mutate(postId);
+    }
+  };
+
+  // Get all posts and filter
+  const allPosts = posts.data?.posts || [];
+  const filteredPosts = allPosts.filter((post: any) => {
+    if (!postSearchQuery) return true;
+    return post.title.toLowerCase().includes(postSearchQuery.toLowerCase());
+  });
+
+  const pinnedPosts = allPosts.filter((post: any) => pinnedPostIds.includes(post.id));
+  const unpinnedPosts = filteredPosts.filter((post: any) => !pinnedPostIds.includes(post.id));
 
   if (portfolioSettings.isLoading) {
     return (
@@ -244,6 +312,112 @@ export function PortfolioSettingsForm({ workspace }: PortfolioSettingsFormProps)
             />
           </div>
         </div>
+      </div>
+
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Pin size={18} className="text-sf-accent" />
+          <h2 className="text-base font-semibold font-display">Pinned Posts</h2>
+        </div>
+        <p className="text-sm text-sf-text-muted">
+          Pin up to 5 posts to feature at the top of your portfolio
+        </p>
+
+        {/* Currently Pinned Posts */}
+        {pinnedPosts.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium text-sf-text-secondary">
+              Pinned ({pinnedPosts.length}/5)
+            </h3>
+            <div className="space-y-2">
+              {pinnedPosts.map((post: any) => (
+                <div
+                  key={post.id}
+                  className="flex items-center justify-between p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-sf-text-primary truncate">
+                      {post.title}
+                    </div>
+                    <div className="text-xs text-sf-text-muted mt-0.5">
+                      {new Date(post.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleTogglePin(post.id)}
+                    disabled={unpinPost.isPending}
+                    className="ml-3 p-1.5 text-sf-accent hover:bg-sf-bg-primary rounded transition-colors disabled:opacity-50"
+                    title="Unpin post"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Search and Add Posts */}
+        {pinnedPosts.length < 5 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-sf-text-secondary">
+              Add Posts
+            </h3>
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-sf-text-muted" />
+              <input
+                type="text"
+                placeholder="Search posts..."
+                value={postSearchQuery}
+                onChange={(e) => setPostSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-primary placeholder:text-sf-text-muted focus:outline-none focus:border-sf-accent"
+              />
+            </div>
+
+            {posts.isLoading ? (
+              <div className="text-sm text-sf-text-muted">Loading posts...</div>
+            ) : unpinnedPosts.length > 0 ? (
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                {unpinnedPosts.slice(0, 10).map((post: any) => (
+                  <div
+                    key={post.id}
+                    className="flex items-center justify-between p-3 bg-sf-bg-primary border border-sf-border rounded-sf hover:border-sf-border-focus transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-sf-text-primary truncate">
+                        {post.title}
+                      </div>
+                      <div className="text-xs text-sf-text-muted mt-0.5">
+                        {new Date(post.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleTogglePin(post.id)}
+                      disabled={pinPost.isPending || pinnedPostIds.length >= 5}
+                      className="ml-3 p-1.5 text-sf-accent hover:bg-sf-bg-tertiary rounded transition-colors disabled:opacity-50"
+                      title="Pin post"
+                    >
+                      <Pin size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-sf-text-muted text-center py-4">
+                {postSearchQuery ? "No posts match your search." : "No posts available to pin."}
+              </div>
+            )}
+          </div>
+        )}
+
+        {pinPost.isError && (
+          <p className="text-sm text-sf-error">
+            {pinPost.error?.message || "Failed to pin post"}
+          </p>
+        )}
+        {unpinPost.isError && (
+          <p className="text-sm text-sf-error">Failed to unpin post.</p>
+        )}
       </div>
 
       <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-5">
