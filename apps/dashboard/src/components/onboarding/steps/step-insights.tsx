@@ -31,7 +31,7 @@ export function StepInsights({
   return (
     <div className="w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-8">
       <p className="text-sf-text-muted text-xs font-medium uppercase tracking-widest mb-6">
-        Step 4 of 4
+        Step 4 of 5
       </p>
 
       <div className="flex items-center gap-2 mb-2">
@@ -110,7 +110,7 @@ export function StepInsights({
           onClick={onComplete}
           className="flex-1 bg-sf-accent text-sf-bg-primary font-medium py-2 rounded-sf hover:bg-sf-accent-dim transition-colors"
         >
-          Finish Setup
+          Next
         </button>
       </div>
     </div>

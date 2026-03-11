@@ -8,13 +8,14 @@ import { StepWorkspace } from "./steps/step-workspace";
 import { StepScanPath } from "./steps/step-scan-path";
 import { StepFirstScan } from "./steps/step-first-scan";
 import { StepInsights } from "./steps/step-insights";
+import { StepGeneratePost } from "./steps/step-generate-post";
 import { useCompleteOnboarding } from "@/hooks/use-onboarding";
 import { OnboardingProgressBar } from "./onboarding-progress-bar";
 import { OnboardingTimer } from "./onboarding-timer";
 
-type Step = "welcome" | "workspace" | "scan-path" | "first-scan" | "insights";
+type Step = "welcome" | "workspace" | "scan-path" | "first-scan" | "insights" | "generate-post";
 
-const STEP_ORDER: Step[] = ["workspace", "scan-path", "first-scan", "insights"];
+const STEP_ORDER: Step[] = ["workspace", "scan-path", "first-scan", "insights", "generate-post"];
 const TOTAL_STEPS = STEP_ORDER.length;
 
 type OnboardingWizardProps = {
@@ -157,8 +158,16 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
         {step === "insights" && (
           <StepInsights
             workspaceSlug={workspaceSlug}
-            onComplete={handleComplete}
+            onComplete={() => setStep("generate-post")}
             onBack={() => setStep("first-scan")}
+          />
+        )}
+
+        {step === "generate-post" && (
+          <StepGeneratePost
+            workspaceSlug={workspaceSlug}
+            onComplete={handleComplete}
+            onBack={() => setStep("insights")}
           />
         )}
 
