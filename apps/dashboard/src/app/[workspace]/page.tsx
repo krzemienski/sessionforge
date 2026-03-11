@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { BioSection } from "@/components/portfolio/bio-section";
+import { PostGrid } from "@/components/portfolio/post-grid";
 
 // This is a public route - no authentication required
 export const dynamic = "force-dynamic";
@@ -80,21 +81,6 @@ async function getPortfolioData(
   }
 }
 
-function formatDate(date: Date | null): string {
-  if (!date) return "";
-  return new Date(date).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function estimateReadTime(wordCount: number | null): string {
-  if (!wordCount) return "5 min read";
-  const minutes = Math.ceil(wordCount / 200);
-  return `${minutes} min read`;
-}
-
 export default async function PublicPortfolioPage({
   params,
 }: {
@@ -107,11 +93,7 @@ export default async function PublicPortfolioPage({
     notFound();
   }
 
-  const { workspace: workspaceData, portfolio, pinnedPosts, posts } = data;
-
-  // Separate pinned and non-pinned posts
-  const pinnedPostIds = new Set(pinnedPosts.map((p) => p.id));
-  const regularPosts = posts.filter((p) => !pinnedPostIds.has(p.id));
+  const { workspace: workspaceData, portfolio, pinnedPosts, posts, series, collections } = data;
 
   return (
     <div className="min-h-screen bg-sf-bg-primary">
@@ -152,83 +134,13 @@ export default async function PublicPortfolioPage({
             )}
           </div>
 
-          {/* Pinned Posts */}
-          {pinnedPosts.length > 0 && (
-            <div className="mb-8">
-              <h3 className="text-sm font-medium text-sf-text-muted mb-4">
-                Pinned Posts
-              </h3>
-              <div className="space-y-4">
-                {pinnedPosts.map((post) => (
-                  <article
-                    key={post.id}
-                    className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6 hover:border-sf-accent/50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-2 text-sf-text-primary">
-                          {post.title}
-                        </h3>
-                        {post.metaDescription && (
-                          <p className="text-sm text-sf-text-secondary mb-3 line-clamp-2">
-                            {post.metaDescription}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-3 text-xs text-sf-text-muted">
-                          <span>{formatDate(post.publishedAt)}</span>
-                          <span>•</span>
-                          <span>{estimateReadTime(post.wordCount)}</span>
-                          <span>•</span>
-                          <span className="capitalize">
-                            {post.contentType.replace(/_/g, " ")}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="px-2.5 py-1 bg-sf-accent/10 border border-sf-accent/20 rounded-sf text-xs font-medium text-sf-accent">
-                        Pinned
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Regular Posts */}
-          {regularPosts.length > 0 && (
-            <div className="space-y-4">
-              {regularPosts.map((post) => (
-                <article
-                  key={post.id}
-                  className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6 hover:border-sf-accent/50 transition-colors"
-                >
-                  <h3 className="text-lg font-semibold mb-2 text-sf-text-primary">
-                    {post.title}
-                  </h3>
-                  {post.metaDescription && (
-                    <p className="text-sm text-sf-text-secondary mb-3 line-clamp-2">
-                      {post.metaDescription}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-3 text-xs text-sf-text-muted">
-                    <span>{formatDate(post.publishedAt)}</span>
-                    <span>•</span>
-                    <span>{estimateReadTime(post.wordCount)}</span>
-                    <span>•</span>
-                    <span className="capitalize">
-                      {post.contentType.replace(/_/g, " ")}
-                    </span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {posts.length === 0 && (
-            <div className="text-center py-12 text-sf-text-muted">
-              <p>No content published yet.</p>
-            </div>
-          )}
+          {/* Post Grid with Filtering */}
+          <PostGrid
+            posts={posts}
+            pinnedPosts={pinnedPosts}
+            series={series}
+            collections={collections}
+          />
         </div>
       </main>
 
