@@ -1,7 +1,7 @@
 import { diffLines, type Change } from "diff";
 import { db } from "@/lib/db";
 import { postRevisions } from "@sessionforge/db";
-import { eq, desc } from "drizzle-orm/sql";
+import { eq, desc, inArray } from "drizzle-orm/sql";
 import type { editTypeEnum, versionTypeEnum } from "@sessionforge/db";
 
 type EditType = (typeof editTypeEnum.enumValues)[number];
@@ -43,6 +43,25 @@ export function computeLineDiff(
   newContent: string
 ): Change[] {
   return diffLines(oldContent, newContent);
+}
+
+async function pruneOldRevisions(postId: string): Promise<void> {
+  const allRevisions = await db
+    .select({ id: postRevisions.id })
+    .from(postRevisions)
+    .where(eq(postRevisions.postId, postId))
+    .orderBy(desc(postRevisions.versionNumber));
+
+  if (allRevisions.length > 50) {
+    const toDelete = allRevisions.slice(50);
+    const idsToDelete = toDelete.map((r) => r.id);
+
+    if (idsToDelete.length > 0) {
+      await db
+        .delete(postRevisions)
+        .where(inArray(postRevisions.id, idsToDelete));
+    }
+  }
 }
 
 export async function createRevision(
@@ -102,6 +121,11 @@ export async function createRevision(
     })
     .returning();
 
+  // Auto-prune to keep only last 50 versions
+  if (versionNumber > 50) {
+    await pruneOldRevisions(input.postId);
+  }
+
   return created;
 }
 
@@ -124,6 +148,8 @@ export async function listRevisions(
       wordCountDelta: postRevisions.wordCountDelta,
       createdAt: postRevisions.createdAt,
       createdBy: postRevisions.createdBy,
+      versionLabel: postRevisions.versionLabel,
+      versionNotes: postRevisions.versionNotes,
     })
     .from(postRevisions)
     .where(eq(postRevisions.postId, postId))
