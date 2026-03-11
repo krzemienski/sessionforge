@@ -74,3 +74,21 @@ export function useUpdateRevisionLabel(postId: string) {
     },
   });
 }
+
+export function useUpdateRevisionNotes(postId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ revisionId, versionNotes }: { revisionId: string; versionNotes: string | null }) => {
+      const res = await fetch(`/api/content/${postId}/revisions/${revisionId}/update`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ versionNotes }),
+      });
+      if (!res.ok) throw new Error("Failed to update version notes");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["revisions", postId] });
+    },
+  });
+}

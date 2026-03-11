@@ -12,8 +12,9 @@ import {
   History,
   Loader2,
   Pencil,
+  FileText,
 } from "lucide-react";
-import { useRevisions, useRevision, useRestoreRevision, useUpdateRevisionLabel } from "@/hooks/use-revisions";
+import { useRevisions, useRevision, useRestoreRevision, useUpdateRevisionLabel, useUpdateRevisionNotes } from "@/hooks/use-revisions";
 import { DiffViewer } from "./diff-viewer";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ interface RevisionEntry {
   createdAt: string | null;
   createdBy: string | null;
   versionLabel: string | null;
+  versionNotes: string | null;
 }
 
 interface RevisionHistoryPanelProps {
@@ -155,6 +157,128 @@ function EditableVersionLabel({
   );
 }
 
+// --- Expandable Version Notes Component ---
+
+interface VersionNotesProps {
+  postId: string;
+  revisionId: string;
+  versionNotes: string | null;
+}
+
+function VersionNotes({ postId, revisionId, versionNotes }: VersionNotesProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(versionNotes || "");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const updateNotes = useUpdateRevisionNotes(postId);
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      // Move cursor to end
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+    }
+  }, [isEditing]);
+
+  const handleSave = () => {
+    if (editValue.trim() !== (versionNotes || "")) {
+      updateNotes.mutate({
+        revisionId,
+        versionNotes: editValue.trim() || null,
+      });
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setEditValue(versionNotes || "");
+      setIsEditing(false);
+    }
+    // Allow Enter for new lines in textarea (Ctrl+Enter or Cmd+Enter to save)
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      handleSave();
+    }
+  };
+
+  const hasNotes = versionNotes && versionNotes.trim().length > 0;
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-1.5 text-xs text-sf-text-muted hover:text-sf-text-secondary transition-colors"
+      >
+        {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <FileText size={12} />
+        <span>Notes {hasNotes && `(${versionNotes.length} chars)`}</span>
+      </button>
+
+      {isExpanded && (
+        <div className="mt-1.5 ml-5">
+          {isEditing ? (
+            <div className="space-y-1.5">
+              <textarea
+                ref={textareaRef}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Add notes about this version..."
+                rows={3}
+                className="w-full bg-sf-bg-primary border border-sf-border-focus rounded-sf px-2 py-1.5 text-xs text-sf-text-primary focus:outline-none resize-none"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSave}
+                  className="text-xs px-2 py-1 bg-sf-accent text-white rounded-sf hover:bg-sf-accent-hover transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => {
+                    setEditValue(versionNotes || "");
+                    setIsEditing(false);
+                  }}
+                  className="text-xs px-2 py-1 text-sf-text-secondary hover:text-sf-text-primary transition-colors"
+                >
+                  Cancel
+                </button>
+                <span className="text-xs text-sf-text-muted">
+                  Ctrl+Enter to save, Esc to cancel
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="group relative"
+              onDoubleClick={() => setIsEditing(true)}
+            >
+              {hasNotes ? (
+                <div className="bg-sf-bg-primary border border-sf-border rounded-sf px-2 py-1.5 text-xs text-sf-text-secondary whitespace-pre-wrap">
+                  {versionNotes}
+                </div>
+              ) : (
+                <div className="text-xs text-sf-text-muted italic">
+                  No notes yet. Double-click to add notes.
+                </div>
+              )}
+              <button
+                onClick={() => setIsEditing(true)}
+                className="absolute top-1 right-1 p-1 rounded-sf bg-sf-bg-secondary/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Edit notes"
+              >
+                <Pencil size={10} className="text-sf-text-muted" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Sub-components ---
 
 interface RevisionCardProps {
@@ -212,6 +336,11 @@ function MajorRevisionCard({ postId, revision, onViewDiff, onRestore, isRestorin
           Restore
         </button>
       </div>
+      <VersionNotes
+        postId={postId}
+        revisionId={revision.id}
+        versionNotes={revision.versionNotes}
+      />
     </div>
   );
 }
