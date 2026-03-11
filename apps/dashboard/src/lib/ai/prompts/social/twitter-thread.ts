@@ -16,4 +16,11 @@ Output format (one tweet per line, separated by ---):
 ---
 ...
 
-No hashtags (they look spammy). No emojis unless they add meaning. Be direct.`;
+No hashtags (they look spammy). No emojis unless they add meaning. Be direct.
+
+CITATIONS:
+Since Twitter threads have strict character limits, do NOT use inline citations. Instead, add a final "Source" tweet at the very end of the thread (after the CTA tweet) that links back to the source session:
+
+[N+1]/ Built from real work → [session link]
+
+This adds credibility without cluttering individual tweets. The session link will be automatically generated from the source sessionId.`;
