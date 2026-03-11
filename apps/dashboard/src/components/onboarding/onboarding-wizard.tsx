@@ -10,6 +10,7 @@ import { StepFirstScan } from "./steps/step-first-scan";
 import { StepInsights } from "./steps/step-insights";
 import { useCompleteOnboarding } from "@/hooks/use-onboarding";
 import { OnboardingProgressBar } from "./onboarding-progress-bar";
+import { OnboardingTimer } from "./onboarding-timer";
 
 type Step = "welcome" | "workspace" | "scan-path" | "first-scan" | "insights";
 
@@ -90,7 +91,10 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
   if (step === "welcome") {
     return (
       <WelcomeModal
-        onStart={() => setStep("workspace")}
+        onStart={() => {
+          localStorage.setItem("sf_onboarding_started_at", Date.now().toString());
+          setStep("workspace");
+        }}
         onSkip={handleSkip}
       />
     );
@@ -102,10 +106,15 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
   return (
     <div className="min-h-screen bg-sf-bg-primary flex items-center justify-center p-4">
       <div className="w-full flex flex-col items-center gap-6">
-        <OnboardingProgressBar
-          currentStep={currentStepNumber}
-          totalSteps={TOTAL_STEPS}
-        />
+        <div className="w-full max-w-lg flex flex-col gap-2">
+          <OnboardingProgressBar
+            currentStep={currentStepNumber}
+            totalSteps={TOTAL_STEPS}
+          />
+          <div className="flex justify-end">
+            <OnboardingTimer />
+          </div>
+        </div>
         {step === "workspace" && (
           <StepWorkspace
             initialName={workspaceName}
