@@ -15,6 +15,7 @@ import {
   Activity,
   Settings,
   X,
+  PenLine,
 } from "lucide-react";
 
 const tabs = [
@@ -28,6 +29,7 @@ const moreItems = [
   { label: "Insights", icon: Lightbulb, href: "/insights" },
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Pipeline", icon: Activity, href: "/observability" },
+  { label: "Writing Coach", icon: PenLine, href: "/writing-coach" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 
