@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { BioSection } from "@/components/portfolio/bio-section";
 
 // This is a public route - no authentication required
 export const dynamic = "force-dynamic";
@@ -126,43 +127,12 @@ export default async function PublicPortfolioPage({
       {/* Main Content */}
       <main className="max-w-5xl mx-auto px-4 py-8">
         {/* Bio Section */}
-        {portfolio.bio && (
-          <div className="mb-12">
-            <div className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6">
-              <h2 className="text-xl font-bold font-display mb-4 text-sf-text-primary">
-                About
-              </h2>
-              <p className="text-sf-text-secondary whitespace-pre-wrap">
-                {portfolio.bio}
-              </p>
-
-              {/* Social Links */}
-              {portfolio.socialLinks &&
-                typeof portfolio.socialLinks === "object" &&
-                Object.keys(portfolio.socialLinks).length > 0 && (
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    {Object.entries(portfolio.socialLinks).map(
-                      ([platform, url]) => {
-                        if (!url || typeof url !== "string") return null;
-                        return (
-                          <a
-                            key={platform}
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-sf-accent hover:underline"
-                          >
-                            {platform.charAt(0).toUpperCase() +
-                              platform.slice(1)}
-                          </a>
-                        );
-                      }
-                    )}
-                  </div>
-                )}
-            </div>
-          </div>
-        )}
+        <BioSection
+          workspaceName={workspaceData.name}
+          bio={portfolio.bio}
+          avatarUrl={portfolio.avatarUrl}
+          socialLinks={portfolio.socialLinks}
+        />
 
         {/* Posts Section */}
         <div>
