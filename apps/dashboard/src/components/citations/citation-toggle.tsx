@@ -5,6 +5,8 @@ import { Quote, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CitationExtractor } from "@/lib/citations/extractor";
 
+export type CitationDensity = "all" | "key" | "summary";
+
 interface CitationToggleProps {
   /**
    * The markdown content containing citation markers
@@ -22,6 +24,16 @@ interface CitationToggleProps {
   onToggle: (enabled: boolean) => void;
 
   /**
+   * Citation density level (controls how many citations are shown)
+   */
+  density?: CitationDensity;
+
+  /**
+   * Callback when citation density changes
+   */
+  onDensityChange?: (density: CitationDensity) => void;
+
+  /**
    * Optional refresh key to trigger re-analysis
    */
   refreshKey?: number;
@@ -31,6 +43,8 @@ export function CitationToggle({
   markdown,
   enabled,
   onToggle,
+  density = "all",
+  onDensityChange,
   refreshKey,
 }: CitationToggleProps) {
   const [citationCount, setCitationCount] = useState(0);
@@ -81,6 +95,29 @@ export function CitationToggle({
             Display citation markers and links to source sessions in the editor
           </p>
         </div>
+
+        {/* Density Configuration */}
+        {enabled && (
+          <div>
+            <label className="text-xs font-medium text-sf-text-secondary mb-1.5 block">
+              Citation Density
+            </label>
+            <select
+              value={density}
+              onChange={(e) => onDensityChange?.(e.target.value as CitationDensity)}
+              className="w-full bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 text-sm text-sf-text-primary focus:outline-none focus:border-sf-border-focus"
+            >
+              <option value="all">Every claim</option>
+              <option value="key">Key claims only</option>
+              <option value="summary">Summary (minimal)</option>
+            </select>
+            <p className="text-xs text-sf-text-muted mt-1.5">
+              {density === "all" && "Show citations for all claims and statements"}
+              {density === "key" && "Show citations only for important or contentious claims"}
+              {density === "summary" && "Show minimal citations for overall credibility"}
+            </p>
+          </div>
+        )}
 
         {/* Citation Statistics */}
         <div className="space-y-3 pt-3 border-t border-sf-border">

@@ -32,7 +32,7 @@ import { SupplementaryPanel } from "@/components/editor/supplementary-panel";
 import { MediaPanel } from "@/components/editor/media-panel";
 import { RepositoryPanel } from "@/components/editor/repository-panel";
 import { SeriesNavLinks } from "@/components/series/series-nav-links";
-import { CitationToggle } from "@/components/citations/citation-toggle";
+import { CitationToggle, type CitationDensity } from "@/components/citations/citation-toggle";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -101,6 +101,7 @@ export default function ContentEditorPage() {
   const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository" | "citations">("chat");
   const [citationsEnabled, setCitationsEnabled] = useState(true);
+  const [citationDensity, setCitationDensity] = useState<CitationDensity>("all");
   const [highlightedCitation, setHighlightedCitation] = useState<string | null>(null);
   const [repurposing, setRepurposing] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -594,6 +595,8 @@ export default function ContentEditorPage() {
                       markdown={markdown}
                       enabled={citationsEnabled}
                       onToggle={setCitationsEnabled}
+                      density={citationDensity}
+                      onDensityChange={setCitationDensity}
                     />
                   )}
                   {sidebarTab === "supplementary" && (
