@@ -16,6 +16,8 @@ export interface CreateRevisionInput {
   versionType: VersionType;
   editType: EditType;
   createdBy?: string;
+  versionLabel?: string;
+  versionNotes?: string;
 }
 
 export type RevisionRow = typeof postRevisions.$inferSelect;
@@ -69,6 +71,8 @@ export async function createRevision(
         wordCount,
         wordCountDelta: wordCount,
         createdBy: input.createdBy,
+        versionLabel: input.versionLabel,
+        versionNotes: input.versionNotes,
       })
       .returning();
 
@@ -93,6 +97,8 @@ export async function createRevision(
       wordCount,
       wordCountDelta: wordCount - prevWordCount,
       createdBy: input.createdBy,
+      versionLabel: input.versionLabel,
+      versionNotes: input.versionNotes,
     })
     .returning();
 
