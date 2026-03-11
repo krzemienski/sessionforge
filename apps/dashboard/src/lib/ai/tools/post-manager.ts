@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq, and, desc } from "drizzle-orm";
 import type { contentTypeEnum, postStatusEnum, toneProfileEnum } from "@sessionforge/db";
+import { createRevision } from "@/lib/revisions/manager";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
 type PostStatus = (typeof postStatusEnum.enumValues)[number];
@@ -87,6 +88,32 @@ export async function updatePost(
   postId: string,
   input: UpdatePostInput
 ) {
+  // If markdown is being updated and we have versioning params, create a revision first
+  if (
+    input.markdown !== undefined &&
+    input.versionType &&
+    input.editType
+  ) {
+    // Get the current post to extract title for the revision
+    const currentPost = await db.query.posts.findFirst({
+      where: and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId)),
+    });
+
+    if (!currentPost) {
+      throw new Error(`Post ${postId} not found`);
+    }
+
+    // Create a revision with the NEW markdown content
+    await createRevision({
+      postId,
+      title: input.title ?? currentPost.title,
+      markdown: input.markdown,
+      versionType: input.versionType as "major" | "minor",
+      editType: input.editType as "user_edit" | "ai_generated" | "auto_save" | "restore",
+      createdBy: input.createdBy,
+    });
+  }
+
   const updates: Record<string, unknown> = {};
 
   if (input.title !== undefined) updates.title = input.title;
