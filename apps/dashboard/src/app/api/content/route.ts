@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, workspaces, toneProfileEnum } from "@sessionforge/db";
-import { eq, desc, and, gte, lte, ilike } from "drizzle-orm/sql";
+import { eq, desc, and, gte, lte, ilike, inArray, sql } from "drizzle-orm/sql";
 import { createPost } from "@/lib/ai/tools/post-manager";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, contentCreateSchema } from "@/lib/validation";
@@ -66,7 +66,40 @@ export async function GET(request: Request) {
       offset,
     });
 
-    return NextResponse.json({ posts: results, limit, offset });
+    // Fetch derivative counts for all posts
+    const postIds = results.map((p) => p.id);
+    let derivativeCounts: Record<string, number> = {};
+
+    if (postIds.length > 0) {
+      const counts = await db
+        .select({
+          parentPostId: posts.parentPostId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(posts)
+        .where(
+          and(
+            inArray(posts.parentPostId, postIds),
+            eq(posts.workspaceId, workspace.id)
+          )
+        )
+        .groupBy(posts.parentPostId);
+
+      derivativeCounts = counts.reduce((acc, row) => {
+        if (row.parentPostId) {
+          acc[row.parentPostId] = row.count;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+    }
+
+    // Add derivative counts to each post
+    const postsWithCounts = results.map((post) => ({
+      ...post,
+      derivativeCount: derivativeCounts[post.id] || 0,
+    }));
+
+    return NextResponse.json({ posts: postsWithCounts, limit, offset });
   })(request);
 }
 
