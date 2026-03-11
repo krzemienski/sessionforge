@@ -3,6 +3,7 @@
 import { Lightbulb, Loader2 } from "lucide-react";
 import { useInsights } from "@/hooks/use-insights";
 import { cn } from "@/lib/utils";
+import { OnboardingTooltip } from "@/components/onboarding/onboarding-tooltip";
 
 const CATEGORIES: Record<string, { label: string; color: string }> = {
   novel_problem_solving: { label: "Novel", color: "text-purple-400 bg-purple-400/10" },
@@ -33,9 +34,12 @@ export function StepInsights({
         Step 4 of 4
       </p>
 
-      <h2 className="text-xl font-bold text-sf-text-primary mb-2">
-        Your first insights
-      </h2>
+      <div className="flex items-center gap-2 mb-2">
+        <h2 className="text-xl font-bold text-sf-text-primary">
+          Your first insights
+        </h2>
+        <OnboardingTooltip content="Insights are patterns, decisions, and techniques automatically extracted from your sessions. Each insight is scored by novelty and impact — higher scores mean more share-worthy content." />
+      </div>
       <p className="text-sf-text-secondary text-sm mb-6">
         SessionForge has extracted these insights from your sessions. Each one
         captures a pattern, decision, or technique worth remembering.

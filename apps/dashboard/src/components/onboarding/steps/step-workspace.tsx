@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { OnboardingTooltip } from "@/components/onboarding/onboarding-tooltip";
 
 type StepWorkspaceProps = {
   onNext: (data: { name: string }) => void;
@@ -22,9 +23,12 @@ export function StepWorkspace({ onNext, initialName = "" }: StepWorkspaceProps) 
         Step 1 of 4
       </p>
 
-      <h2 className="text-xl font-bold text-sf-text-primary mb-2">
-        Name your workspace
-      </h2>
+      <div className="flex items-center gap-2 mb-2">
+        <h2 className="text-xl font-bold text-sf-text-primary">
+          Name your workspace
+        </h2>
+        <OnboardingTooltip content="A workspace organises all your sessions, insights, and generated content in one place. Think of it as a project space — you can rename it any time from settings." />
+      </div>
       <p className="text-sf-text-secondary text-sm mb-6">
         Your workspace is where your sessions, insights, and content live. You
         can always change this later.

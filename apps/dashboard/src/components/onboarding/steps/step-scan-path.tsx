@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { OnboardingTooltip } from "@/components/onboarding/onboarding-tooltip";
 
 type StepScanPathProps = {
   onNext: (data: { sessionBasePath: string }) => void;
@@ -22,9 +23,12 @@ export function StepScanPath({ onNext, onBack }: StepScanPathProps) {
         Step 2 of 4
       </p>
 
-      <h2 className="text-xl font-bold text-sf-text-primary mb-2">
-        Where are your Claude sessions?
-      </h2>
+      <div className="flex items-center gap-2 mb-2">
+        <h2 className="text-xl font-bold text-sf-text-primary">
+          Where are your Claude sessions?
+        </h2>
+        <OnboardingTooltip content="SessionForge reads the JSONL conversation files that Claude Code saves locally. The default path (~/.claude) is correct for most setups — only change this if you've moved your Claude data directory." />
+      </div>
       <p className="text-sf-text-secondary text-sm mb-6">
         SessionForge scans this directory for Claude Code session files. The
         default path is where Claude Code stores sessions on your machine.

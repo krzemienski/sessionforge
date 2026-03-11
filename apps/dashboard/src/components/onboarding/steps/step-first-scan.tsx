@@ -2,6 +2,7 @@
 
 import { Loader2, Zap, CheckCircle, AlertCircle } from "lucide-react";
 import { useOnboardingScan } from "@/hooks/use-onboarding";
+import { OnboardingTooltip } from "@/components/onboarding/onboarding-tooltip";
 
 type StepFirstScanProps = {
   workspaceSlug: string;
@@ -28,9 +29,12 @@ export function StepFirstScan({
 
       {status === "idle" && (
         <>
-          <h2 className="text-xl font-bold text-sf-text-primary mb-2">
-            Scan your sessions
-          </h2>
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-xl font-bold text-sf-text-primary">
+              Scan your sessions
+            </h2>
+            <OnboardingTooltip content="The scan reads your local Claude Code JSONL files and indexes them in SessionForge. No data leaves your machine — everything is stored in your local database." />
+          </div>
           <p className="text-sf-text-secondary text-sm mb-8">
             SessionForge will scan your Claude Code session files and index them
             so you can extract insights and generate content.
