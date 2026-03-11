@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { BioSection } from "@/components/portfolio/bio-section";
 import { PostGrid } from "@/components/portfolio/post-grid";
-import { PortfolioLayout, ThemeMinimal } from "@/components/portfolio/portfolio-layout";
+import { PortfolioLayout, ThemeMinimal, ThemeDeveloperDark } from "@/components/portfolio/portfolio-layout";
 
 // This is a public route - no authentication required
 export const dynamic = "force-dynamic";
@@ -103,7 +103,12 @@ export default async function PublicPortfolioPage({
   const theme = themeParam || portfolio.theme || "default";
 
   // Select the appropriate theme component
-  const ThemeComponent = theme === "minimal" ? ThemeMinimal : PortfolioLayout;
+  let ThemeComponent = PortfolioLayout;
+  if (theme === "minimal") {
+    ThemeComponent = ThemeMinimal;
+  } else if (theme === "developer-dark") {
+    ThemeComponent = ThemeDeveloperDark;
+  }
 
   return (
     <ThemeComponent
