@@ -99,6 +99,7 @@ test.describe("Version History E2E Flow", () => {
     await page.route(
       (url: URL) => url.pathname.startsWith(`/api/content/${MOCK_POST.id}/revisions/`) && !url.pathname.includes("/restore"),
       async (route: any) => {
+        const url = new URL(route.request().url());
         const revisionId = url.pathname.split("/").pop();
         const revision = capturedRevisions.find((r) => r.id === revisionId);
         if (revision) {
@@ -306,5 +307,275 @@ test.describe("Version History E2E Flow", () => {
 
     // Verify panel is closed
     await expect(historyPanel).not.toBeVisible();
+  });
+
+  test("Named versions and notes workflow", async ({ page }) => {
+    // Track revisions created during the test
+    let revisionCount = 0;
+    const capturedRevisions: any[] = [];
+
+    // Route for fetching post data
+    await page.route(
+      (url: URL) => url.pathname === `/api/content/${MOCK_POST.id}`,
+      async (route: any) => {
+        if (route.request().method() === "GET") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(MOCK_POST),
+          });
+        } else if (route.request().method() === "PUT") {
+          // Save endpoint - create a new revision
+          const body = JSON.parse(route.request().postData() || "{}");
+
+          const revision = {
+            id: `revision-${++revisionCount}`,
+            postId: MOCK_POST.id,
+            versionNumber: revisionCount,
+            versionType: body.versionType || "major",
+            editType: body.editType || "user_edit",
+            markdown: body.markdown || MOCK_POST.markdown,
+            title: body.title || MOCK_POST.title,
+            wordCount: body.wordCount || MOCK_POST.wordCount,
+            wordCountDelta: 0,
+            createdAt: new Date().toISOString(),
+            createdBy: "user-123",
+            parentRevisionId: null,
+            versionLabel: null,
+            versionNotes: null,
+          };
+
+          capturedRevisions.push(revision);
+
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ ...MOCK_POST, ...body }),
+          });
+        } else {
+          await route.continue();
+        }
+      }
+    );
+
+    // Route for fetching revision history
+    await page.route(
+      (url: URL) => url.pathname === `/api/content/${MOCK_POST.id}/revisions`,
+      async (route: any) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ revisions: capturedRevisions }),
+        });
+      }
+    );
+
+    // Route for updating revision labels and notes
+    await page.route(
+      (url: URL) => !!url.pathname.match(new RegExp(`/api/content/${MOCK_POST.id}/revisions/[^/]+/update`)),
+      async (route: any) => {
+        const body = JSON.parse(route.request().postData() || "{}");
+        const revisionId = route.request().url().split("/").slice(-2)[0];
+
+        // Find and update the revision
+        const revision = capturedRevisions.find((r) => r.id === revisionId);
+        if (revision) {
+          if (body.versionLabel !== undefined) {
+            revision.versionLabel = body.versionLabel;
+          }
+          if (body.versionNotes !== undefined) {
+            revision.versionNotes = body.versionNotes;
+          }
+        }
+
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true }),
+        });
+      }
+    );
+
+    // Mock SEO analysis endpoint
+    await page.route(
+      (url: URL) => url.pathname === `/api/content/${MOCK_POST.id}/seo/analyze`,
+      async (route: any) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true }),
+        });
+      }
+    );
+
+    const workspace = await loginAndGetWorkspace(page);
+    await page.goto(`/${workspace}/content/${MOCK_POST.id}`);
+
+    // Wait for editor to load
+    await page.waitForSelector('input[placeholder="Post title..."]');
+
+    // ===== STEP 1: Create initial version by saving =====
+    const titleInput = page.locator('input[placeholder="Post title..."]');
+    await titleInput.fill("Version Test Post - First Save");
+
+    const saveButton = page.getByRole("button", { name: /^Save$/i });
+    await saveButton.click();
+
+    // Wait for save to complete
+    await page.waitForResponse(
+      (resp: any) =>
+        resp.url().includes(`/api/content/${MOCK_POST.id}`) &&
+        resp.request().method() === "PUT"
+    );
+
+    // Verify we created the first revision
+    expect(capturedRevisions.length).toBe(1);
+
+    // ===== STEP 2: Open history panel =====
+    const historyButton = page.getByRole("button", { name: /history/i });
+    await historyButton.click();
+
+    // Wait for history panel to appear
+    await page.waitForSelector('[class*="fixed"][class*="inset-0"]', {
+      state: "visible",
+      timeout: 5000
+    });
+
+    const historyPanel = page.locator('[class*="fixed"][class*="inset-0"]');
+    await expect(historyPanel).toBeVisible();
+
+    // ===== STEP 3: Click on version label to edit =====
+    // Find the version label button (it should show "v1" initially)
+    const versionLabelButton = page.locator('button[title="Click to edit version label"]').first();
+    await expect(versionLabelButton).toBeVisible();
+    await versionLabelButton.click();
+
+    // Wait for input to appear
+    const versionLabelInput = page.locator('input[placeholder^="v"]').first();
+    await expect(versionLabelInput).toBeVisible();
+
+    // ===== STEP 4: Set label to 'Pre-review draft' =====
+    await versionLabelInput.fill("Pre-review draft");
+    await versionLabelInput.press("Enter");
+
+    // Wait for the update to complete
+    await page.waitForResponse(
+      (resp: any) =>
+        resp.url().includes(`/api/content/${MOCK_POST.id}/revisions/`) &&
+        resp.url().includes("/update") &&
+        resp.request().method() === "PATCH"
+    );
+
+    // Verify the label was saved in our mock data
+    expect(capturedRevisions[0].versionLabel).toBe("Pre-review draft");
+
+    // ===== STEP 5: Add notes 'Ready for team review' =====
+    // Click on the Notes button to expand notes section
+    const notesButton = page.locator('button:has-text("Notes")').first();
+    await notesButton.click();
+
+    // Wait for notes section to expand
+    await page.waitForTimeout(300);
+
+    // Click on the notes area to start editing
+    const notesArea = page.locator('textarea[placeholder="Add notes about this version..."]').first();
+    await expect(notesArea).toBeVisible();
+    await notesArea.fill("Ready for team review");
+
+    // Click the Save button for notes
+    const notesSaveButton = page.locator('button:has-text("Save")').first();
+    await notesSaveButton.click();
+
+    // Wait for the notes update to complete
+    await page.waitForResponse(
+      (resp: any) =>
+        resp.url().includes(`/api/content/${MOCK_POST.id}/revisions/`) &&
+        resp.url().includes("/update") &&
+        resp.request().method() === "PATCH"
+    );
+
+    // Verify the notes were saved in our mock data
+    expect(capturedRevisions[0].versionNotes).toBe("Ready for team review");
+
+    // Close the history panel
+    const closeButton = page.locator('[aria-label="Close history"]');
+    await closeButton.click();
+    await expect(historyPanel).not.toBeVisible();
+
+    // ===== STEP 6: Refresh page and verify label and notes persist =====
+    await page.reload();
+
+    // Wait for editor to load again
+    await page.waitForSelector('input[placeholder="Post title..."]');
+
+    // Open history panel again
+    await historyButton.click();
+    await page.waitForSelector('[class*="fixed"][class*="inset-0"]', {
+      state: "visible",
+      timeout: 5000
+    });
+
+    // Verify the label persisted
+    const persistedLabel = page.locator('button:has-text("Pre-review draft")').first();
+    await expect(persistedLabel).toBeVisible();
+
+    // Expand notes to verify they persisted
+    const notesButtonAfterReload = page.locator('button:has-text("Notes")').first();
+    await notesButtonAfterReload.click();
+    await page.waitForTimeout(300);
+
+    // Verify notes content persisted (should be visible in the expanded section)
+    const notesContent = page.locator('text="Ready for team review"');
+    await expect(notesContent).toBeVisible();
+
+    // Close history panel
+    await closeButton.click();
+
+    // ===== STEP 7: Create another version and label it 'Final for publishing' =====
+    // Make another edit and save
+    await titleInput.fill("Version Test Post - Second Save");
+    await saveButton.click();
+
+    // Wait for save to complete
+    await page.waitForResponse(
+      (resp: any) =>
+        resp.url().includes(`/api/content/${MOCK_POST.id}`) &&
+        resp.request().method() === "PUT"
+    );
+
+    // Verify we now have two revisions
+    expect(capturedRevisions.length).toBe(2);
+
+    // Open history panel
+    await historyButton.click();
+    await page.waitForSelector('[class*="fixed"][class*="inset-0"]', {
+      state: "visible",
+      timeout: 5000
+    });
+
+    // Find the second version (newest, should be first in the list)
+    const secondVersionLabel = page.locator('button[title="Click to edit version label"]').first();
+    await secondVersionLabel.click();
+
+    // Edit the label
+    const secondVersionInput = page.locator('input[placeholder^="v"]').first();
+    await expect(secondVersionInput).toBeVisible();
+    await secondVersionInput.fill("Final for publishing");
+    await secondVersionInput.press("Enter");
+
+    // Wait for update
+    await page.waitForResponse(
+      (resp: any) =>
+        resp.url().includes(`/api/content/${MOCK_POST.id}/revisions/`) &&
+        resp.url().includes("/update") &&
+        resp.request().method() === "PATCH"
+    );
+
+    // Verify the label was saved
+    expect(capturedRevisions[1].versionLabel).toBe("Final for publishing");
+
+    // Verify both labels are now visible
+    await expect(page.locator('button:has-text("Final for publishing")')).toBeVisible();
+    await expect(page.locator('button:has-text("Pre-review draft")')).toBeVisible();
   });
 });
