@@ -13,9 +13,12 @@ import {
   Loader2,
   Pencil,
   FileText,
+  Columns2,
+  AlignLeft,
 } from "lucide-react";
 import { useRevisions, useRevision, useRestoreRevision, useUpdateRevisionLabel, useUpdateRevisionNotes } from "@/hooks/use-revisions";
 import { DiffViewer } from "./diff-viewer";
+import { SideBySideDiffViewer } from "./side-by-side-diff-viewer";
 import { cn } from "@/lib/utils";
 
 interface RevisionEntry {
@@ -388,6 +391,7 @@ interface DiffOverlayProps {
 }
 
 function DiffOverlay({ postId, revision, onClose }: DiffOverlayProps) {
+  const [diffMode, setDiffMode] = useState<"unified" | "split">("unified");
   const targetRev = useRevision(postId, revision.id);
   const parentRev = useRevision(postId, revision.parentRevisionId ?? "");
 
@@ -414,20 +418,56 @@ function DiffOverlay({ postId, revision, onClose }: DiffOverlayProps) {
                 : ""}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-sf hover:bg-sf-bg-hover text-sf-text-muted hover:text-sf-text-primary transition-colors"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Diff mode toggle */}
+            <div className="flex items-center gap-1 bg-sf-bg-primary rounded-sf p-0.5 border border-sf-border">
+              <button
+                onClick={() => setDiffMode("unified")}
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 rounded-sf text-xs transition-colors",
+                  diffMode === "unified"
+                    ? "bg-sf-accent text-white"
+                    : "text-sf-text-muted hover:text-sf-text-secondary"
+                )}
+                title="Unified diff view"
+              >
+                <AlignLeft size={14} />
+                <span>Unified</span>
+              </button>
+              <button
+                onClick={() => setDiffMode("split")}
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 rounded-sf text-xs transition-colors",
+                  diffMode === "split"
+                    ? "bg-sf-accent text-white"
+                    : "text-sf-text-muted hover:text-sf-text-secondary"
+                )}
+                title="Side-by-side diff view"
+              >
+                <Columns2 size={14} />
+                <span>Split</span>
+              </button>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-sf hover:bg-sf-bg-hover text-sf-text-muted hover:text-sf-text-primary transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
         <div className="p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 size={24} className="animate-spin text-sf-accent" />
             </div>
-          ) : (
+          ) : diffMode === "unified" ? (
             <DiffViewer
+              fromContent={parentRev.data?.markdown ?? ""}
+              toContent={targetRev.data?.markdown ?? ""}
+            />
+          ) : (
+            <SideBySideDiffViewer
               fromContent={parentRev.data?.markdown ?? ""}
               toContent={targetRev.data?.markdown ?? ""}
             />
