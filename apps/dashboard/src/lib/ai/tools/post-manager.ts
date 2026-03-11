@@ -106,8 +106,8 @@ export async function updatePost(
       postId,
       title: input.title ?? currentPost.title,
       markdown: input.markdown,
-      versionType: input.versionType as "major" | "minor" | "patch",
-      editType: input.editType as "ai" | "human" | "restore",
+      versionType: input.versionType as "major" | "minor",
+      editType: input.editType as "user_edit" | "ai_generated" | "auto_save" | "restore",
       createdBy: input.createdBy,
     });
   }
