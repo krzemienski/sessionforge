@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, Pin } from "lucide-react";
+import Image from "next/image";
+import { Search, Pin, BookOpen, FolderOpen } from "lucide-react";
 
 interface Post {
   id: string;
@@ -214,6 +215,92 @@ export function PostGrid({
           </button>
         )}
       </div>
+
+      {/* Featured Series */}
+      {series.length > 0 && series.filter(s => s.coverImage).length > 0 && (
+        <div className="mb-12">
+          <h3 className="text-lg font-semibold text-sf-text-primary mb-4 flex items-center gap-2">
+            <BookOpen size={20} />
+            Featured Series
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {series
+              .filter(s => s.coverImage)
+              .slice(0, 3)
+              .map((s) => (
+                <div
+                  key={s.id}
+                  className="bg-sf-bg-secondary border border-sf-border rounded-sf overflow-hidden hover:border-sf-accent/50 transition-colors"
+                >
+                  {/* Cover Image */}
+                  <div className="relative w-full aspect-video bg-sf-bg-tertiary">
+                    <Image
+                      src={s.coverImage!}
+                      alt={s.title}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover"
+                    />
+                  </div>
+                  {/* Content */}
+                  <div className="p-4">
+                    <h4 className="text-base font-semibold text-sf-text-primary mb-2">
+                      {s.title}
+                    </h4>
+                    {s.description && (
+                      <p className="text-sm text-sf-text-secondary line-clamp-2">
+                        {s.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Featured Collections */}
+      {collections.length > 0 && collections.filter(c => c.coverImage).length > 0 && (
+        <div className="mb-12">
+          <h3 className="text-lg font-semibold text-sf-text-primary mb-4 flex items-center gap-2">
+            <FolderOpen size={20} />
+            Featured Collections
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {collections
+              .filter(c => c.coverImage)
+              .slice(0, 3)
+              .map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-sf-bg-secondary border border-sf-border rounded-sf overflow-hidden hover:border-sf-accent/50 transition-colors"
+                >
+                  {/* Cover Image */}
+                  <div className="relative w-full aspect-video bg-sf-bg-tertiary">
+                    <Image
+                      src={c.coverImage!}
+                      alt={c.title}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover"
+                    />
+                  </div>
+                  {/* Content */}
+                  <div className="p-4">
+                    <h4 className="text-base font-semibold text-sf-text-primary mb-2">
+                      {c.title}
+                    </h4>
+                    {c.description && (
+                      <p className="text-sm text-sf-text-secondary line-clamp-2">
+                        {c.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* Pinned Posts Grid */}
       {filteredPinnedPosts.length > 0 && (

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Twitter, Linkedin, Github, ExternalLink, User } from "lucide-react";
 
 interface SocialLinks {
@@ -33,10 +34,13 @@ export function BioSection({
           <div className="flex-shrink-0">
             <div className="w-24 h-24 rounded-full bg-sf-bg-tertiary border-2 border-sf-border flex items-center justify-center overflow-hidden">
               {avatarUrl ? (
-                <img
+                <Image
                   src={avatarUrl}
                   alt={`${workspaceName} avatar`}
+                  width={96}
+                  height={96}
                   className="w-full h-full object-cover"
+                  priority
                 />
               ) : (
                 <User size={40} className="text-sf-text-muted" />
