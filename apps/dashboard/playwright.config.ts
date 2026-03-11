@@ -2,12 +2,13 @@ import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Playwright configuration for E2E tests.
- * Tests are located in tests/e2e/ and cover critical user flows:
- * onboarding, session scanning, content generation, and publishing.
+ * Tests are located in tests/e2e/ and e2e/ directories.
+ * tests/e2e/ covers critical user flows (onboarding, publishing),
+ * e2e/ covers editor-specific flows (version history, content editing).
  */
 export default defineConfig({
-  testDir: "./tests/e2e",
-  testMatch: "**/*.spec.{ts,tsx}",
+  testDir: "./",
+  testMatch: ["**/e2e/**/*.spec.{ts,tsx}", "**/tests/e2e/**/*.spec.{ts,tsx}"],
 
   /* Maximum time one test can run */
   timeout: 30_000,
