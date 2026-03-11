@@ -56,3 +56,21 @@ export function useRestoreRevision(postId: string) {
     },
   });
 }
+
+export function useUpdateRevisionLabel(postId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ revisionId, versionLabel }: { revisionId: string; versionLabel: string | null }) => {
+      const res = await fetch(`/api/content/${postId}/revisions/${revisionId}/update`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ versionLabel }),
+      });
+      if (!res.ok) throw new Error("Failed to update version label");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["revisions", postId] });
+    },
+  });
+}

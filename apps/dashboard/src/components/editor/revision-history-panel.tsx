@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Bot,
   User,
@@ -11,8 +11,9 @@ import {
   X,
   History,
   Loader2,
+  Pencil,
 } from "lucide-react";
-import { useRevisions, useRevision, useRestoreRevision } from "@/hooks/use-revisions";
+import { useRevisions, useRevision, useRestoreRevision, useUpdateRevisionLabel } from "@/hooks/use-revisions";
 import { DiffViewer } from "./diff-viewer";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +29,7 @@ interface RevisionEntry {
   wordCountDelta: number | null;
   createdAt: string | null;
   createdBy: string | null;
+  versionLabel: string | null;
 }
 
 interface RevisionHistoryPanelProps {
@@ -61,23 +63,119 @@ function getEditTypeLabel(editType: string): string {
   }
 }
 
+// --- Inline Editable Label Component ---
+
+interface EditableVersionLabelProps {
+  postId: string;
+  revisionId: string;
+  versionNumber: number;
+  versionLabel: string | null;
+  size?: "default" | "small";
+}
+
+function EditableVersionLabel({
+  postId,
+  revisionId,
+  versionNumber,
+  versionLabel,
+  size = "default"
+}: EditableVersionLabelProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(versionLabel || "");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const updateLabel = useUpdateRevisionLabel(postId);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleSave = () => {
+    if (editValue.trim() !== (versionLabel || "")) {
+      updateLabel.mutate({
+        revisionId,
+        versionLabel: editValue.trim() || null,
+      });
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === "Escape") {
+      setEditValue(versionLabel || "");
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={handleKeyDown}
+        placeholder={`v${versionNumber}`}
+        className={cn(
+          "bg-sf-bg-primary border border-sf-border-focus rounded-sf px-2 py-0.5 font-display font-bold text-sf-text-primary focus:outline-none",
+          size === "small" ? "text-xs w-24" : "text-sm w-32"
+        )}
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setIsEditing(true)}
+      className={cn(
+        "group flex items-center gap-1.5 rounded-sf-full px-2 py-0.5 font-display font-bold transition-colors",
+        size === "small"
+          ? "text-xs hover:bg-sf-bg-hover"
+          : "bg-sf-accent text-white hover:bg-sf-accent-hover"
+      )}
+      title="Click to edit version label"
+    >
+      <span className={size === "small" ? "text-sf-text-primary" : ""}>
+        {versionLabel || `v${versionNumber}`}
+      </span>
+      <Pencil
+        size={size === "small" ? 10 : 12}
+        className={cn(
+          "opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0",
+          size === "small" ? "text-sf-text-muted" : "text-white/80"
+        )}
+      />
+    </button>
+  );
+}
+
 // --- Sub-components ---
 
 interface RevisionCardProps {
+  postId: string;
   revision: RevisionEntry;
   onViewDiff: () => void;
   onRestore: () => void;
   isRestoring: boolean;
 }
 
-function MajorRevisionCard({ revision, onViewDiff, onRestore, isRestoring }: RevisionCardProps) {
+function MajorRevisionCard({ postId, revision, onViewDiff, onRestore, isRestoring }: RevisionCardProps) {
   return (
     <div className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-3 transition-colors">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="flex-shrink-0 px-2 py-0.5 bg-sf-accent text-white rounded-sf-full text-xs font-bold font-display">
-            v{revision.versionNumber}
-          </span>
+          <EditableVersionLabel
+            postId={postId}
+            revisionId={revision.id}
+            versionNumber={revision.versionNumber}
+            versionLabel={revision.versionLabel}
+          />
           {getEditTypeIcon(revision.editType)}
           <span className="text-sm text-sf-text-primary truncate">
             {getEditTypeLabel(revision.editType)}
@@ -118,13 +216,17 @@ function MajorRevisionCard({ revision, onViewDiff, onRestore, isRestoring }: Rev
   );
 }
 
-function MinorRevisionRow({ revision, onViewDiff, onRestore, isRestoring }: RevisionCardProps) {
+function MinorRevisionRow({ postId, revision, onViewDiff, onRestore, isRestoring }: RevisionCardProps) {
   return (
     <div className="flex items-center justify-between py-1.5 px-2 rounded-sf hover:bg-sf-bg-hover transition-colors group">
       <div className="flex items-center gap-2 min-w-0">
-        <span className="text-xs text-sf-text-muted font-mono w-7 flex-shrink-0 text-right">
-          v{revision.versionNumber}
-        </span>
+        <EditableVersionLabel
+          postId={postId}
+          revisionId={revision.id}
+          versionNumber={revision.versionNumber}
+          versionLabel={revision.versionLabel}
+          size="small"
+        />
         {getEditTypeIcon(revision.editType)}
         <span className="text-xs text-sf-text-secondary truncate">
           {revision.createdAt ? new Date(revision.createdAt).toLocaleString() : ""}
@@ -313,6 +415,7 @@ export function RevisionHistoryPanel({ postId, className }: RevisionHistoryPanel
                 {orphanMinors.map((rev) => (
                   <MinorRevisionRow
                     key={rev.id}
+                    postId={postId}
                     revision={rev}
                     onViewDiff={() => setDiffRevision(rev)}
                     onRestore={() => handleRestore(rev.id)}
@@ -326,6 +429,7 @@ export function RevisionHistoryPanel({ postId, className }: RevisionHistoryPanel
             {groups.map((group) => (
               <div key={group.major.id} className="space-y-1">
                 <MajorRevisionCard
+                  postId={postId}
                   revision={group.major}
                   onViewDiff={() => setDiffRevision(group.major)}
                   onRestore={() => handleRestore(group.major.id)}
@@ -355,6 +459,7 @@ export function RevisionHistoryPanel({ postId, className }: RevisionHistoryPanel
                         {group.minors.map((rev) => (
                           <MinorRevisionRow
                             key={rev.id}
+                            postId={postId}
                             revision={rev}
                             onViewDiff={() => setDiffRevision(rev)}
                             onRestore={() => handleRestore(rev.id)}
