@@ -636,6 +636,8 @@ export const postRevisions = pgTable(
     wordCountDelta: integer("word_count_delta").default(0),
     createdAt: timestamp("created_at").defaultNow(),
     createdBy: text("created_by"),
+    versionLabel: text("version_label"),
+    versionNotes: text("version_notes"),
   },
   (table) => [
     index("postRevisions_postId_idx").on(table.postId),
