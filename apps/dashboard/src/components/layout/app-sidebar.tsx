@@ -13,6 +13,7 @@ import {
   Activity,
   Settings,
   LogOut,
+  PenLine,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -25,6 +26,7 @@ const mainNav = [
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Automation", icon: Zap, href: "/automation" },
   { label: "Pipeline", icon: Activity, href: "/observability" },
+  { label: "Writing Coach", icon: PenLine, href: "/writing-coach" },
 ];
 
 const settingsNav = [

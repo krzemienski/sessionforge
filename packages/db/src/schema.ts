@@ -1730,6 +1730,10 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     references: [linkedinPublications.postId],
   }),
   socialAnalytics: many(socialAnalytics),
+  styleMetrics: one(postStyleMetrics, {
+    fields: [posts.id],
+    references: [postStyleMetrics.postId],
+  }),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -2392,6 +2396,57 @@ export const socialAnalyticsRelations = relations(
 export const scanSourcesRelations = relations(scanSources, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [scanSources.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+// ── Writing Coach: Post Style Metrics ──
+
+export interface AiPatternMatch {
+  phrase: string;
+  category: string;
+  suggestion: string;
+}
+
+export const postStyleMetrics = pgTable(
+  "post_style_metrics",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    readabilityScore: real("readability_score"),
+    gradeLevel: real("grade_level"),
+    wordCount: integer("word_count"),
+    sentenceCount: integer("sentence_count"),
+    avgSentenceLength: real("avg_sentence_length"),
+    avgSyllablesPerWord: real("avg_syllables_per_word"),
+    vocabDiversity: real("vocab_diversity"),
+    passiveVoicePct: real("passive_voice_pct"),
+    codeToProseRatio: real("code_to_prose_ratio"),
+    aiPatternCount: integer("ai_pattern_count"),
+    aiPatternMatches: jsonb("ai_pattern_matches").$type<AiPatternMatch[]>(),
+    authenticityScore: real("authenticity_score"),
+    voiceConsistencyScore: real("voice_consistency_score"),
+    suggestions: jsonb("suggestions"),
+    analyzedAt: timestamp("analyzed_at").defaultNow(),
+  },
+  (table) => [
+    index("postStyleMetrics_postId_idx").on(table.postId),
+    index("postStyleMetrics_workspaceId_idx").on(table.workspaceId),
+  ]
+);
+
+export const postStyleMetricsRelations = relations(postStyleMetrics, ({ one }) => ({
+  post: one(posts, {
+    fields: [postStyleMetrics.postId],
+    references: [posts.id],
+  }),
+  workspace: one(workspaces, {
+    fields: [postStyleMetrics.workspaceId],
     references: [workspaces.id],
   }),
 }));
