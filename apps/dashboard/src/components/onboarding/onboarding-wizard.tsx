@@ -9,8 +9,12 @@ import { StepScanPath } from "./steps/step-scan-path";
 import { StepFirstScan } from "./steps/step-first-scan";
 import { StepInsights } from "./steps/step-insights";
 import { useCompleteOnboarding } from "@/hooks/use-onboarding";
+import { OnboardingProgressBar } from "./onboarding-progress-bar";
 
 type Step = "welcome" | "workspace" | "scan-path" | "first-scan" | "insights";
+
+const STEP_ORDER: Step[] = ["workspace", "scan-path", "first-scan", "insights"];
+const TOTAL_STEPS = STEP_ORDER.length;
 
 type OnboardingWizardProps = {
   initialWorkspaceName?: string;
@@ -92,9 +96,16 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
     );
   }
 
+  const currentStepIndex = STEP_ORDER.indexOf(step);
+  const currentStepNumber = currentStepIndex >= 0 ? currentStepIndex + 1 : 1;
+
   return (
     <div className="min-h-screen bg-sf-bg-primary flex items-center justify-center p-4">
       <div className="w-full flex flex-col items-center gap-6">
+        <OnboardingProgressBar
+          currentStep={currentStepNumber}
+          totalSteps={TOTAL_STEPS}
+        />
         {step === "workspace" && (
           <StepWorkspace
             initialName={workspaceName}
