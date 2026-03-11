@@ -6,6 +6,7 @@
  * clicked to view the source session transcript.
  */
 
+import type { ReactElement } from "react";
 import {
   DecoratorNode,
   type DOMConversionMap,
@@ -42,7 +43,7 @@ export type SerializedCitationNode = Spread<
  * // Renders: [@abc-123:10]
  * ```
  */
-export class CitationNode extends DecoratorNode<JSX.Element> {
+export class CitationNode extends DecoratorNode<ReactElement> {
   __sessionId: string;
   __messageIndex: number;
 
@@ -126,7 +127,7 @@ export class CitationNode extends DecoratorNode<JSX.Element> {
 
   // ── React Component ──────────────────────────────────────────────────────
 
-  decorate(): JSX.Element {
+  decorate(): ReactElement {
     return (
       <CitationInlineMarker
         sessionId={this.__sessionId}
