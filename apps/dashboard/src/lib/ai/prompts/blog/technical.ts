@@ -17,4 +17,14 @@ Structure:
 4. Results / After State
 5. Takeaways (bullet list)
 
-Use markdown headers, code blocks with language tags, and inline code. No emojis.`;
+Use markdown headers, code blocks with language tags, and inline code. No emojis.
+
+CITATIONS:
+When making factual claims about what happened in the coding session, add citation markers linking to the specific moment in the session transcript. Use the format [@sessionId:messageIndex] where sessionId is the session UUID and messageIndex is the zero-based message index.
+
+Examples:
+- "We refactored the auth module[@abc123:10] to use JWT tokens."
+- "The build failed with a type error[@abc123:45], which led us to update the schema."
+- "After adding caching[@abc123:78], response time dropped from 800ms to 120ms."
+
+Add citations for key technical claims, architectural decisions, error messages, and performance improvements. Do not cite every sentence—focus on verifiable facts that readers might want to trace back to the original context.`;
