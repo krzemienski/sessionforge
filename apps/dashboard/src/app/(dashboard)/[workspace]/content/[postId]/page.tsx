@@ -776,6 +776,37 @@ export default function ContentEditorPage() {
         isOpen={isTemplateDialogOpen}
         onClose={() => setIsTemplateDialogOpen(false)}
       />
+
+      {/* Revision History Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowHistory(false)}
+          />
+
+          {/* Right-side panel */}
+          <div className="ml-auto relative w-full max-w-2xl bg-sf-bg-primary border-l border-sf-border shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-sf-border">
+              <h2 className="text-lg font-semibold text-sf-text-primary">Revision History</h2>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="p-2 hover:bg-sf-bg-hover rounded-sf transition-colors"
+                aria-label="Close history"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-hidden">
+              <RevisionHistoryPanel postId={postId} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
