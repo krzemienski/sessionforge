@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileText, BookOpen, FolderOpen, Settings2 } from "lucide-react";
+import { FileText, BookOpen, FolderOpen, Settings2, GitBranch, CornerUpLeft } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { STATUS_COLORS, TYPE_LABELS, STATUS_TABS, SeoScoreBadge } from "@/lib/content-constants";
 import { ExportDropdown } from "@/components/content/export-dropdown";
@@ -125,6 +125,19 @@ export function ContentListView({
                 {TYPE_LABELS[post.contentType] || post.contentType}
               </span>
               <SeoScoreBadge post={post} />
+              {/* Derivative count badge */}
+              {post.derivativeCount > 0 && (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-sf-accent/10 border border-sf-accent/20 rounded-sf-full text-xs text-sf-accent" title={`${post.derivativeCount} repurposed variant${post.derivativeCount > 1 ? 's' : ''}`}>
+                  <GitBranch size={12} />
+                  <span>{post.derivativeCount}</span>
+                </div>
+              )}
+              {/* Parent post indicator */}
+              {post.parentPostId && (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-sf-text-muted/10 border border-sf-text-muted/20 rounded-sf-full text-xs text-sf-text-muted" title="Repurposed from another post">
+                  <CornerUpLeft size={12} />
+                </div>
+              )}
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-sf-text-muted">{post.updatedAt ? timeAgo(post.updatedAt) : ""}</span>
                 <ExportDropdown markdown={post.markdown || ""} title={post.title || ""} />

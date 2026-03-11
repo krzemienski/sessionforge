@@ -429,6 +429,7 @@ export const posts = pgTable(
     contentType: contentTypeEnum("content_type").notNull(),
     status: postStatusEnum("status").default("draft"),
     insightId: text("insight_id").references(() => insights.id),
+    parentPostId: text("parent_post_id"),
     sourceMetadata: jsonb("source_metadata").$type<{
       triggerId?: string;
       sessionIds: string[];
