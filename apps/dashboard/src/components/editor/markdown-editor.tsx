@@ -18,6 +18,7 @@ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
 import { $getRoot, EditorState } from "lexical";
+import { CitationNode } from "./nodes/citation-node";
 
 function MarkdownImportPlugin({ markdown }: { markdown: string }) {
   const [editor] = useLexicalComposerContext();
@@ -74,6 +75,7 @@ const EDITOR_NODES = [
   CodeHighlightNode,
   LinkNode,
   AutoLinkNode,
+  CitationNode,
 ];
 
 interface MarkdownEditorProps {
