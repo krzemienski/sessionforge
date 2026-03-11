@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { WelcomeModal } from "./welcome-modal";
@@ -9,7 +9,7 @@ import { StepScanPath } from "./steps/step-scan-path";
 import { StepFirstScan } from "./steps/step-first-scan";
 import { StepInsights } from "./steps/step-insights";
 import { StepGeneratePost } from "./steps/step-generate-post";
-import { useCompleteOnboarding } from "@/hooks/use-onboarding";
+import { useCompleteOnboarding, useTrackOnboardingStep } from "@/hooks/use-onboarding";
 import { OnboardingProgressBar } from "./onboarding-progress-bar";
 import { OnboardingTimer } from "./onboarding-timer";
 
@@ -32,8 +32,17 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
   const [createError, setCreateError] = useState<string | null>(null);
 
   const completeOnboarding = useCompleteOnboarding();
+  const trackStep = useTrackOnboardingStep();
+
+  // Track when welcome step is shown (on component mount)
+  useEffect(() => {
+    if (step === "welcome") {
+      trackStep("welcome", "entered");
+    }
+  }, [step, trackStep]);
 
   async function handleSkip() {
+    trackStep(step, "skipped", { currentStep: step });
     // Create a default workspace so the user isn't left workspace-less
     const name = initialWorkspaceName || "My Workspace";
     try {
@@ -75,6 +84,7 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
       const workspace = await res.json();
       setWorkspaceSlug(workspace.slug);
       setStep("first-scan");
+      trackStep("first-scan", "entered");
     } catch (err) {
       setCreateError(
         err instanceof Error ? err.message : "Failed to create workspace"
@@ -85,6 +95,7 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
   }
 
   async function handleComplete() {
+    trackStep("generate-post", "completed");
     await completeOnboarding.mutateAsync();
     router.push("/");
   }
@@ -95,6 +106,7 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
         onStart={() => {
           localStorage.setItem("sf_onboarding_started_at", Date.now().toString());
           setStep("workspace");
+          trackStep("workspace", "entered");
         }}
         onSkip={handleSkip}
       />
@@ -122,6 +134,7 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
             onNext={({ name }) => {
               setWorkspaceName(name);
               setStep("scan-path");
+              trackStep("scan-path", "entered");
             }}
           />
         )}
@@ -150,6 +163,7 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
             onNext={(count) => {
               setSessionsFound(count);
               setStep("insights");
+              trackStep("insights", "entered", { sessionsFound: count });
             }}
             onBack={() => setStep("scan-path")}
           />
@@ -158,7 +172,10 @@ export function OnboardingWizard({ initialWorkspaceName }: OnboardingWizardProps
         {step === "insights" && (
           <StepInsights
             workspaceSlug={workspaceSlug}
-            onComplete={() => setStep("generate-post")}
+            onComplete={() => {
+              setStep("generate-post");
+              trackStep("generate-post", "entered");
+            }}
             onBack={() => setStep("first-scan")}
           />
         )}
