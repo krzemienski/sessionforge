@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { OnboardingChecklist } from "@/components/onboarding/onboarding-checklist";
 
 const mainNav = [
   { label: "Dashboard", icon: LayoutDashboard, href: "" },
@@ -94,6 +95,10 @@ export function AppSidebar({
             {item.label}
           </Link>
         ))}
+
+        <div className="mt-4">
+          <OnboardingChecklist workspace={workspace} />
+        </div>
       </nav>
 
       <div className="p-3 border-t border-sf-border">
