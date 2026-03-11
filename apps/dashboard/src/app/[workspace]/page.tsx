@@ -4,7 +4,8 @@ import { PostGrid } from "@/components/portfolio/post-grid";
 import { PortfolioLayout, ThemeMinimal, ThemeDeveloperDark, ThemeColorful } from "@/components/portfolio/portfolio-layout";
 
 // This is a public route - no authentication required
-export const dynamic = "force-dynamic";
+// Enable ISR with 1 hour revalidation for better performance
+export const revalidate = 3600;
 
 interface PortfolioData {
   workspace: {
@@ -67,7 +68,7 @@ async function getPortfolioData(
     const res = await fetch(
       `${baseUrl}/api/public/portfolio/${workspace}`,
       {
-        cache: "no-store",
+        next: { revalidate: 3600 },
       }
     );
 
