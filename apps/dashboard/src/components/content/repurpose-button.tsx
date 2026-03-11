@@ -5,14 +5,13 @@ import { Wand2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { showToast } from "@/components/ui/toast";
 import { BatchRepurposeDialog } from "./batch-repurpose-dialog";
+import { useRepurpose, type TargetFormat } from "@/hooks/use-repurpose";
 
 interface RepurposeButtonProps {
   postId: string;
   contentType: string;
   workspaceSlug: string;
 }
-
-type TargetFormat = "twitter_thread" | "linkedin_post" | "changelog" | "tldr" | "blog_post";
 
 const FORMAT_LABELS: Record<TargetFormat, string> = {
   twitter_thread: "Twitter Thread",
@@ -44,9 +43,9 @@ function getAvailableFormats(contentType: string): TargetFormat[] {
 
 export function RepurposeButton({ postId, contentType, workspaceSlug }: RepurposeButtonProps) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [showBatchDialog, setShowBatchDialog] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const repurpose = useRepurpose();
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -62,47 +61,22 @@ export function RepurposeButton({ postId, contentType, workspaceSlug }: Repurpos
 
   async function handleRepurpose(targetFormat: TargetFormat, e: React.MouseEvent) {
     e.stopPropagation();
-    setLoading(true);
     setOpen(false);
 
-    try {
-      const response = await fetch(`/api/agents/repurpose`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceSlug,
-          sourcePostId: postId,
-          targetFormat,
-        }),
-      });
+    showToast(`Repurposing to ${FORMAT_LABELS[targetFormat]}...`, "info");
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Repurpose failed");
-      }
+    // Use the hook to run the repurpose operation
+    await repurpose.run({
+      workspaceSlug,
+      sourcePostId: postId,
+      targetFormat,
+    });
 
-      showToast(`Repurposing to ${FORMAT_LABELS[targetFormat]}...`, "success");
-
-      // The response is a stream, so we'll wait for it to complete
-      const reader = response.body?.getReader();
-      if (reader) {
-        while (true) {
-          const { done } = await reader.read();
-          if (done) break;
-        }
-      }
-
+    if (repurpose.status === "completed") {
       showToast(`${FORMAT_LABELS[targetFormat]} created successfully`, "success");
-
-      // Reload the page to show the new post in the tracker
       setTimeout(() => window.location.reload(), 1000);
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Failed to repurpose content",
-        "error"
-      );
-    } finally {
-      setLoading(false);
+    } else if (repurpose.error) {
+      showToast(repurpose.error, "error");
     }
   }
 
@@ -118,14 +92,14 @@ export function RepurposeButton({ postId, contentType, workspaceSlug }: Repurpos
             e.stopPropagation();
             setOpen((prev) => !prev);
           }}
-          disabled={loading}
+          disabled={repurpose.status === "running" || repurpose.status === "retrying"}
           className={cn(
             "flex items-center gap-1.5 bg-sf-bg-secondary border border-sf-border text-sf-text-secondary px-3 py-1.5 rounded-sf text-sm font-medium hover:text-sf-text-primary hover:border-sf-border-strong transition-colors",
-            loading && "opacity-50 cursor-not-allowed"
+            (repurpose.status === "running" || repurpose.status === "retrying") && "opacity-50 cursor-not-allowed"
           )}
         >
           <Wand2 size={14} />
-          {loading ? "Repurposing..." : "Repurpose"}
+          {repurpose.status === "running" || repurpose.status === "retrying" ? "Repurposing..." : "Repurpose"}
           <ChevronDown
             size={14}
             className={cn("transition-transform duration-150", open && "rotate-180")}

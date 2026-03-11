@@ -54,8 +54,8 @@ export async function GET(
     id: post.id,
     title: post.title,
     contentType: post.contentType,
-    status: post.status,
-    createdAt: post.createdAt.toISOString(),
+    status: post.status ?? "draft",
+    createdAt: post.createdAt?.toISOString() ?? new Date().toISOString(),
   }));
 
   // Query parent post if this is a derivative
@@ -70,8 +70,8 @@ export async function GET(
         id: parent.id,
         title: parent.title,
         contentType: parent.contentType,
-        status: parent.status,
-        createdAt: parent.createdAt.toISOString(),
+        status: parent.status ?? "draft",
+        createdAt: parent.createdAt?.toISOString() ?? new Date().toISOString(),
       };
     }
   }
