@@ -24,7 +24,7 @@ export function StepFirstScan({
   return (
     <div className="w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-8">
       <p className="text-sf-text-muted text-xs font-medium uppercase tracking-widest mb-6">
-        Step 3 of 4
+        Step 3 of 5
       </p>
 
       {status === "idle" && (
