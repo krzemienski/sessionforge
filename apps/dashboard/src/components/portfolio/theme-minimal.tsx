@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 
-interface PortfolioLayoutProps {
+interface ThemeMinimalProps {
   workspaceName: string;
   workspaceSlug: string;
   showRss?: boolean;
@@ -8,19 +8,19 @@ interface PortfolioLayoutProps {
   children: ReactNode;
 }
 
-export function PortfolioLayout({
+export function ThemeMinimal({
   workspaceName,
   workspaceSlug,
   showRss = false,
   showPoweredBy = true,
   children,
-}: PortfolioLayoutProps) {
+}: ThemeMinimalProps) {
   return (
-    <div className="min-h-screen bg-sf-bg-primary">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="border-b border-sf-border bg-sf-bg-secondary">
+      <header className="border-b border-gray-200 bg-white">
         <div className="max-w-5xl mx-auto px-4 py-6">
-          <h1 className="text-2xl font-bold font-display text-sf-text-primary">
+          <h1 className="text-2xl font-semibold text-black">
             {workspaceName}
           </h1>
         </div>
@@ -30,16 +30,16 @@ export function PortfolioLayout({
       <main className="max-w-5xl mx-auto px-4 py-8">{children}</main>
 
       {/* Footer */}
-      <footer className="border-t border-sf-border mt-16">
+      <footer className="border-t border-gray-200 mt-16">
         <div className="max-w-5xl mx-auto px-4 py-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-sf-text-muted">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-600">
             {/* RSS Link */}
             {showRss && (
               <a
                 href={`/${workspaceSlug}/rss`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sf-accent hover:underline"
+                className="text-black hover:underline"
               >
                 RSS Feed
               </a>
@@ -53,7 +53,7 @@ export function PortfolioLayout({
                   href="https://sessionforge.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sf-accent hover:underline"
+                  className="text-black hover:underline"
                 >
                   SessionForge
                 </a>
@@ -65,6 +65,3 @@ export function PortfolioLayout({
     </div>
   );
 }
-
-// Export theme components
-export { ThemeMinimal } from "./theme-minimal";

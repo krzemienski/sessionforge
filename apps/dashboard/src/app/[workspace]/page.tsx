@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { BioSection } from "@/components/portfolio/bio-section";
 import { PostGrid } from "@/components/portfolio/post-grid";
+import { PortfolioLayout, ThemeMinimal } from "@/components/portfolio/portfolio-layout";
 
 // This is a public route - no authentication required
 export const dynamic = "force-dynamic";
@@ -83,10 +84,13 @@ async function getPortfolioData(
 
 export default async function PublicPortfolioPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ workspace: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { workspace } = await params;
+  const { theme: themeParam } = await searchParams;
   const data = await getPortfolioData(workspace);
 
   if (!data) {
@@ -95,71 +99,53 @@ export default async function PublicPortfolioPage({
 
   const { workspace: workspaceData, portfolio, pinnedPosts, posts, series, collections } = data;
 
+  // Determine which theme to use (query param overrides portfolio settings for testing)
+  const theme = themeParam || portfolio.theme || "default";
+
+  // Select the appropriate theme component
+  const ThemeComponent = theme === "minimal" ? ThemeMinimal : PortfolioLayout;
+
   return (
-    <div className="min-h-screen bg-sf-bg-primary">
-      {/* Header */}
-      <header className="border-b border-sf-border bg-sf-bg-secondary">
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          <h1 className="text-2xl font-bold font-display text-sf-text-primary">
-            {workspaceData.name}
-          </h1>
-        </div>
-      </header>
+    <ThemeComponent
+      workspaceName={workspaceData.name}
+      workspaceSlug={workspaceData.slug}
+      showRss={portfolio.showRss}
+      showPoweredBy={portfolio.showPoweredBy}
+    >
+      {/* Bio Section */}
+      <BioSection
+        workspaceName={workspaceData.name}
+        bio={portfolio.bio}
+        avatarUrl={portfolio.avatarUrl}
+        socialLinks={portfolio.socialLinks}
+      />
 
-      {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-4 py-8">
-        {/* Bio Section */}
-        <BioSection
-          workspaceName={workspaceData.name}
-          bio={portfolio.bio}
-          avatarUrl={portfolio.avatarUrl}
-          socialLinks={portfolio.socialLinks}
-        />
-
-        {/* Posts Section */}
-        <div>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold font-display text-sf-text-primary">
-              Content
-            </h2>
-            {portfolio.showRss && (
-              <a
-                href={`/${workspace}/rss`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-sf-accent hover:underline"
-              >
-                RSS Feed
-              </a>
-            )}
-          </div>
-
-          {/* Post Grid with Filtering */}
-          <PostGrid
-            posts={posts}
-            pinnedPosts={pinnedPosts}
-            series={series}
-            collections={collections}
-          />
-        </div>
-      </main>
-
-      {/* Footer */}
-      {portfolio.showPoweredBy && (
-        <footer className="border-t border-sf-border mt-16">
-          <div className="max-w-5xl mx-auto px-4 py-6 text-center text-sm text-sf-text-muted">
-            Powered by{" "}
+      {/* Posts Section */}
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold font-display text-sf-text-primary">
+            Content
+          </h2>
+          {portfolio.showRss && (
             <a
-              href="https://sessionforge.com"
+              href={`/${workspace}/rss`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sf-accent hover:underline"
+              className="text-sm text-sf-accent hover:underline"
             >
-              SessionForge
+              RSS Feed
             </a>
-          </div>
-        </footer>
-      )}
-    </div>
+          )}
+        </div>
+
+        {/* Post Grid with Filtering */}
+        <PostGrid
+          posts={posts}
+          pinnedPosts={pinnedPosts}
+          series={series}
+          collections={collections}
+        />
+      </div>
+    </ThemeComponent>
   );
 }
