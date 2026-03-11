@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Wand2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { showToast } from "@/components/ui/toast";
+import { BatchRepurposeDialog } from "./batch-repurpose-dialog";
 
 interface RepurposeButtonProps {
   postId: string;
@@ -44,6 +45,7 @@ function getAvailableFormats(contentType: string): TargetFormat[] {
 export function RepurposeButton({ postId, contentType, workspaceSlug }: RepurposeButtonProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -109,39 +111,60 @@ export function RepurposeButton({ postId, contentType, workspaceSlug }: Repurpos
   }
 
   return (
-    <div ref={containerRef} className="relative">
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((prev) => !prev);
-        }}
-        disabled={loading}
-        className={cn(
-          "flex items-center gap-1.5 bg-sf-bg-secondary border border-sf-border text-sf-text-secondary px-3 py-1.5 rounded-sf text-sm font-medium hover:text-sf-text-primary hover:border-sf-border-strong transition-colors",
-          loading && "opacity-50 cursor-not-allowed"
-        )}
-      >
-        <Wand2 size={14} />
-        {loading ? "Repurposing..." : "Repurpose"}
-        <ChevronDown
-          size={14}
-          className={cn("transition-transform duration-150", open && "rotate-180")}
-        />
-      </button>
+    <>
+      <div ref={containerRef} className="relative">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((prev) => !prev);
+          }}
+          disabled={loading}
+          className={cn(
+            "flex items-center gap-1.5 bg-sf-bg-secondary border border-sf-border text-sf-text-secondary px-3 py-1.5 rounded-sf text-sm font-medium hover:text-sf-text-primary hover:border-sf-border-strong transition-colors",
+            loading && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          <Wand2 size={14} />
+          {loading ? "Repurposing..." : "Repurpose"}
+          <ChevronDown
+            size={14}
+            className={cn("transition-transform duration-150", open && "rotate-180")}
+          />
+        </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-20 bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-[var(--shadow-sf-lg)] py-1 min-w-[180px]">
-          {availableFormats.map((format) => (
+        {open && (
+          <div className="absolute right-0 top-full mt-1 z-20 bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-[var(--shadow-sf-lg)] py-1 min-w-[180px]">
             <button
-              key={format}
-              onClick={(e) => handleRepurpose(format, e)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-sf-text-secondary hover:text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors text-left"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                setShowBatchDialog(true);
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-sf-accent hover:bg-sf-bg-tertiary transition-colors text-left border-b border-sf-border"
             >
-              {FORMAT_LABELS[format]}
+              <Wand2 size={14} />
+              Batch Repurpose...
             </button>
-          ))}
-        </div>
-      )}
-    </div>
+            {availableFormats.map((format) => (
+              <button
+                key={format}
+                onClick={(e) => handleRepurpose(format, e)}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-sf-text-secondary hover:text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors text-left"
+              >
+                {FORMAT_LABELS[format]}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <BatchRepurposeDialog
+        postId={postId}
+        workspace={workspaceSlug}
+        contentType={contentType}
+        isOpen={showBatchDialog}
+        onClose={() => setShowBatchDialog(false)}
+      />
+    </>
   );
 }
