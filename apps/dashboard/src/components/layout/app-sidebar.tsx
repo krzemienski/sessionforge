@@ -13,9 +13,11 @@ import {
   Activity,
   Settings,
   LogOut,
+  PenLine,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { OnboardingChecklist } from "@/components/onboarding/onboarding-checklist";
 
 const mainNav = [
   { label: "Dashboard", icon: LayoutDashboard, href: "" },
@@ -25,6 +27,7 @@ const mainNav = [
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Automation", icon: Zap, href: "/automation" },
   { label: "Pipeline", icon: Activity, href: "/observability" },
+  { label: "Writing Coach", icon: PenLine, href: "/writing-coach" },
 ];
 
 const settingsNav = [
@@ -92,6 +95,10 @@ export function AppSidebar({
             {item.label}
           </Link>
         ))}
+
+        <div className="mt-4">
+          <OnboardingChecklist workspace={workspace} />
+        </div>
       </nav>
 
       <div className="p-3 border-t border-sf-border">

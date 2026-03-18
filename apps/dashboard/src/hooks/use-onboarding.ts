@@ -141,3 +141,21 @@ export function useOnboardingScan() {
 
   return { ...state, startScan };
 }
+
+export function useTrackOnboardingStep() {
+  const trackStep = useCallback(
+    (step: string, event: string, metadata?: Record<string, unknown>) => {
+      // Fire-and-forget: don't await, don't block UI
+      fetch("/api/onboarding/funnel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step, event, metadata }),
+      }).catch(() => {
+        // Silently fail - funnel tracking should never block user experience
+      });
+    },
+    []
+  );
+
+  return trackStep;
+}

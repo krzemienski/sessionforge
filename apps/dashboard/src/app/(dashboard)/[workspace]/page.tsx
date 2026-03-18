@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import { useSessions, useScanSessions } from "@/hooks/use-sessions";
 import { useInsights } from "@/hooks/use-insights";
 import { useContent } from "@/hooks/use-content";
@@ -15,6 +16,8 @@ import {
   ArrowRight,
   CalendarDays,
   PenTool,
+  X,
+  Sparkles,
 } from "lucide-react";
 
 function StatCard({
@@ -68,6 +71,21 @@ export default function DashboardHome() {
   const contentList = content.data?.posts ?? [];
   const drafts = contentList.filter((p: Record<string, unknown>) => p.status === "draft");
 
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(false);
+
+  useEffect(() => {
+    const dismissed = localStorage.getItem(`sf-welcome-banner-dismissed-${workspace}`);
+    const totalSessions = sessions.data?.total ?? sessionList.length;
+    if (!dismissed && totalSessions === 0 && !sessions.isLoading) {
+      setShowWelcomeBanner(true);
+    }
+  }, [workspace, sessions.data?.total, sessionList.length, sessions.isLoading]);
+
+  const handleDismissBanner = () => {
+    localStorage.setItem(`sf-welcome-banner-dismissed-${workspace}`, "true");
+    setShowWelcomeBanner(false);
+  };
+
   return (
     <div>
       {/* Header */}
@@ -90,6 +108,39 @@ export default function DashboardHome() {
             Scan complete: {scan.data?.scanned ?? 0} files scanned,{" "}
             {(scan.data?.new ?? 0) + (scan.data?.updated ?? 0)} sessions indexed
           </p>
+        </div>
+      )}
+
+      {/* Welcome banner for new users */}
+      {showWelcomeBanner && (
+        <div className="bg-sf-accent-bg border border-sf-accent/20 rounded-sf-lg p-4 mb-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 flex-1">
+              <Sparkles size={20} className="text-sf-accent mt-0.5 flex-shrink-0" />
+              <div>
+                <h3 className="text-sf-text-primary font-semibold mb-1">
+                  Welcome to SessionForge!
+                </h3>
+                <p className="text-sf-text-secondary text-sm mb-3">
+                  Get started by completing the setup wizard. We'll help you configure your workspace and start indexing sessions.
+                </p>
+                <Link
+                  href={`/${workspace}/onboarding`}
+                  className="inline-flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                >
+                  <Sparkles size={14} />
+                  Complete Setup
+                </Link>
+              </div>
+            </div>
+            <button
+              onClick={handleDismissBanner}
+              className="text-sf-text-muted hover:text-sf-text-primary transition-colors flex-shrink-0"
+              aria-label="Dismiss welcome banner"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
       )}
 
