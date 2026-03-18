@@ -105,7 +105,7 @@ function RecentPostsTable({ posts, workspace }: { posts: RecentPost[]; workspace
   if (posts.length === 0) {
     return (
       <div className="text-center py-8 text-sf-text-secondary text-sm">
-        No analyzed posts yet. Click "Analyze All Posts" to get started.
+        No analyzed posts yet. Click &ldquo;Analyze All Posts&rdquo; to get started.
       </div>
     );
   }
@@ -340,7 +340,7 @@ export default function WritingCoachPage() {
                 deviations: data.recentPosts
                   .filter((p) => p.authenticityScore < (data.aggregates.avgAuthenticityScore - 10))
                   .slice(0, 3)
-                  .map((p) => ({ postTitle: p.title ?? "Untitled", issue: p.topIssue })),
+                  .map((p) => `${p.title ?? "Untitled"}: ${p.topIssue}`),
                 hasStyleProfile: data.aggregates.postsAnalyzed > 0,
               }}
               workspace={workspace}
@@ -380,7 +380,7 @@ export default function WritingCoachPage() {
               <Sparkles size={40} className="mx-auto text-sf-text-muted mb-3" />
               <p className="text-sf-text-secondary mb-1">No posts analyzed yet.</p>
               <p className="text-sm text-sf-text-muted">
-                Click "Analyze All Posts" to start analyzing your writing quality.
+                Click &ldquo;Analyze All Posts&rdquo; to start analyzing your writing quality.
               </p>
             </div>
           )}

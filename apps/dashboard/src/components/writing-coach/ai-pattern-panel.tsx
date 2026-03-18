@@ -54,7 +54,7 @@ function PatternRow({ pattern, rank }: { pattern: AIPattern; rank: number }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="font-medium text-sf-text-primary text-sm">
-            "{pattern.phrase}"
+            &ldquo;{pattern.phrase}&rdquo;
           </span>
           <CategoryBadge category={pattern.category} />
         </div>

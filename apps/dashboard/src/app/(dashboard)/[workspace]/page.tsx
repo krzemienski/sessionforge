@@ -122,7 +122,7 @@ export default function DashboardHome() {
                   Welcome to SessionForge!
                 </h3>
                 <p className="text-sf-text-secondary text-sm mb-3">
-                  Get started by completing the setup wizard. We'll help you configure your workspace and start indexing sessions.
+                  Get started by completing the setup wizard. We&apos;ll help you configure your workspace and start indexing sessions.
                 </p>
                 <Link
                   href="/onboarding"
