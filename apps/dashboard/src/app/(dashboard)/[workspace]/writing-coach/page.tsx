@@ -1,9 +1,9 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Sparkles, RefreshCw } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MetricsOverview } from "@/components/writing-coach/metrics-overview";
 import { AuthenticityTrendChart } from "@/components/writing-coach/authenticity-trend-chart";
@@ -167,6 +167,25 @@ function RecentPostsTable({ posts, workspace }: { posts: RecentPost[]; workspace
 export default function WritingCoachPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const [timeframe, setTimeframe] = useState<Timeframe>("30d");
+  const queryClient = useQueryClient();
+
+  const analyzeAll = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/writing-coach/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspace }),
+      });
+      if (!res.ok) throw new Error("Failed to start analysis");
+      return res.json() as Promise<{ status: string; postCount: number }>;
+    },
+    onSuccess: () => {
+      // Refetch analytics after a delay to let analysis complete
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["writing-coach-analytics", workspace] });
+      }, 5000);
+    },
+  });
 
   const query = useQuery<AnalyticsData>({
     queryKey: ["writing-coach-analytics", workspace, timeframe],
@@ -231,15 +250,23 @@ export default function WritingCoachPage() {
         <h1 className="text-2xl font-bold font-display">Writing Coach</h1>
         <div className="flex items-center gap-2">
           <button
-            className="px-4 py-2 rounded-sf text-sm font-medium text-white bg-sf-accent hover:bg-sf-accent-hover transition-colors border border-sf-accent flex items-center gap-2"
-            onClick={() => {
-              // TODO: Implement analyze all posts functionality
-              alert("Analyze All Posts functionality coming soon!");
-            }}
+            className="px-4 py-2 rounded-sf text-sm font-medium text-white bg-sf-accent hover:bg-sf-accent-hover transition-colors border border-sf-accent flex items-center gap-2 disabled:opacity-50"
+            onClick={() => analyzeAll.mutate()}
+            disabled={analyzeAll.isPending}
           >
-            <Sparkles size={16} />
-            Analyze All Posts
+            {analyzeAll.isPending ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {analyzeAll.isPending ? "Analyzing..." : "Analyze All Posts"}
           </button>
+          {analyzeAll.isSuccess && (
+            <span className="text-xs text-sf-accent">
+              Analyzing {analyzeAll.data.postCount} posts...
+            </span>
+          )}
+          {analyzeAll.isError && (
+            <span className="text-xs text-red-400">
+              {analyzeAll.error.message}
+            </span>
+          )}
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf.value}
@@ -310,7 +337,10 @@ export default function WritingCoachPage() {
               data={{
                 score: data.aggregates.voiceConsistencyAvg,
                 consistencyLevel: getConsistencyLevel(data.aggregates.voiceConsistencyAvg),
-                deviations: [], // TODO: Add deviations when available from API
+                deviations: data.recentPosts
+                  .filter((p) => p.authenticityScore < (data.aggregates.avgAuthenticityScore - 10))
+                  .slice(0, 3)
+                  .map((p) => ({ postTitle: p.title ?? "Untitled", issue: p.topIssue })),
                 hasStyleProfile: data.aggregates.postsAnalyzed > 0,
               }}
               workspace={workspace}

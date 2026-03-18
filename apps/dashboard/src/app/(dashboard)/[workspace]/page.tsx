@@ -125,7 +125,7 @@ export default function DashboardHome() {
                   Get started by completing the setup wizard. We'll help you configure your workspace and start indexing sessions.
                 </p>
                 <Link
-                  href={`/${workspace}/onboarding`}
+                  href="/onboarding"
                   className="inline-flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
                 >
                   <Sparkles size={14} />

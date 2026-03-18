@@ -13,13 +13,29 @@ import type { Layout } from "react-resizable-panels";
 import { AIChatSidebar } from "@/components/editor/ai-chat-sidebar";
 import { InlineEditControls } from "@/components/editor/inline-edit-controls";
 import { useEditorChat } from "@/hooks/use-editor-chat";
-import { HashnodePublishModal } from "@/components/publish/hashnode-publish-modal";
 import { cn } from "@/lib/utils";
 import { computeSeoScore } from "@/lib/seo";
-import { DevtoPublishModal } from "@/components/publishing/devto-publish-modal";
-import { GhostPublishModal } from "@/components/publishing/ghost-publish-modal";
-import { CreateTemplateDialog } from "@/components/templates/create-template-dialog";
-import { MediumPublishModal } from "@/components/publishing/medium-publish-modal";
+
+const HashnodePublishModal = dynamic(
+  () => import("@/components/publish/hashnode-publish-modal").then((m) => m.HashnodePublishModal),
+  { ssr: false }
+);
+const DevtoPublishModal = dynamic(
+  () => import("@/components/publishing/devto-publish-modal").then((m) => m.DevtoPublishModal),
+  { ssr: false }
+);
+const GhostPublishModal = dynamic(
+  () => import("@/components/publishing/ghost-publish-modal").then((m) => m.GhostPublishModal),
+  { ssr: false }
+);
+const MediumPublishModal = dynamic(
+  () => import("@/components/publishing/medium-publish-modal").then((m) => m.MediumPublishModal),
+  { ssr: false }
+);
+const CreateTemplateDialog = dynamic(
+  () => import("@/components/templates/create-template-dialog").then((m) => m.CreateTemplateDialog),
+  { ssr: false }
+);
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SocialCopyButton } from "@/components/content/social-copy-button";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
