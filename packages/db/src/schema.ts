@@ -188,6 +188,12 @@ export const recommendationTypeEnum = pgEnum("recommendation_type", [
   "improvement",
 ]);
 
+export const portfolioThemeEnum = pgEnum("portfolio_theme", [
+  "minimal",
+  "developer-dark",
+  "colorful",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -1386,6 +1392,31 @@ export const collections = pgTable(
   ]
 );
 
+export const portfolioSettings = pgTable(
+  "portfolio_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    isEnabled: boolean("is_enabled").default(false),
+    bio: text("bio"),
+    avatarUrl: text("avatar_url"),
+    socialLinks: jsonb("social_links"),
+    pinnedPostIds: jsonb("pinned_post_ids"),
+    theme: portfolioThemeEnum("theme").default("minimal"),
+    customDomain: text("custom_domain"),
+    showRss: boolean("show_rss").default(true),
+    showPoweredBy: boolean("show_powered_by").default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("portfolio_settings_workspaceId_uidx").on(table.workspaceId),
+    index("portfolio_settings_workspaceId_idx").on(table.workspaceId),
+  ]
+);
+
 export const seriesPosts = pgTable(
   "series_posts",
   {
@@ -1650,6 +1681,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
     references: [users.id],
   }),
   styleSettings: one(styleSettings),
+  portfolioSettings: one(portfolioSettings),
   claudeSessions: many(claudeSessions),
   insights: many(insights),
   posts: many(posts),
@@ -1688,6 +1720,13 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [styleSettings.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+export const portfolioSettingsRelations = relations(portfolioSettings, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [portfolioSettings.workspaceId],
     references: [workspaces.id],
   }),
 }));
