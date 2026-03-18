@@ -48,6 +48,7 @@ import { SupplementaryPanel } from "@/components/editor/supplementary-panel";
 import { MediaPanel } from "@/components/editor/media-panel";
 import { RepositoryPanel } from "@/components/editor/repository-panel";
 import { SeriesNavLinks } from "@/components/series/series-nav-links";
+import { CitationToggle, type CitationDensity } from "@/components/citations/citation-toggle";
 import { RepurposeButton } from "@/components/content/repurpose-button";
 import { RepurposeTracker } from "@/components/content/repurpose-tracker";
 
@@ -107,7 +108,9 @@ export default function ContentEditorPage() {
   const [externalMd, setExternalMd] = useState<string | null>(null);
   const [hashnodeModalOpen, setHashnodeModalOpen] = useState(false);
   const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository">("chat");
+  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository" | "citations">("chat");
+  const [citationsEnabled, setCitationsEnabled] = useState(true);
+  const [citationDensity, setCitationDensity] = useState<CitationDensity>("all");
   const [highlightedCitation, setHighlightedCitation] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [badgeEnabled, setBadgeEnabled] = useState(false);
@@ -431,7 +434,7 @@ export default function ContentEditorPage() {
               <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
                 {/* Sidebar tabs */}
                 <div className="flex gap-1 p-2 border-b border-sf-border">
-                  {(["chat", "seo", "evidence", "supplementary", "media", "repository"] as const).map((tab) => (
+                  {(["chat", "seo", "evidence", "citations", "supplementary", "media", "repository"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setSidebarTab(tab)}
@@ -442,7 +445,7 @@ export default function ContentEditorPage() {
                           : "text-sf-text-secondary hover:bg-sf-bg-hover"
                       )}
                     >
-                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : "More"}
+                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "citations" ? "Citations" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : "More"}
                     </button>
                   ))}
                 </div>
@@ -463,6 +466,15 @@ export default function ContentEditorPage() {
                     <EvidenceExplorer
                       postId={postId}
                       highlightedCitation={highlightedCitation}
+                    />
+                  )}
+                  {sidebarTab === "citations" && (
+                    <CitationToggle
+                      markdown={markdown}
+                      enabled={citationsEnabled}
+                      onToggle={setCitationsEnabled}
+                      density={citationDensity}
+                      onDensityChange={setCitationDensity}
                     />
                   )}
                   {sidebarTab === "supplementary" && (

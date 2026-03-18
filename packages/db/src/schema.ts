@@ -466,6 +466,14 @@ export const posts = pgTable(
       { id: string; label: string; passed: boolean; suggestion?: string }[]
     >(),
     seoAnalysis: jsonb("seo_analysis"),
+    citations: jsonb("citations").$type<
+      {
+        sessionId: string;
+        messageIndex: number;
+        text: string;
+        type: "tool_call" | "file_edit" | "conversation" | "evidence";
+      }[]
+    >(),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),

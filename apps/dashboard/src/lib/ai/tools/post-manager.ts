@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq, and, desc } from "drizzle-orm";
 import type { contentTypeEnum, postStatusEnum, toneProfileEnum } from "@sessionforge/db";
+import { CitationExtractor } from "@/lib/citations/extractor";
 import { createRevision } from "@/lib/revisions/manager";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
@@ -59,9 +60,38 @@ function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
+/**
+ * Extract citations from markdown content and convert to database format.
+ *
+ * Parses citation markers in the format [@sessionId:messageIndex] from markdown
+ * and converts them to the schema format with surrounding text context.
+ *
+ * @param markdown - The markdown content containing citation markers
+ * @returns Array of citation objects in database schema format
+ */
+function extractCitations(markdown: string): {
+  sessionId: string;
+  messageIndex: number;
+  text: string;
+  type: "tool_call" | "file_edit" | "conversation" | "evidence";
+}[] {
+  const extractor = new CitationExtractor();
+  const citationsWithContext = extractor.extractWithContext(markdown, 100);
+
+  return citationsWithContext.map((citation) => ({
+    sessionId: citation.sessionId,
+    messageIndex: citation.messageIndex,
+    // Use the surrounding context as the citation text
+    text: `${citation.textBefore.trim()} ${citation.textAfter.trim()}`.trim(),
+    // Default to 'evidence' type - this can be enhanced later to detect specific types
+    type: "evidence" as const,
+  }));
+}
+
 export async function createPost(input: CreatePostInput) {
   const content = markdownToHtml(input.markdown);
   const wordCount = countWords(input.markdown);
+  const citations = extractCitations(input.markdown);
 
   const [created] = await db
     .insert(posts)
@@ -77,6 +107,7 @@ export async function createPost(input: CreatePostInput) {
       toneUsed: input.toneUsed,
       wordCount,
       sourceMetadata: input.sourceMetadata,
+      citations,
     })
     .returning();
 
@@ -144,6 +175,7 @@ export async function updatePost(
     updates.markdown = input.markdown;
     updates.content = markdownToHtml(input.markdown);
     updates.wordCount = countWords(input.markdown);
+    updates.citations = extractCitations(input.markdown);
   } else if (input.content !== undefined) {
     updates.content = input.content;
   }

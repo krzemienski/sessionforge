@@ -16,8 +16,52 @@ import { LinkNode, AutoLinkNode } from "@lexical/link";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
-import { $getRoot, EditorState } from "lexical";
+import {
+  $convertFromMarkdownString,
+  $convertToMarkdownString,
+  TextMatchTransformer,
+} from "@lexical/markdown";
+import { $getRoot, EditorState, TextNode } from "lexical";
+import {
+  CitationNode,
+  $createCitationNode,
+  $isCitationNode,
+} from "./nodes/citation-node";
+
+// ── Citation Markdown Transformer ─────────────────────────────────────────
+
+/**
+ * Transformer for converting citation markers between markdown and Lexical nodes.
+ *
+ * Matches the pattern: [@sessionId:messageIndex]
+ * Examples:
+ *   - [@abc-123:10] -> CitationNode with sessionId="abc-123", messageIndex=10
+ *   - [@session-xyz:0] -> CitationNode with sessionId="session-xyz", messageIndex=0
+ */
+const CITATION_TRANSFORMER: TextMatchTransformer = {
+  dependencies: [CitationNode],
+  export: (node, exportChildren, exportFormat) => {
+    if (!$isCitationNode(node)) {
+      return null;
+    }
+    return `[@${node.getSessionId()}:${node.getMessageIndex()}]`;
+  },
+  importRegExp: /\[@([^:]+):(\d+)\]/,
+  regExp: /\[@([^:]+):(\d+)\]$/,
+  replace: (textNode, match) => {
+    const [, sessionId, messageIndexStr] = match;
+    const messageIndex = parseInt(messageIndexStr, 10);
+    const citationNode = $createCitationNode(sessionId, messageIndex);
+    textNode.replace(citationNode);
+  },
+  trigger: "]",
+  type: "text-match",
+};
+
+/**
+ * Combined transformers including default Lexical transformers and citation transformer.
+ */
+const EDITOR_TRANSFORMERS = [...TRANSFORMERS, CITATION_TRANSFORMER];
 
 function MarkdownImportPlugin({ markdown }: { markdown: string }) {
   const [editor] = useLexicalComposerContext();
@@ -25,7 +69,7 @@ function MarkdownImportPlugin({ markdown }: { markdown: string }) {
   useEffect(() => {
     if (!markdown) return;
     editor.update(() => {
-      $convertFromMarkdownString(markdown, TRANSFORMERS);
+      $convertFromMarkdownString(markdown, EDITOR_TRANSFORMERS);
     });
   }, []); // Only import once on mount
 
@@ -39,7 +83,7 @@ function MarkdownExportPlugin({
 }) {
   function handleChange(editorState: EditorState) {
     editorState.read(() => {
-      const md = $convertToMarkdownString(TRANSFORMERS);
+      const md = $convertToMarkdownString(EDITOR_TRANSFORMERS);
       onMarkdownChange(md);
     });
   }
@@ -58,7 +102,7 @@ export function ExternalUpdatePlugin({
   useEffect(() => {
     if (externalMarkdown === null) return;
     editor.update(() => {
-      $convertFromMarkdownString(externalMarkdown, TRANSFORMERS);
+      $convertFromMarkdownString(externalMarkdown, EDITOR_TRANSFORMERS);
     });
   }, [externalMarkdown, editor]);
 
@@ -74,6 +118,7 @@ const EDITOR_NODES = [
   CodeHighlightNode,
   LinkNode,
   AutoLinkNode,
+  CitationNode,
 ];
 
 interface MarkdownEditorProps {
@@ -131,7 +176,7 @@ export function MarkdownEditor({
         <HistoryPlugin />
         <ListPlugin />
         <LinkPlugin />
-        <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
+        <MarkdownShortcutPlugin transformers={EDITOR_TRANSFORMERS} />
         <MarkdownImportPlugin markdown={initialMarkdown} />
         <MarkdownExportPlugin onMarkdownChange={onMarkdownChange} />
         <ExternalUpdatePlugin externalMarkdown={externalMarkdown} />
