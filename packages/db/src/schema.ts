@@ -1151,6 +1151,27 @@ export const usageMonthlySummary = pgTable(
   ]
 );
 
+// ── Onboarding Funnel Events (from 018-interactive-onboarding-guided-setup-wizard) ──
+
+export const onboardingFunnelEvents = pgTable(
+  "onboarding_funnel_events",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    step: text("step").notNull(),
+    event: text("event").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("onboardingFunnelEvents_userId_idx").on(table.userId),
+    index("onboardingFunnelEvents_createdAt_idx").on(table.createdAt),
+    index("onboardingFunnelEvents_step_idx").on(table.step),
+  ]
+);
+
 // ── GitHub Integration tables (from 012-github-repository-deep-integration) ──
 
 export const githubIntegrations = pgTable(

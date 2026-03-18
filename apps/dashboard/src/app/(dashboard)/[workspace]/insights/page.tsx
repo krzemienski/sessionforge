@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useInsights } from "@/hooks/use-insights";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { useState, useCallback, useEffect } from "react";
-import { Lightbulb, SlidersHorizontal, X, Sparkles, ArrowRight, Check, XCircle, Target, Play, Code2, FileText } from "lucide-react";
+import { Lightbulb, SlidersHorizontal, X, Sparkles, ArrowRight, Check, XCircle, Target, Play, Code2, FileText, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MultiSelectToolbar } from "@/components/batch/multi-select-toolbar";
 import { JobProgressModal } from "@/components/batch/job-progress-modal";
@@ -84,6 +84,18 @@ export default function InsightsPage() {
     enabled: !!workspace,
   });
   const recList = recommendations.data?.recommendations ?? [];
+
+  // Check if sessions exist for empty state messaging
+  const sessionsCheck = useQuery({
+    queryKey: ["sessions-check", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/sessions?workspace=${workspace}&limit=1`);
+      if (!res.ok) throw new Error("Failed to check sessions");
+      return res.json();
+    },
+    enabled: !!workspace && insightList.length === 0 && !insights.isLoading && !pipeline.isRunning,
+  });
+  const hasSessions = (sessionsCheck.data?.total ?? 0) > 0;
 
   const patchRecommendation = useMutation({
     mutationFn: async ({ recommendationId, action }: { recommendationId: string; action: "accepted" | "dismissed" }) => {
@@ -486,23 +498,46 @@ export default function InsightsPage() {
             <Lightbulb size={40} className="mx-auto text-sf-text-muted mb-3" />
             <p className="text-sf-text-primary font-medium mb-1">No insights yet</p>
             <p className="text-sf-text-secondary mb-6 text-sm max-w-md mx-auto">
-              Start your first analysis to discover content-worthy patterns, recurring themes, and actionable insights across your sessions.
+              {hasSessions
+                ? "Start your first analysis to discover content-worthy patterns, recurring themes, and actionable insights across your sessions."
+                : "Import sessions first to unlock insight extraction. Scan your Claude Code projects to get started."}
             </p>
             <div className="flex items-center justify-center gap-3">
-              <button
-                onClick={() => pipeline.startAnalysis(90)}
-                disabled={pipeline.isRunning}
-                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
-              >
-                <Play size={14} />
-                Start Analysis (90 days)
-              </button>
-              <Link
-                href={`/${workspace}/sessions`}
-                className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
-              >
-                View Sessions →
-              </Link>
+              {hasSessions ? (
+                <>
+                  <button
+                    onClick={() => pipeline.startAnalysis(90)}
+                    disabled={pipeline.isRunning}
+                    className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
+                  >
+                    <Play size={14} />
+                    Start Analysis (90 days)
+                  </button>
+                  <Link
+                    href={`/${workspace}/sessions`}
+                    className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
+                  >
+                    View Sessions →
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href={`/${workspace}/sessions`}
+                    className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                  >
+                    <Zap size={16} />
+                    Scan Sessions
+                  </Link>
+                  <Link
+                    href="/onboarding"
+                    className="flex items-center gap-1.5 text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
+                  >
+                    Setup guide
+                    <ArrowRight size={14} />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}
