@@ -79,13 +79,13 @@ export function WorkspaceShell({
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-sf-bg-primary">
+    <div className="flex h-screen bg-sf-bg-primary overflow-hidden">
       <AppSidebar
         workspace={workspace}
         userName={userName}
         onOpenSearch={() => setIsSearchOpen(true)}
       />
-      <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6">
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
         <div className="flex justify-end mb-2">
           <SystemHealthIndicator />
         </div>

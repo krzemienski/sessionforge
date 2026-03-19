@@ -53,7 +53,7 @@ export function AppSidebar({
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-[260px] border-r border-sf-border bg-sf-bg-secondary h-screen sticky top-0">
+    <aside className="hidden md:flex flex-col w-[260px] flex-shrink-0 border-r border-sf-border bg-sf-bg-secondary h-full overflow-hidden">
       <div className="p-4 border-b border-sf-border">
         <Link href={`/${workspace}`} className="text-sf-accent font-bold tracking-tight font-display text-lg">
           SessionForge
@@ -61,7 +61,7 @@ export function AppSidebar({
         <p className="text-sf-text-muted text-xs mt-1 font-display truncate">{workspace}</p>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {mainNav.map((item) => (
           <Link
             key={item.href}
