@@ -630,5 +630,5 @@ Upsert with `(workspaceId, sessionId)` conflict key. Re-scanning is always safe.
 ### 8. Workspace-Scoped Everything
 Every table scoped to `workspaceId`. Multiple workspaces per user for separating projects.
 
-### 9. 7-Platform Integration Strategy
-Token-based for simple platforms (paste and go), OAuth for platforms requiring user authorization (Twitter, LinkedIn, GitHub). Each platform has its own DB table for credentials and configuration.
+### 9. Multi-Stage Containerization
+3-stage Docker build: deps (frozen lockfile) → builder (monorepo compile) → runner (Node.js standalone). Production image runs only necessary artifacts, zero dev dependencies.

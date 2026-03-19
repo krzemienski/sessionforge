@@ -161,18 +161,110 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.1.0-alpha] - 2026-03-02
 
-### Added
+**Milestone:** Project converged from 2 worktree branches (015-citations + 021-portfolio). All features integrated and containerized.
 
-- Turborepo monorepo with Bun package manager
-- PostgreSQL schema via Drizzle ORM (30+ tables, enums, relations)
-- better-auth integration (email + password, GitHub OAuth)
-- Session scanning pipeline: Scanner -> Parser -> Normalizer -> Indexer
-- Local JSONL ingestion from `~/.claude/projects/` and `~/.claude/sessions/`
-- AI agent layer with `@anthropic-ai/claude-agent-sdk` (zero API keys)
-- 6 content agents: blog-writer, social-writer, changelog-writer, newsletter-writer, repurpose-writer, editor-chat
-- Insight extractor with 6-dimension weighted scoring
-- Tool registry pattern for per-agent access control
-- SSE streaming for content generation
-- Hashnode and Dev.to publishing integrations
-- Health check endpoint
-- Flat-black design tokens
+### Foundation
+
+- **Monorepo:** Turborepo + Bun workspaces (apps/dashboard, packages/db, packages/tsconfig)
+- **Containerization:** 3-stage Docker build (deps → builder → runner), docker-compose with PostgreSQL 16
+- **Database:** PostgreSQL via Drizzle ORM — 63 tables, 50+ enums, cross-workspace relations
+- **Authentication:** better-auth (email + password, GitHub OAuth, OAuth2 for integrations)
+
+### Session Intelligence
+
+- **Scanning pipeline:** Scanner → Parser → Normalizer → Indexer (local JSONL from `~/.claude/projects/` and `~/.claude/sessions/`)
+- **SSH session discovery:** Remote session ingestion via SSH key-based auth
+- **Session upload:** Drag-drop JSONL and ZIP file support
+- **Session indexing:** Idempotent upsert with `(workspaceId, sessionId)` conflict key
+
+### AI Content Generation
+
+- **Agent SDK:** `@anthropic-ai/claude-agent-sdk` with CLI-inherited auth (zero API keys)
+- **12 AI agents:** Blog writer, social writer, changelog, newsletter, repurpose, editor-chat, insight extractor, style learner, strategist, corpus analyzer, recommendations analyzer, evidence classifier
+- **Tool registry:** Per-agent access control (session, insight, post, markdown, skill tools)
+- **SSE streaming:** Real-time tool-use visualization and partial content rendering in editor
+- **Agentic loops:** Multi-turn tool-use with MCP server integration
+
+### Insight Extraction
+
+- **Corpus analysis:** Cross-session pattern detection (novel problems, tool patterns, transformations, failure recovery)
+- **Composite scoring:** 6-dimension weighted ranking (novelty×3, tool_discovery×3, before_after×2, failure_recovery×3, reproducibility×1, scale×1)
+- **Quality gate:** Insights filtered by composite score threshold (≥15)
+- **Temporal awareness:** Frequency trends, recency bias, clustering, evolution arcs
+
+### Content Lifecycle
+
+- **Status workflow:** draft → published / archived / in_review / scheduled / idea
+- **Revisions:** Track post edit history with diffs and restore capability
+- **Evidence system:** Cite source sessions and link work to posts
+- **Calendar view:** Monthly grid with post publishing dates
+- **Pipeline view:** Kanban board with status columns
+
+### Publishing Integrations
+
+- **Token-based:** Hashnode, Dev.to, Medium, Ghost, WordPress
+- **OAuth:** GitHub, Twitter/X (PKCE), LinkedIn
+- **Multi-platform:** Publish blog to Hashnode + Dev.to simultaneously
+- **Social posting:** Threads to Twitter, LinkedIn posts
+
+### Content Intelligence
+
+- **SEO/GEO analysis:** Readability scoring (Flesch-Kincaid), keyword extraction, structured data (JSON-LD), meta tag generation
+- **Recommendations:** AI-powered content performance analyzer
+- **Series & collections:** Organize posts, custom ordering, public sharing
+- **Templates:** 8 built-in content templates (How I Built X, Debugging Story, Tool Comparison, etc.)
+
+### Public API
+
+- **v1 endpoints:** 9 public routes with API key authentication
+- **Webhooks:** Outbound webhooks for automation events
+- **Content export:** Copy Markdown, Copy HTML, Download .md
+- **Series/collection export:** Bulk export capability
+
+### Automation & Observability
+
+- **QStash scheduling:** Publish queue, automation trigger execution, cron integration (5-min automation runner)
+- **Pipeline runs:** Track end-to-end automation with granular status (pending → scanning → extracting → generating → complete)
+- **Observability:** Real-time SSE event stream, historical event queries, pipeline visualization
+- **Usage metering:** Track API calls, session scans, content generations
+
+### Dashboard UI
+
+- **Pages (9):** Dashboard, Sessions, Insights, Content (list/calendar/pipeline), Analytics, Automation, Observability, Settings
+- **Navigation:** Desktop sidebar + mobile bottom nav (5 items + More sheet)
+- **Editor:** Lexical rich text with markdown import/export, split view, SEO/evidence/media/repo tabs
+- **AI chat:** Sidebar panel with SSE streaming, tool-use visualization, live markdown edits
+- **Responsive:** Full mobile support with touch-friendly interactions
+
+### Developer Portfolio
+
+- **Public pages:** Profile, blog feed, content showcase (per-workspace public URLs)
+- **Static export:** GitHub Pages export with SPA routing
+- **RSS/Atom feeds:** Public content feed for each workspace
+- **Custom domain:** Portfolio accessible at user's domain
+
+### DDD Patterns
+
+- **Workspace domain:** Multi-user isolation, session scoping, resource ownership
+- **Content domain:** Post lifecycle, versioning, publishing state machine
+- **Insight domain:** Pattern extraction, quality scoring, evidence linking
+- **Integration domain:** Multi-platform credential management, OAuth flow orchestration
+- **Automation domain:** Trigger management, pipeline execution, event broadcasting
+
+### Shared Infrastructure
+
+- **Cache:** Upstash Redis for scan results, rate limiting, session caching
+- **Queue:** Upstash QStash for scheduled publishing and automation
+- **Billing:** Stripe integration with 3 tiers (Solo, Pro, Team)
+- **Error handling:** Comprehensive validation, user-friendly error messages, detailed server logs
+- **Monitoring:** Health checks, performance metrics per post, usage analytics
+
+### Tech Stack
+
+- **Frontend:** Next.js 15 (App Router) + React 19 + Tailwind CSS 4 + shadcn/ui
+- **Editor:** Lexical rich text engine
+- **State:** TanStack Query v5 (server), React Context (client)
+- **Database:** PostgreSQL serverless (Neon) + Drizzle ORM
+- **Deployment:** Vercel (frontend + serverless API), Docker (self-hosted option)
+- **Styling:** Flat-black design tokens, responsive Tailwind utilities
+- **Code quality:** TypeScript strict mode, named exports, 200-400 line file size targets

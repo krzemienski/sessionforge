@@ -1,15 +1,54 @@
 # SessionForge Deployment Guide
 
-**Version:** 0.5.1-alpha
+**Version:** 0.5.2-alpha
 
 ---
 
-## Prerequisites
+## Local Development
 
-- [Bun](https://bun.sh/) (package manager and runtime)
-- [Vercel CLI](https://vercel.com/docs/cli) (optional, for local preview)
-- A [Neon](https://neon.tech/) PostgreSQL database
-- A [Vercel](https://vercel.com/) account for hosting
+### Quick Start (Docker Compose)
+
+```bash
+# Clone and install
+git clone https://github.com/nick/sessionforge.git
+cd sessionforge
+
+# Start with local PostgreSQL
+docker compose up
+
+# Database starts at localhost:5432
+# App runs at http://localhost:3000
+```
+
+**Credentials (Local):**
+- Database: `sessionforge` / `sessionforge`
+- Auth: Email/password signup available
+
+**Env vars (auto-set by compose):**
+- `DATABASE_URL`: `postgresql://sessionforge:sessionforge@postgres:5432/sessionforge`
+- `BETTER_AUTH_SECRET`: `dev-secret-change-in-production`
+- `NEXT_PUBLIC_APP_URL`: `http://localhost:3000`
+- `DISABLE_AI_AGENTS`: `true` (disable for local dev without Claude CLI auth)
+
+### Manual Setup
+
+```bash
+# Install dependencies
+bun install
+
+# Setup database
+cp .env.example .env.local
+# Edit .env.local with your DATABASE_URL
+
+# Push schema
+bun run db:push
+
+# Start dev server
+bun run dev
+# Runs on http://localhost:3000
+```
+
+**Important:** Use `next dev` (NOT `--turbopack`). Turbopack has drizzle-orm relation resolution bugs. Restart dev server after route/schema changes to clear stale caches.
 
 ---
 
@@ -17,7 +56,42 @@
 
 SessionForge deploys as a Next.js 15 application on Vercel. The monorepo build is configured in `vercel.json` at the project root.
 
-### Build Configuration
+### ### Docker Production
+
+Deploy to your own infrastructure (self-hosted, cloud VMs, Kubernetes):
+
+```bash
+# Build image
+docker build -t sessionforge:latest .
+
+# Run with Neon database
+export DATABASE_URL="postgresql://user:pass@neon-endpoint/sessionforge"
+export BETTER_AUTH_SECRET="your-secret-key"
+export BETTER_AUTH_URL="https://yourdomain.com"
+
+docker run -p 3000:3000 \
+  -e DATABASE_URL \
+  -e BETTER_AUTH_SECRET \
+  -e BETTER_AUTH_URL \
+  -e NEXT_PUBLIC_APP_URL="https://yourdomain.com" \
+  sessionforge:latest
+```
+
+Or with docker-compose for production (Neon backend):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+Update env vars in `.env` before running:
+- `DATABASE_URL` — Neon connection (not local Postgres)
+- `BETTER_AUTH_SECRET` — Strong random key
+- `BETTER_AUTH_URL` — Your domain
+- All Upstash and Stripe credentials
+
+Image runs as non-root user (nextjs:1001). Health check polls `/api/healthcheck`.
+
+### Vercel Build Configuration
 
 | Setting | Value |
 |---|---|
