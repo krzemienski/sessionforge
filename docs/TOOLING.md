@@ -11,7 +11,7 @@ Canonical tools for every layer of the stack. All phases use only tools from thi
 | Styling | Tailwind CSS | 3.x | Utility-first, shadcn/ui compatible |
 | Component Library | shadcn/ui | latest | Accessible, composable components |
 | Language | TypeScript | 5.7 | Strict mode, type safety |
-| Database (production) | Neon Postgres | Serverless | Branching, auto-suspend, Vercel-native |
+| Database (production) | Neon Postgres | PG 17 (aws-us-east-2) | Project: sessionforge-prod, pooled connections |
 | Database (local) | PostgreSQL via Docker | 16 | Dev parity with Neon |
 | ORM | Drizzle ORM | latest | Type-safe, lightweight, push-based migrations |
 | Auth | Better Auth | 1.2 | Email/password + OAuth providers |
