@@ -6,6 +6,10 @@ import { posts } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { updatePost } from "@/lib/ai/tools/post-manager";
 import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
+import {
+  validateStatusTransition,
+  WorkflowError,
+} from "@/lib/approval/workflow-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +97,35 @@ export async function PUT(
           { status: 403 }
         );
       }
+    }
+  }
+
+  // Validate status transition and enforce approval workflow rules
+  if (status && status !== existing.status) {
+    try {
+      await validateStatusTransition(
+        id,
+        existing.workspaceId,
+        existing.status ?? "draft",
+        status,
+        session.user.id
+      );
+    } catch (error) {
+      if (error instanceof WorkflowError) {
+        const statusCode =
+          error.code === "approval_required" ? 403 :
+          error.code === "invalid_transition" ? 422 :
+          error.code === "not_reviewer" ? 403 : 400;
+
+        return NextResponse.json(
+          {
+            error: error.message,
+            code: error.code,
+          },
+          { status: statusCode }
+        );
+      }
+      throw error;
     }
   }
 

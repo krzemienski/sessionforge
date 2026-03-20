@@ -38,6 +38,7 @@ export const postStatusEnum = pgEnum("post_status", [
   "idea",
   "in_review",
   "scheduled",
+  "approved",
 ]);
 
 export const contentTypeEnum = pgEnum("content_type", [
@@ -224,6 +225,12 @@ export const riskFlagStatusEnum = pgEnum("risk_flag_status", [
   "verified",
   "dismissed",
   "overridden",
+]);
+
+export const approvalDecisionTypeEnum = pgEnum("approval_decision_type", [
+  "approved",
+  "rejected",
+  "changes_requested",
 ]);
 
 export const researchItemTypeEnum = pgEnum("research_item_type", [
@@ -1749,6 +1756,72 @@ export const recommendationFeedback = pgTable(
   ]
 );
 
+export const approvalWorkflows = pgTable(
+  "approval_workflows",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").default(false),
+    requiredApprovers: integer("required_approvers").default(1),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("approvalWorkflows_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
+export const postReviewers = pgTable(
+  "post_reviewers",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    assignedBy: text("assigned_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    assignedAt: timestamp("assigned_at").defaultNow(),
+  },
+  (table) => [
+    index("postReviewers_postId_idx").on(table.postId),
+    index("postReviewers_userId_idx").on(table.userId),
+    uniqueIndex("postReviewers_postId_userId_uidx").on(
+      table.postId,
+      table.userId
+    ),
+  ]
+);
+
+export const approvalDecisions = pgTable(
+  "approval_decisions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    reviewerId: text("reviewer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    decision: approvalDecisionTypeEnum("decision").notNull(),
+    comment: text("comment"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("approvalDecisions_postId_idx").on(table.postId),
+    index("approvalDecisions_reviewerId_idx").on(table.reviewerId),
+    index("approvalDecisions_postId_createdAt_idx").on(
+      table.postId,
+      table.createdAt
+    ),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1766,6 +1839,13 @@ export const usersRelations = relations(users, ({ many }) => ({
   usageMonthlySummary: many(usageMonthlySummary),
   contentTemplates: many(contentTemplates),
   recommendationFeedback: many(recommendationFeedback),
+  postReviewAssignments: many(postReviewers, {
+    relationName: "reviewerUser",
+  }),
+  postReviewsAssigned: many(postReviewers, {
+    relationName: "reviewerAssigner",
+  }),
+  approvalDecisions: many(approvalDecisions),
 }));
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
@@ -1822,12 +1902,48 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   linkedinPublications: many(linkedinPublications),
   socialAnalytics: many(socialAnalytics),
   scanSources: many(scanSources),
+  approvalWorkflow: one(approvalWorkflows),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [styleSettings.workspaceId],
     references: [workspaces.id],
+  }),
+}));
+
+export const approvalWorkflowsRelations = relations(approvalWorkflows, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [approvalWorkflows.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+export const postReviewersRelations = relations(postReviewers, ({ one }) => ({
+  post: one(posts, {
+    fields: [postReviewers.postId],
+    references: [posts.id],
+  }),
+  user: one(users, {
+    fields: [postReviewers.userId],
+    references: [users.id],
+    relationName: "reviewerUser",
+  }),
+  assigner: one(users, {
+    fields: [postReviewers.assignedBy],
+    references: [users.id],
+    relationName: "reviewerAssigner",
+  }),
+}));
+
+export const approvalDecisionsRelations = relations(approvalDecisions, ({ one }) => ({
+  post: one(posts, {
+    fields: [approvalDecisions.postId],
+    references: [posts.id],
+  }),
+  reviewer: one(users, {
+    fields: [approvalDecisions.reviewerId],
+    references: [users.id],
   }),
 }));
 
@@ -1910,6 +2026,8 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     references: [postStyleMetrics.postId],
   }),
   riskFlagResolutions: many(riskFlagResolutions),
+  reviewers: many(postReviewers),
+  approvalDecisions: many(approvalDecisions),
   researchItems: many(researchItems),
 }));
 
