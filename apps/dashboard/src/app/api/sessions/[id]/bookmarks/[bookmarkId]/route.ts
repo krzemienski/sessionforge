@@ -2,35 +2,34 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { claudeSessions, sessionBookmarks, workspaces } from "@sessionforge/db";
+import { claudeSessions, sessionBookmarks } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
+import type { Session } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 async function resolveSession(
-  userId: string,
+  session: Session,
   sessionId: string
-): Promise<{ workspaceId: string } | null> {
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(eq(workspaces.ownerId, userId))
-    .limit(1);
-
-  if (!workspace.length) return null;
-
+): Promise<{ workspaceId: string }> {
   const rows = await db
     .select({ id: claudeSessions.id, workspaceId: claudeSessions.workspaceId })
     .from(claudeSessions)
-    .where(
-      and(
-        eq(claudeSessions.workspaceId, workspace[0].id),
-        eq(claudeSessions.id, sessionId)
-      )
-    )
+    .where(eq(claudeSessions.id, sessionId))
     .limit(1);
 
-  if (!rows.length) return null;
+  if (!rows.length) {
+    throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
+  }
+
+  await getAuthorizedWorkspaceById(
+    session,
+    rows[0].workspaceId,
+    PERMISSIONS.SESSIONS_READ
+  );
 
   return { workspaceId: rows[0].workspaceId };
 }
@@ -48,10 +47,7 @@ export async function DELETE(
 
   const { id, bookmarkId } = await params;
 
-  const resolved = await resolveSession(session.user.id, id);
-  if (!resolved) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  }
+  const resolved = await resolveSession(session, id);
 
   const deleted = await db
     .delete(sessionBookmarks)
