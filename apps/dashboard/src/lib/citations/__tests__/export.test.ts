@@ -4,7 +4,7 @@
  * Tests for markdown export with citation links in references section.
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 import {
   CitationRenderer,
   type CitationMetadata,
