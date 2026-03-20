@@ -194,6 +194,13 @@ export const portfolioThemeEnum = pgEnum("portfolio_theme", [
   "colorful",
 ]);
 
+export const researchItemTypeEnum = pgEnum("research_item_type", [
+  "link",
+  "note",
+  "code_snippet",
+  "session_snippet",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -1802,6 +1809,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.id],
     references: [postStyleMetrics.postId],
   }),
+  researchItems: many(researchItems),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -2516,5 +2524,52 @@ export const postStyleMetricsRelations = relations(postStyleMetrics, ({ one }) =
   workspace: one(workspaces, {
     fields: [postStyleMetrics.workspaceId],
     references: [workspaces.id],
+  }),
+}));
+
+// ── Research Workspace & Source Notebook (from 026-research-workspace-source-notebook) ──
+
+export const researchItems = pgTable(
+  "research_items",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    type: researchItemTypeEnum("type").notNull(),
+    title: text("title").notNull(),
+    content: text("content"),
+    url: text("url"),
+    tags: jsonb("tags").$type<string[]>().default([]),
+    credibilityRating: integer("credibility_rating"),
+    sessionId: text("session_id").references(() => claudeSessions.id, {
+      onDelete: "set null",
+    }),
+    messageIndex: integer("message_index"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("researchItems_postId_idx").on(table.postId),
+    index("researchItems_workspaceId_idx").on(table.workspaceId),
+  ]
+);
+
+export const researchItemsRelations = relations(researchItems, ({ one }) => ({
+  post: one(posts, {
+    fields: [researchItems.postId],
+    references: [posts.id],
+  }),
+  workspace: one(workspaces, {
+    fields: [researchItems.workspaceId],
+    references: [workspaces.id],
+  }),
+  session: one(claudeSessions, {
+    fields: [researchItems.sessionId],
+    references: [claudeSessions.id],
   }),
 }));
