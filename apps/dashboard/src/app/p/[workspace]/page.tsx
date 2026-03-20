@@ -136,7 +136,7 @@ export default async function PublicPortfolioPage({
           </h2>
           {portfolio.showRss && (
             <a
-              href={`/${workspace}/rss`}
+              href={`/api/public/portfolio/${workspace}/rss`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-sf-accent hover:underline"
