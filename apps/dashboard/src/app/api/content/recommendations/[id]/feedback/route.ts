@@ -6,6 +6,10 @@ import { contentRecommendations, recommendationFeedback } from "@sessionforge/db
 import { eq } from "drizzle-orm";
 import { createPost } from "@/lib/ai/tools/post-manager";
 import type { contentTypeEnum } from "@sessionforge/db";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
 
@@ -25,50 +29,49 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  // Verify recommendation exists and user owns the workspace
-  const recommendation = await db.query.contentRecommendations.findFirst({
-    where: eq(contentRecommendations.id, id),
-    with: { workspace: true },
-  });
+    // Verify recommendation exists and user has access to the workspace
+    const recommendation = await db.query.contentRecommendations.findFirst({
+      where: eq(contentRecommendations.id, id),
+      with: { workspace: true },
+    });
 
-  if (!recommendation) {
-    return NextResponse.json({ error: "Recommendation not found" }, { status: 404 });
-  }
+    if (!recommendation) {
+      throw new AppError("Recommendation not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (recommendation.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    await getAuthorizedWorkspaceById(session, recommendation.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      throw new AppError("Invalid JSON body", ERROR_CODES.BAD_REQUEST);
+    }
 
-  const { action } = body;
+    const { action } = body;
 
-  if (!action) {
-    return NextResponse.json({ error: "action is required" }, { status: 400 });
-  }
+    if (!action) {
+      throw new AppError("action is required", ERROR_CODES.BAD_REQUEST);
+    }
 
-  // Normalize action values: "accept" -> "accepted", "dismiss" -> "dismissed"
-  let normalizedAction: "accepted" | "dismissed";
-  if (action === "accept" || action === "accepted") {
-    normalizedAction = "accepted";
-  } else if (action === "dismiss" || action === "dismissed") {
-    normalizedAction = "dismissed";
-  } else {
-    return NextResponse.json(
-      { error: "action must be 'accept', 'accepted', 'dismiss', or 'dismissed'" },
-      { status: 400 }
-    );
-  }
+    // Normalize action values: "accept" -> "accepted", "dismiss" -> "dismissed"
+    let normalizedAction: "accepted" | "dismissed";
+    if (action === "accept" || action === "accepted") {
+      normalizedAction = "accepted";
+    } else if (action === "dismiss" || action === "dismissed") {
+      normalizedAction = "dismissed";
+    } else {
+      throw new AppError(
+        "action must be 'accept', 'accepted', 'dismiss', or 'dismissed'",
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
 
   const now = new Date();
   const updateData: Record<string, unknown> = {
@@ -137,10 +140,5 @@ export async function POST(
       action: normalizedAction,
       ...(draftPostId ? { draftPostId } : {}),
     });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Feedback recording failed" },
-      { status: 500 }
-    );
-  }
+  })(request);
 }

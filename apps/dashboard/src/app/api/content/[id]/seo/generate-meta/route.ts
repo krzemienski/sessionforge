@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { generateMetaSuggestions } from "@/lib/seo/meta-generator";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,38 +25,34 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, id),
-    columns: {
-      id: true,
-      title: true,
-      markdown: true,
-    },
-    with: { workspace: true },
-  });
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      columns: {
+        id: true,
+        title: true,
+        markdown: true,
+      },
+      with: { workspace: true },
+    });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (!post) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    await getAuthorizedWorkspaceById(session, post.workspace.id, PERMISSIONS.CONTENT_EDIT);
 
-  const body = await request.json().catch(() => ({}));
-  const { targetAudience, contentDomain } = body as {
-    targetAudience?: string;
-    contentDomain?: string;
-  };
+    const body = await request.json().catch(() => ({}));
+    const { targetAudience, contentDomain } = body as {
+      targetAudience?: string;
+      contentDomain?: string;
+    };
 
-  try {
     const suggestions = await generateMetaSuggestions({
       content: post.markdown,
       title: post.title,
@@ -61,10 +61,5 @@ export async function POST(
     });
 
     return NextResponse.json(suggestions);
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate meta suggestions" },
-      { status: 500 }
-    );
-  }
+  })(request);
 }

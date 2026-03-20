@@ -2,33 +2,36 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { contentRecommendations, workspaces, recommendationFeedback } from "@sessionforge/db";
+import { contentRecommendations, recommendationFeedback } from "@sessionforge/db";
 import { eq, desc, and, gte } from "drizzle-orm";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { searchParams } = new URL(request.url);
-  const workspaceSlug = searchParams.get("workspace");
-  const limit = parseInt(searchParams.get("limit") ?? "20", 10);
-  const offset = parseInt(searchParams.get("offset") ?? "0", 10);
-  const minPriority = parseInt(searchParams.get("minPriority") ?? "0", 10);
-  const status = searchParams.get("status") ?? "active";
+    const { searchParams } = new URL(request.url);
+    const workspaceSlug = searchParams.get("workspace");
+    const limit = parseInt(searchParams.get("limit") ?? "20", 10);
+    const offset = parseInt(searchParams.get("offset") ?? "0", 10);
+    const minPriority = parseInt(searchParams.get("minPriority") ?? "0", 10);
+    const status = searchParams.get("status") ?? "active";
 
-  if (!workspaceSlug) {
-    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
-  }
+    if (!workspaceSlug) {
+      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
+    }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.CONTENT_READ
+    );
 
   const conditions = [
     eq(contentRecommendations.workspaceId, workspace.id),
@@ -50,47 +53,47 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json({ recommendations: results, limit, offset });
+  })(request);
 }
 
 export async function PATCH(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { searchParams } = new URL(request.url);
-  const workspaceSlug = searchParams.get("workspace");
+    const { searchParams } = new URL(request.url);
+    const workspaceSlug = searchParams.get("workspace");
 
-  if (!workspaceSlug) {
-    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
-  }
+    if (!workspaceSlug) {
+      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
+    }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.CONTENT_EDIT
+    );
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    throw new AppError("Invalid JSON body", ERROR_CODES.BAD_REQUEST);
   }
 
   const { recommendationId, action } = body;
 
   if (!recommendationId || !action) {
-    return NextResponse.json(
-      { error: "recommendationId and action are required" },
-      { status: 400 }
+    throw new AppError(
+      "recommendationId and action are required",
+      ERROR_CODES.BAD_REQUEST
     );
   }
 
   if (action !== "accepted" && action !== "dismissed") {
-    return NextResponse.json(
-      { error: "action must be 'accepted' or 'dismissed'" },
-      { status: 400 }
+    throw new AppError(
+      "action must be 'accepted' or 'dismissed'",
+      ERROR_CODES.BAD_REQUEST
     );
   }
 
@@ -99,7 +102,7 @@ export async function PATCH(request: Request) {
   });
 
   if (!recommendation || recommendation.workspaceId !== workspace.id) {
-    return NextResponse.json({ error: "Recommendation not found" }, { status: 404 });
+    throw new AppError("Recommendation not found", ERROR_CODES.NOT_FOUND);
   }
 
   const now = new Date();
@@ -126,4 +129,5 @@ export async function PATCH(request: Request) {
   });
 
   return NextResponse.json({ success: true, action });
+  })(request);
 }
