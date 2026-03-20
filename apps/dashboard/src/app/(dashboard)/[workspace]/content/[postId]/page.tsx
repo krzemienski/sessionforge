@@ -6,7 +6,7 @@ import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useGhostIntegration, useGhostPublication } from "@/hooks/use-ghost";
 import { useMediumIntegration, useMediumPublication } from "@/hooks/use-medium";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X } from "lucide-react";
+import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X, ShieldCheck } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import type { Layout } from "react-resizable-panels";
@@ -51,6 +51,9 @@ import { SeriesNavLinks } from "@/components/series/series-nav-links";
 import { CitationToggle, type CitationDensity } from "@/components/citations/citation-toggle";
 import { RepurposeButton } from "@/components/content/repurpose-button";
 import { RepurposeTracker } from "@/components/content/repurpose-tracker";
+import { useRiskFlags, useResolveFlag } from "@/hooks/use-risk-flags";
+import { useVerification } from "@/hooks/use-verification";
+import type { VerificationSummary } from "@/lib/verification/types";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -67,6 +70,16 @@ const SeoPanel = dynamic(
 const RevisionHistoryPanel = dynamic(
   () => import("@/components/editor/revision-history-panel").then((m) => m.RevisionHistoryPanel),
   { ssr: false, loading: () => <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg animate-pulse" /> }
+);
+
+const RiskFlagsPanel = dynamic(
+  () => import("@/components/editor/risk-flags-panel").then((m) => m.RiskFlagsPanel),
+  { ssr: false }
+);
+
+const PublishGateModal = dynamic(
+  () => import("@/components/editor/publish-gate-modal").then((m) => m.PublishGateModal),
+  { ssr: false }
 );
 
 const AUTO_SAVE_INTERVAL_MS = 2 * 60 * 1000;
@@ -108,7 +121,7 @@ export default function ContentEditorPage() {
   const [externalMd, setExternalMd] = useState<string | null>(null);
   const [hashnodeModalOpen, setHashnodeModalOpen] = useState(false);
   const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository" | "citations">("chat");
+  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository" | "citations" | "verify">("chat");
   const [citationsEnabled, setCitationsEnabled] = useState(true);
   const [citationDensity, setCitationDensity] = useState<CitationDensity>("all");
   const [highlightedCitation, setHighlightedCitation] = useState<string | null>(null);
@@ -122,8 +135,14 @@ export default function ContentEditorPage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [seoRefreshKey, setSeoRefreshKey] = useState(0);
+  const [isPublishGateOpen, setIsPublishGateOpen] = useState(false);
   const initializedRef = useRef(false);
   const lastSavedMarkdownRef = useRef("");
+
+  // Risk flags & verification hooks
+  const riskFlags = useRiskFlags(postId);
+  const resolveFlag = useResolveFlag(postId);
+  const verification = useVerification(postId);
 
   useEffect(() => {
     if (post.data && !initializedRef.current) {
@@ -191,10 +210,34 @@ export default function ContentEditorPage() {
   }, [update, postId, title, markdown, status]);
 
   const handlePublish = useCallback(() => {
+    // Check for unresolved critical flags that block publishing
+    const flags = riskFlags.data?.flags ?? [];
+    const blockingFlags = flags.filter(
+      (f: any) => f.severity === "critical" && f.status === "unresolved"
+    );
+    if (blockingFlags.length > 0) {
+      setIsPublishGateOpen(true);
+      return;
+    }
+    setStatus('published');
+    update.mutate({ id: postId, title, markdown, status: 'published', versionType: "major", editType: "user_edit" });
+    lastSavedMarkdownRef.current = markdown;
+  }, [update, postId, title, markdown, riskFlags.data]);
+
+  const handleOverridePublish = useCallback(() => {
+    setIsPublishGateOpen(false);
     setStatus('published');
     update.mutate({ id: postId, title, markdown, status: 'published', versionType: "major", editType: "user_edit" });
     lastSavedMarkdownRef.current = markdown;
   }, [update, postId, title, markdown]);
+
+  const handleRunVerification = useCallback(() => {
+    verification.mutate({ force: false });
+  }, [verification]);
+
+  const handleResolveFlag = useCallback((flagId: string, status: "verified" | "dismissed", notes?: string) => {
+    resolveFlag.mutate({ flagId, status, evidenceNotes: notes });
+  }, [resolveFlag]);
 
   useKeyboardShortcut(SHORTCUTS.Actions[2], handleSave, { captureInInputs: true });
   useKeyboardShortcut(SHORTCUTS.Actions[3], handlePublish, { captureInInputs: true });
@@ -434,7 +477,7 @@ export default function ContentEditorPage() {
               <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
                 {/* Sidebar tabs */}
                 <div className="flex gap-1 p-2 border-b border-sf-border">
-                  {(["chat", "seo", "evidence", "citations", "supplementary", "media", "repository"] as const).map((tab) => (
+                  {(["chat", "seo", "evidence", "citations", "supplementary", "media", "repository", "verify"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setSidebarTab(tab)}
@@ -445,7 +488,7 @@ export default function ContentEditorPage() {
                           : "text-sf-text-secondary hover:bg-sf-bg-hover"
                       )}
                     >
-                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "citations" ? "Citations" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : "More"}
+                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "citations" ? "Citations" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : tab === "verify" ? "Verify" : "More"}
                     </button>
                   ))}
                 </div>
@@ -493,6 +536,16 @@ export default function ContentEditorPage() {
                     <RepositoryPanel
                       postId={postId}
                       workspace={workspace}
+                    />
+                  )}
+                  {sidebarTab === "verify" && (
+                    <RiskFlagsPanel
+                      postId={postId}
+                      flags={riskFlags.data?.flags}
+                      summary={riskFlags.data?.summary}
+                      isVerifying={verification.isPending}
+                      onRunVerification={handleRunVerification}
+                      onResolve={handleResolveFlag}
                     />
                   )}
                 </div>
@@ -569,6 +622,24 @@ export default function ContentEditorPage() {
             <span className={cn("text-xs font-medium", seoScoreColor(liveScore.total))}>
               SEO: {liveScore.total}/100
             </span>
+          )}
+          {riskFlags.data?.summary && (
+            <button
+              onClick={() => setSidebarTab("verify")}
+              className={cn(
+                "text-xs font-medium flex items-center gap-1 hover:underline",
+                riskFlags.data.summary.unresolvedCount > 0
+                  ? riskFlags.data.summary.criticalCount > 0
+                    ? "text-red-500"
+                    : "text-amber-500"
+                  : "text-sf-success"
+              )}
+            >
+              <ShieldCheck size={12} />
+              {riskFlags.data.summary.unresolvedCount > 0
+                ? `${riskFlags.data.summary.unresolvedCount} flags`
+                : "Verified"}
+            </button>
           )}
           {(post.data?.contentType === "twitter_thread" || post.data?.contentType === "linkedin_post") && (
             <SocialCopyButton
@@ -691,6 +762,20 @@ export default function ContentEditorPage() {
           </div>
         </div>
       )}
+
+      <PublishGateModal
+        isOpen={isPublishGateOpen}
+        onClose={() => setIsPublishGateOpen(false)}
+        blockingFlags={(riskFlags.data?.flags ?? []).filter(
+          (f: any) => f.severity === "critical" && f.status === "unresolved"
+        )}
+        canOverride={true}
+        onResolveFlags={() => {
+          setIsPublishGateOpen(false);
+          setSidebarTab("verify");
+        }}
+        onOverridePublish={handleOverridePublish}
+      />
     </div>
   );
 }
