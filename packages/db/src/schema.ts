@@ -2582,3 +2582,26 @@ export const experimentVariants = pgTable(
     index("experiment_variants_experimentId_idx").on(table.experimentId),
   ]
 );
+
+export const experimentResults = pgTable(
+  "experiment_results",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    variantId: text("variant_id")
+      .notNull()
+      .references(() => experimentVariants.id, { onDelete: "cascade" }),
+    impressions: integer("impressions").default(0),
+    clicks: integer("clicks").default(0),
+    views: integer("views").default(0),
+    likes: integer("likes").default(0),
+    comments: integer("comments").default(0),
+    shares: integer("shares").default(0),
+    engagementRate: real("engagement_rate").default(0),
+    recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("experiment_results_variantId_idx").on(table.variantId),
+    index("experiment_results_recordedAt_idx").on(table.recordedAt),
+  ]
+);
