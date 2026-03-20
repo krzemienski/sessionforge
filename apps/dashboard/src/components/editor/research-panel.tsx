@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Copy, Check, Pencil, Trash2, Plus, X, Star, ClipboardPaste } from "lucide-react";
+import { Copy, Check, Pencil, Trash2, Plus, X, Star, ClipboardPaste, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  useResearchItems,
+  useCreateResearchItem,
+  useUpdateResearchItem,
+  useDeleteResearchItem,
+} from "@/hooks/use-research";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -15,7 +21,7 @@ export interface ResearchItem {
   content: string;
   url?: string;
   tags: string[];
-  credibility: number; // 1-5
+  credibilityRating: number; // 1-5
   createdAt: string;
 }
 
@@ -174,7 +180,7 @@ function ResearchCard({ item, onEdit, onDelete, onInsert }: ResearchCardProps) {
           <span>{config.icon}</span>
           <span>{config.label}</span>
         </span>
-        <CredibilityStars rating={item.credibility} />
+        <CredibilityStars rating={item.credibilityRating} />
       </div>
 
       {/* Title */}
@@ -264,7 +270,7 @@ function AddItemForm({ onSubmit, onCancel }: AddItemFormProps) {
   const [url, setUrl] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [credibility, setCredibility] = useState(3);
+  const [credibilityRating, setCredibilityRating] = useState(3);
 
   const handleAddTag = useCallback(() => {
     const trimmed = tagInput.trim().toLowerCase();
@@ -298,10 +304,10 @@ function AddItemForm({ onSubmit, onCancel }: AddItemFormProps) {
         content: content.trim(),
         url: type === "link" ? url.trim() : undefined,
         tags,
-        credibility,
+        credibilityRating,
       });
     },
-    [type, title, content, url, tags, credibility, onSubmit]
+    [type, title, content, url, tags, credibilityRating, onSubmit]
   );
 
   const inputClass =
@@ -391,7 +397,7 @@ function AddItemForm({ onSubmit, onCancel }: AddItemFormProps) {
         <span className="text-[10px] text-sf-text-muted uppercase tracking-wide">
           Credibility
         </span>
-        <CredibilityStars rating={credibility} interactive onChange={setCredibility} />
+        <CredibilityStars rating={credibilityRating} interactive onChange={setCredibilityRating} />
       </div>
 
       {/* Form actions */}
@@ -429,7 +435,7 @@ function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
   const [url, setUrl] = useState(item.url ?? "");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>(item.tags);
-  const [credibility, setCredibility] = useState(item.credibility);
+  const [credibilityRating, setCredibilityRating] = useState(item.credibilityRating);
 
   const handleAddTag = useCallback(() => {
     const trimmed = tagInput.trim().toLowerCase();
@@ -462,10 +468,10 @@ function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
         content: content.trim(),
         url: item.type === "link" ? url.trim() : undefined,
         tags,
-        credibility,
+        credibilityRating,
       });
     },
-    [item.id, item.type, title, content, url, tags, credibility, onSave]
+    [item.id, item.type, title, content, url, tags, credibilityRating, onSave]
   );
 
   const inputClass =
@@ -542,7 +548,7 @@ function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
         <span className="text-[10px] text-sf-text-muted uppercase tracking-wide">
           Credibility
         </span>
-        <CredibilityStars rating={credibility} interactive onChange={setCredibility} />
+        <CredibilityStars rating={credibilityRating} interactive onChange={setCredibilityRating} />
       </div>
 
       {/* Form actions */}
@@ -586,12 +592,36 @@ function EmptyState() {
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function ResearchPanel({
-  items = [],
+  postId,
+  items: propItems,
   onAddItem,
   onUpdateItem,
   onDeleteItem,
   onInsertIntoDraft,
 }: ResearchPanelProps) {
+  // ── Self-fetching: use hooks when no items are provided via props ──
+  const { data, isLoading } = useResearchItems(postId);
+  const createMutation = useCreateResearchItem();
+  const updateMutation = useUpdateResearchItem();
+  const deleteMutation = useDeleteResearchItem();
+
+  // Map API items to component format (handle field naming differences)
+  const fetchedItems: ResearchItem[] = (data?.items ?? []).map(
+    (item: Record<string, unknown>) => ({
+      id: item.id as string,
+      type: item.type as ResearchItemType,
+      title: item.title as string,
+      content: (item.content as string) ?? "",
+      url: item.url as string | undefined,
+      tags: (item.tags as string[]) ?? [],
+      credibilityRating: (item.credibilityRating as number) ?? 3,
+      createdAt: item.createdAt as string,
+    })
+  );
+
+  // Use prop items if provided, otherwise use fetched items
+  const items = propItems ?? fetchedItems;
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
@@ -616,18 +646,56 @@ export function ResearchPanel({
 
   const handleAddItem = useCallback(
     (item: Omit<ResearchItem, "id" | "createdAt">) => {
-      onAddItem?.(item);
+      if (onAddItem) {
+        onAddItem(item);
+      } else {
+        // Self-managed: use mutation
+        createMutation.mutate({
+          postId,
+          type: item.type,
+          title: item.title,
+          content: item.content,
+          url: item.url,
+          tags: item.tags,
+          credibilityRating: item.credibilityRating,
+        });
+      }
       setShowAddForm(false);
     },
-    [onAddItem]
+    [onAddItem, createMutation, postId]
   );
 
   const handleSaveEdit = useCallback(
     (id: string, updates: Partial<ResearchItem>) => {
-      onUpdateItem?.(id, updates);
+      if (onUpdateItem) {
+        onUpdateItem(id, updates);
+      } else {
+        // Self-managed: use mutation
+        updateMutation.mutate({
+          postId,
+          itemId: id,
+          title: updates.title,
+          content: updates.content,
+          url: updates.url,
+          tags: updates.tags,
+          credibilityRating: updates.credibilityRating,
+        });
+      }
       setEditingId(null);
     },
-    [onUpdateItem]
+    [onUpdateItem, updateMutation, postId]
+  );
+
+  const handleDeleteItem = useCallback(
+    (id: string) => {
+      if (onDeleteItem) {
+        onDeleteItem(id);
+      } else {
+        // Self-managed: use mutation
+        deleteMutation.mutate({ postId, itemId: id });
+      }
+    },
+    [onDeleteItem, deleteMutation, postId]
   );
 
   const handleInsert = useCallback(
@@ -647,6 +715,25 @@ export function ResearchPanel({
     },
     [onInsertIntoDraft]
   );
+
+  // Loading state when self-fetching
+  if (!propItems && isLoading) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-4 py-3 border-b border-sf-border">
+          <h3 className="font-display font-semibold text-sf-text-primary text-sm">
+            Research
+          </h3>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="flex items-center gap-2 text-sf-text-muted">
+            <Loader2 size={16} className="animate-spin" />
+            <span className="text-xs">Loading research items...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -749,7 +836,7 @@ export function ResearchPanel({
                         key={item.id}
                         item={item}
                         onEdit={() => setEditingId(item.id)}
-                        onDelete={() => onDeleteItem?.(item.id)}
+                        onDelete={() => handleDeleteItem(item.id)}
                         onInsert={() => handleInsert(item)}
                       />
                     )
