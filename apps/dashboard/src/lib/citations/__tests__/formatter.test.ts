@@ -7,7 +7,7 @@
  * - Cards: Expandable evidence cards with full context
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 import {
   CitationFormatter,
   type CitationMetadata,

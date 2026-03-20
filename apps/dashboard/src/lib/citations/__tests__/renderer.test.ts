@@ -5,7 +5,7 @@
  * and rendering of citations in markdown content.
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 import {
   CitationRenderer,
   type RenderOptions,
