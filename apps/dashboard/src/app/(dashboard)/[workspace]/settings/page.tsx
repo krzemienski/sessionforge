@@ -8,9 +8,11 @@ import { ApiKeysTab } from "@/components/settings/api-keys-tab";
 import { IntegrationsTab } from "@/components/settings/integrations-tab";
 import { WebhooksTab } from "@/components/settings/webhooks-tab";
 import { SourcesTab } from "@/components/settings/sources-tab";
+import { MembersTab } from "@/components/settings/members-tab";
 
 const TABS = [
   { id: "general", label: "General" },
+  { id: "members", label: "Members" },
   { id: "style", label: "Style" },
   { id: "api-keys", label: "API Keys" },
   { id: "integrations", label: "Integrations" },
@@ -63,6 +65,7 @@ export default function SettingsPage() {
       </div>
 
       {activeTab === "general" && <GeneralTab workspace={workspace} />}
+      {activeTab === "members" && <MembersTab workspace={workspace} />}
       {activeTab === "style" && <StyleTab workspace={workspace} />}
       {activeTab === "api-keys" && <ApiKeysTab workspace={workspace} />}
       {activeTab === "integrations" && <IntegrationsTab workspace={workspace} />}
