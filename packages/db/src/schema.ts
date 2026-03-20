@@ -1731,6 +1731,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   linkedinPublications: many(linkedinPublications),
   socialAnalytics: many(socialAnalytics),
   scanSources: many(scanSources),
+  experiments: many(experiments),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
@@ -1818,6 +1819,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.id],
     references: [postStyleMetrics.postId],
   }),
+  experiments: many(experiments),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -2604,4 +2606,37 @@ export const experimentResults = pgTable(
     index("experiment_results_variantId_idx").on(table.variantId),
     index("experiment_results_recordedAt_idx").on(table.recordedAt),
   ]
+);
+
+export const experimentsRelations = relations(experiments, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [experiments.workspaceId],
+    references: [workspaces.id],
+  }),
+  post: one(posts, {
+    fields: [experiments.postId],
+    references: [posts.id],
+  }),
+  variants: many(experimentVariants),
+}));
+
+export const experimentVariantsRelations = relations(
+  experimentVariants,
+  ({ one, many }) => ({
+    experiment: one(experiments, {
+      fields: [experimentVariants.experimentId],
+      references: [experiments.id],
+    }),
+    results: many(experimentResults),
+  })
+);
+
+export const experimentResultsRelations = relations(
+  experimentResults,
+  ({ one }) => ({
+    variant: one(experimentVariants, {
+      fields: [experimentResults.variantId],
+      references: [experimentVariants.id],
+    }),
+  })
 );
