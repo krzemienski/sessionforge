@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, beforeAll, mock } from "bun:test";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
 // Mutable mock state shared between mock factories and test cases
@@ -70,23 +71,15 @@ mock.module("@sessionforge/db", () => ({
   },
 }));
 
-// Mock workspace-auth to use existing mockWorkspaceResult + mockAuthSession
+// Mock workspace-auth to use existing mockWorkspaceResult + mockAuthSession.
+// Uses the REAL AppError (imported above) so withApiHandler recognises it.
 mock.module("@/lib/workspace-auth", () => {
-  class AppError extends Error {
-    code: string;
-    statusCode: number;
-    constructor(msg: string, code: string, status?: number) {
-      super(msg);
-      this.code = code;
-      this.statusCode = status ?? 500;
-    }
-  }
   const getAuthorizedWorkspace = async (session: any, slug: string, _perm?: string) => {
-    if (!mockWorkspaceResult.length) throw new AppError("Workspace not found", "NOT_FOUND", 404);
+    if (!mockWorkspaceResult.length) throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
     return { workspace: { ...mockWorkspaceResult[0], slug, ownerId: session.user.id }, role: "owner" };
   };
   const getAuthorizedWorkspaceById = async (session: any, id: string, _perm?: string) => {
-    if (!mockWorkspaceResult.length) throw new AppError("Workspace not found", "NOT_FOUND", 404);
+    if (!mockWorkspaceResult.length) throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
     return { workspace: { ...mockWorkspaceResult[0], ownerId: session.user.id }, role: "owner" };
   };
   const logWorkspaceActivity = async () => {};
@@ -209,11 +202,23 @@ type MockResponse = { _status: number; _body: unknown };
 /**
  * Builds a minimal request-like object whose only required property is
  * `nextUrl`, which is the only part of NextRequest that the route handler
- * reads directly.
+ * reads directly.  Includes `workspace=test-workspace` by default.
  */
 function makeRequest(params: Record<string, string> = {}): Request {
   const url = new URL("http://localhost/api/sessions");
+  // Always include workspace unless explicitly overridden via params
+  if (!("workspace" in params)) {
+    url.searchParams.set("workspace", "test-workspace");
+  }
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  return { url: url.toString() } as unknown as Request;
+}
+
+/**
+ * Builds a request WITHOUT the workspace query param (for testing the 400 path).
+ */
+function makeRequestWithoutWorkspace(): Request {
+  const url = new URL("http://localhost/api/sessions");
   return { url: url.toString() } as unknown as Request;
 }
 
@@ -258,21 +263,20 @@ describe("GET /api/sessions", () => {
   // -------------------------------------------------------------------------
 
   describe("workspace lookup", () => {
-    it("returns 404 when the authenticated user has no workspace", async () => {
+    it("returns 400 when the workspace query param is missing", async () => {
+      const res = (await GET(makeRequestWithoutWorkspace())) as unknown as MockResponse;
+      expect(res._status).toBe(400);
+    });
+
+    it("returns 'workspace query param required' error body when param is missing", async () => {
+      const res = (await GET(makeRequestWithoutWorkspace())) as unknown as MockResponse;
+      expect((res._body as Record<string, string>).error).toBe("workspace query param required");
+    });
+
+    it("returns 404 when the workspace is not found", async () => {
       mockWorkspaceResult = [];
       const res = (await GET(makeRequest())) as unknown as MockResponse;
       expect(res._status).toBe(404);
-    });
-
-    it("returns 'No workspace found' error body when workspace is missing", async () => {
-      mockWorkspaceResult = [];
-      const res = (await GET(makeRequest())) as unknown as MockResponse;
-      expect((res._body as Record<string, string>).error).toBe("No workspace found");
-    });
-
-    it("proceeds past workspace lookup when workspace exists", async () => {
-      const res = (await GET(makeRequest())) as unknown as MockResponse;
-      expect(res._status).toBe(200);
     });
   });
 
@@ -286,9 +290,9 @@ describe("GET /api/sessions", () => {
       expect(res._status).toBe(200);
     });
 
-    it("response body contains a data array", async () => {
+    it("response body contains a sessions array", async () => {
       const res = (await GET(makeRequest())) as unknown as MockResponse;
-      expect((res._body as Record<string, unknown>).data).toBeDefined();
+      expect((res._body as Record<string, unknown>).sessions).toBeDefined();
     });
 
     it("response body contains a total count", async () => {
@@ -306,19 +310,19 @@ describe("GET /api/sessions", () => {
       expect((res._body as Record<string, unknown>).offset).toBeDefined();
     });
 
-    it("data array contains the session rows returned by the database", async () => {
+    it("sessions array contains the session rows returned by the database", async () => {
       mockSessionRows = [
         { id: 1, sessionId: "abc", projectName: "project-a" },
         { id: 2, sessionId: "def", projectName: "project-b" },
       ];
       const res = (await GET(makeRequest())) as unknown as MockResponse;
-      expect((res._body as Record<string, unknown>).data).toEqual(mockSessionRows);
+      expect((res._body as Record<string, unknown>).sessions).toEqual(mockSessionRows);
     });
 
-    it("data array is empty when no sessions are found", async () => {
+    it("sessions array is empty when no sessions are found", async () => {
       mockSessionRows = [];
       const res = (await GET(makeRequest())) as unknown as MockResponse;
-      expect((res._body as Record<string, unknown>).data).toEqual([]);
+      expect((res._body as Record<string, unknown>).sessions).toEqual([]);
     });
   });
 

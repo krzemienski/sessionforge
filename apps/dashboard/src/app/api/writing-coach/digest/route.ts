@@ -217,14 +217,29 @@ export async function GET(request: Request) {
       );
       targetWorkspaces = [{ id: workspace.id, slug: workspace.slug }];
     } else {
-      // All owned workspaces (backward compat)
-      targetWorkspaces = await db
+      // All accessible workspaces (owned + member)
+      const ownedWorkspaces = await db
         .select({
           id: workspaces.id,
           slug: workspaces.slug,
         })
         .from(workspaces)
         .where(eq(workspaces.ownerId, session.user.id));
+
+      const memberWorkspaces = await db
+        .select({
+          id: workspaces.id,
+          slug: workspaces.slug,
+        })
+        .from(workspaceMembers)
+        .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
+        .where(eq(workspaceMembers.userId, session.user.id));
+
+      const seen = new Set(ownedWorkspaces.map((w) => w.id));
+      targetWorkspaces = [
+        ...ownedWorkspaces,
+        ...memberWorkspaces.filter((w) => !seen.has(w.id)),
+      ];
     }
 
     const workspaceDigests: WorkspaceDigest[] = [];
@@ -280,14 +295,29 @@ export async function POST(request: Request) {
       );
       targetWorkspaces = [{ id: workspace.id, slug: workspace.slug }];
     } else {
-      // All owned workspaces (backward compat)
-      targetWorkspaces = await db
+      // All accessible workspaces (owned + member)
+      const ownedWorkspaces = await db
         .select({
           id: workspaces.id,
           slug: workspaces.slug,
         })
         .from(workspaces)
         .where(eq(workspaces.ownerId, session.user.id));
+
+      const memberWorkspaces = await db
+        .select({
+          id: workspaces.id,
+          slug: workspaces.slug,
+        })
+        .from(workspaceMembers)
+        .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
+        .where(eq(workspaceMembers.userId, session.user.id));
+
+      const seen = new Set(ownedWorkspaces.map((w) => w.id));
+      targetWorkspaces = [
+        ...ownedWorkspaces,
+        ...memberWorkspaces.filter((w) => !seen.has(w.id)),
+      ];
     }
 
     const workspaceDigests: WorkspaceDigest[] = [];
