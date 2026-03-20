@@ -161,6 +161,21 @@ export function useSubmitDecision() {
   });
 }
 
+export function useWorkspaceMembers(workspace: string) {
+  return useQuery({
+    queryKey: ["workspace-members", workspace],
+    queryFn: async () => {
+      const res = await fetch(`/api/workspace/${workspace}/members`);
+      if (!res.ok) throw new Error("Failed to fetch workspace members");
+      return res.json() as Promise<{
+        ownerId: string;
+        members: { id: string; name: string | null; email: string | null; image: string | null }[];
+      }>;
+    },
+    enabled: !!workspace,
+  });
+}
+
 export function useApprovalTimeline(postId: string) {
   return useQuery({
     queryKey: ["approval-timeline", postId],

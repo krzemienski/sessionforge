@@ -51,7 +51,8 @@ import { SeriesNavLinks } from "@/components/series/series-nav-links";
 import { CitationToggle, type CitationDensity } from "@/components/citations/citation-toggle";
 import { RepurposeButton } from "@/components/content/repurpose-button";
 import { RepurposeTracker } from "@/components/content/repurpose-tracker";
-import { useApprovalSettings, useReviewStatus, useSubmitForReview } from "@/hooks/use-approval";
+import { useApprovalSettings, useReviewStatus, useSubmitForReview, useWorkspaceMembers } from "@/hooks/use-approval";
+import { useSession } from "@/lib/auth-client";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -134,8 +135,13 @@ export default function ContentEditorPage() {
   const approvalSettings = useApprovalSettings(workspace);
   const reviewStatus = useReviewStatus(postId);
   const submitForReview = useSubmitForReview();
+  const workspaceMembers = useWorkspaceMembers(workspace);
+  const sessionData = useSession();
+  const currentUserId = sessionData.data?.user?.id;
   const isWorkflowEnabled = approvalSettings.data?.enabled === true;
   const isApproved = reviewStatus.data?.status === "approved";
+  const isWorkspaceOwner = !!(currentUserId && workspaceMembers.data?.ownerId === currentUserId);
+  const isCurrentUserReviewer = !!(currentUserId && reviewStatus.data?.reviewers?.some((r: { userId: string }) => r.userId === currentUserId));
 
   useEffect(() => {
     if (post.data && !initializedRef.current) {
@@ -552,6 +558,9 @@ export default function ContentEditorPage() {
                       postId={postId}
                       postStatus={status}
                       workspace={workspace}
+                      members={workspaceMembers.data?.members ?? []}
+                      canManage={isWorkspaceOwner}
+                      isReviewer={isCurrentUserReviewer}
                     />
                   )}
                   {sidebarTab === "supplementary" && (
