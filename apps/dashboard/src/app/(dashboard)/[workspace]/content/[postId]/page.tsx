@@ -128,6 +128,7 @@ export default function ContentEditorPage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [seoRefreshKey, setSeoRefreshKey] = useState(0);
+  const [approvalAlert, setApprovalAlert] = useState<string | null>(null);
   const initializedRef = useRef(false);
   const lastSavedMarkdownRef = useRef("");
   const approvalSettings = useApprovalSettings(workspace);
@@ -178,8 +179,23 @@ export default function ContentEditorPage() {
   }
 
   const handleSave = useCallback(() => {
+    // Prevent directly setting status to "approved" via dropdown when workflow is enabled
+    // Approval must go through the review workflow
+    let saveStatus = status;
+    if (isWorkflowEnabled && status === "approved" && !isApproved) {
+      setApprovalAlert("Cannot set status to 'Approved' directly. Content must go through the review workflow.");
+      saveStatus = "in_review";
+      setStatus("in_review");
+    }
+    // Prevent publishing via status dropdown when workflow requires approval
+    if (isWorkflowEnabled && status === "published" && !isApproved) {
+      setApprovalAlert("Content must be approved before it can be published. Please submit for review first.");
+      saveStatus = post.data?.status || "draft";
+      setStatus(saveStatus);
+      return;
+    }
     update.mutate(
-      { id: postId, title, markdown, status, versionType: "major", editType: "user_edit" },
+      { id: postId, title, markdown, status: saveStatus, versionType: "major", editType: "user_edit" },
       {
         onSuccess: () => {
           fetch(`/api/content/${postId}/seo/analyze`, {
@@ -199,13 +215,18 @@ export default function ContentEditorPage() {
       }
     );
     lastSavedMarkdownRef.current = markdown;
-  }, [update, postId, title, markdown, status]);
+  }, [update, postId, title, markdown, status, isWorkflowEnabled, isApproved, post.data?.status]);
 
   const handlePublish = useCallback(() => {
+    // When approval workflow is enabled, block publishing unless content is approved
+    if (isWorkflowEnabled && !isApproved) {
+      setApprovalAlert("This content requires approval before publishing. Please submit it for review first.");
+      return;
+    }
     setStatus('published');
     update.mutate({ id: postId, title, markdown, status: 'published', versionType: "major", editType: "user_edit" });
     lastSavedMarkdownRef.current = markdown;
-  }, [update, postId, title, markdown]);
+  }, [update, postId, title, markdown, isWorkflowEnabled, isApproved]);
 
   useKeyboardShortcut(SHORTCUTS.Actions[2], handleSave, { captureInInputs: true });
   useKeyboardShortcut(SHORTCUTS.Actions[3], handlePublish, { captureInInputs: true });
@@ -367,7 +388,7 @@ export default function ContentEditorPage() {
             <option value="idea">Idea</option>
             <option value="draft">Draft</option>
             <option value="in_review">In Review</option>
-            <option value="approved">Approved</option>
+            <option value="approved" disabled={isWorkflowEnabled}>Approved{isWorkflowEnabled ? " (via review)" : ""}</option>
             <option value="published">Published</option>
             <option value="archived">Archived</option>
           </select>
@@ -418,6 +439,21 @@ export default function ContentEditorPage() {
           )}
         </div>
       </div>
+
+      {/* Approval workflow alert */}
+      {approvalAlert && (
+        <div className="flex items-center gap-3 mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-sf text-sm text-amber-400">
+          <ShieldCheck size={16} className="shrink-0" />
+          <span className="flex-1">{approvalAlert}</span>
+          <button
+            onClick={() => setApprovalAlert(null)}
+            className="shrink-0 p-1 hover:bg-amber-500/20 rounded-sf transition-colors"
+            aria-label="Dismiss alert"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Title Input */}
       <input
