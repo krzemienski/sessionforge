@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   devtoIntegrations,
@@ -7,6 +7,7 @@ import {
   twitterIntegrations,
   linkedinIntegrations,
   wordpressConnections,
+  integrationHealthChecks,
 } from "@sessionforge/db";
 import { verifyDevtoApiKey } from "./devto";
 import { verifyGhostApiKey } from "./ghost";
@@ -222,4 +223,157 @@ export async function checkAllIntegrations(
   }
 
   return results;
+}
+
+// ── Persist health check results ──
+
+/**
+ * Map from HealthStatus (internal) to the DB enum value.
+ * The DB uses "paused" where the checker returns "auth_expired".
+ */
+function toDbStatus(status: HealthStatus): "healthy" | "degraded" | "unhealthy" | "paused" {
+  if (status === "auth_expired") return "paused";
+  return status;
+}
+
+/**
+ * Returns the drizzle table reference for a given platform's integration table.
+ */
+function getIntegrationTable(platform: IntegrationPlatform) {
+  const tables = {
+    devto: devtoIntegrations,
+    ghost: ghostIntegrations,
+    medium: mediumIntegrations,
+    twitter: twitterIntegrations,
+    linkedin: linkedinIntegrations,
+    wordpress: wordpressConnections,
+  } as const;
+  return tables[platform];
+}
+
+/**
+ * Upserts health check results into the integrationHealthChecks table.
+ * When a check returns "auth_expired", pauses the integration (healthStatus='paused', disabled).
+ * When a check returns "healthy", restores the integration if it was previously paused.
+ */
+export async function persistHealthCheckResults(
+  workspaceId: string,
+  results: HealthCheckResult[]
+): Promise<void> {
+  for (const result of results) {
+    const dbStatus = toDbStatus(result.status);
+
+    // Upsert the health check record (unique on workspace + platform)
+    const existing = await db
+      .select({ id: integrationHealthChecks.id })
+      .from(integrationHealthChecks)
+      .where(
+        and(
+          eq(integrationHealthChecks.workspaceId, workspaceId),
+          eq(integrationHealthChecks.platform, result.platform)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(integrationHealthChecks)
+        .set({
+          status: dbStatus,
+          lastCheckedAt: new Date(),
+          errorMessage: result.errorMessage ?? null,
+          errorCode: result.errorCode ?? null,
+          responseTimeMs: result.responseTimeMs,
+        })
+        .where(eq(integrationHealthChecks.id, existing[0].id));
+    } else {
+      await db.insert(integrationHealthChecks).values({
+        workspaceId,
+        platform: result.platform,
+        status: dbStatus,
+        lastCheckedAt: new Date(),
+        errorMessage: result.errorMessage ?? null,
+        errorCode: result.errorCode ?? null,
+        responseTimeMs: result.responseTimeMs,
+      });
+    }
+
+    // Update the integration table's healthStatus and enabled/isActive flag
+    await updateIntegrationStatus(workspaceId, result);
+  }
+}
+
+async function updateIntegrationStatus(
+  workspaceId: string,
+  result: HealthCheckResult
+): Promise<void> {
+  const dbStatus = toDbStatus(result.status);
+  const table = getIntegrationTable(result.platform);
+
+  if (result.platform === "wordpress") {
+    // WordPress uses isActive instead of enabled
+    if (result.status === "auth_expired") {
+      await db
+        .update(wordpressConnections)
+        .set({ healthStatus: dbStatus, isActive: false })
+        .where(eq(wordpressConnections.workspaceId, workspaceId));
+    } else if (result.status === "healthy") {
+      // Restore if previously paused
+      const [row] = await db
+        .select({ healthStatus: wordpressConnections.healthStatus })
+        .from(wordpressConnections)
+        .where(eq(wordpressConnections.workspaceId, workspaceId))
+        .limit(1);
+
+      if (row?.healthStatus === "paused") {
+        await db
+          .update(wordpressConnections)
+          .set({ healthStatus: dbStatus, isActive: true })
+          .where(eq(wordpressConnections.workspaceId, workspaceId));
+      } else {
+        await db
+          .update(wordpressConnections)
+          .set({ healthStatus: dbStatus })
+          .where(eq(wordpressConnections.workspaceId, workspaceId));
+      }
+    } else {
+      await db
+        .update(wordpressConnections)
+        .set({ healthStatus: dbStatus })
+        .where(eq(wordpressConnections.workspaceId, workspaceId));
+    }
+    return;
+  }
+
+  // All other platforms use `enabled` boolean
+  if (result.status === "auth_expired") {
+    await db
+      .update(table)
+      .set({ healthStatus: dbStatus, enabled: false } as Record<string, unknown>)
+      .where(eq(table.workspaceId, workspaceId));
+  } else if (result.status === "healthy") {
+    // Restore if previously paused due to auth
+    const [row] = await db
+      .select({ healthStatus: table.healthStatus })
+      .from(table)
+      .where(eq(table.workspaceId, workspaceId))
+      .limit(1);
+
+    if (row?.healthStatus === "paused") {
+      await db
+        .update(table)
+        .set({ healthStatus: dbStatus, enabled: true } as Record<string, unknown>)
+        .where(eq(table.workspaceId, workspaceId));
+    } else {
+      await db
+        .update(table)
+        .set({ healthStatus: dbStatus })
+        .where(eq(table.workspaceId, workspaceId));
+    }
+  } else {
+    await db
+      .update(table)
+      .set({ healthStatus: dbStatus })
+      .where(eq(table.workspaceId, workspaceId));
+  }
 }
