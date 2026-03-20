@@ -119,7 +119,7 @@ export default function RoiPage() {
   const isError = roiQuery.isError || attributionQuery.isError;
 
   function handleExport() {
-    const sp = new URLSearchParams({ workspace });
+    const sp = new URLSearchParams({ workspace, timeframe });
     const url = `/api/analytics/export?${sp}`;
     const a = document.createElement("a");
     a.href = url;
