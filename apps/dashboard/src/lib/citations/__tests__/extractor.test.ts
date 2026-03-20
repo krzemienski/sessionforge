@@ -5,7 +5,7 @@
  * Citation markers use the format: [@sessionId:messageIndex]
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 import { CitationExtractor } from "../extractor";
 
 describe("CitationExtractor", () => {
