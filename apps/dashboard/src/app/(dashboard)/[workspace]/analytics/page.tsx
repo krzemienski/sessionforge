@@ -6,6 +6,7 @@ import { useState } from "react";
 import { BarChart2, Eye, Heart, Share2, MessageCircle, MousePointerClick, RefreshCw, Twitter, Linkedin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TrendChart } from "@/components/analytics/trend-chart";
+import { AnalyticsTabs } from "@/components/analytics/analytics-tabs";
 
 type Timeframe = "7d" | "30d" | "90d";
 
@@ -130,8 +131,10 @@ export default function AnalyticsPage() {
 
   return (
     <div>
+      <h1 className="text-2xl font-bold font-display mb-4">Analytics</h1>
+      <AnalyticsTabs />
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold font-display">Social Analytics</h1>
+        <h2 className="text-lg font-semibold font-display text-sf-text-secondary">Social Analytics</h2>
         <div className="flex items-center gap-2">
           {TIMEFRAMES.map((tf) => (
             <button
