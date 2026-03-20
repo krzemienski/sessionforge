@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users, workspaces, workspaceMembers } from "@sessionforge/db";
-import { eq, or } from "drizzle-orm/sql";
+import { eq } from "drizzle-orm/sql";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ export async function GET(_req: NextRequest) {
     .limit(1);
 
   // If no owned workspace, check for membership in any workspace
-  let workspace = ownedWorkspace;
+  let workspace: typeof ownedWorkspace | undefined = ownedWorkspace;
   if (!workspace) {
     const memberRow = await db.query.workspaceMembers.findFirst({
       where: eq(workspaceMembers.userId, session.user.id),

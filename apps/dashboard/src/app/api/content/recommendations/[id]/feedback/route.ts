@@ -73,19 +73,18 @@ export async function POST(
       );
     }
 
-  const now = new Date();
-  const updateData: Record<string, unknown> = {
-    status: normalizedAction,
-    updatedAt: now,
-  };
+    const now = new Date();
+    const updateData: Record<string, unknown> = {
+      status: normalizedAction,
+      updatedAt: now,
+    };
 
-  if (normalizedAction === "accepted") {
-    updateData.acceptedAt = now;
-  } else {
-    updateData.dismissedAt = now;
-  }
+    if (normalizedAction === "accepted") {
+      updateData.acceptedAt = now;
+    } else {
+      updateData.dismissedAt = now;
+    }
 
-  try {
     // Update recommendation status
     await db
       .update(contentRecommendations)
