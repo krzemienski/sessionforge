@@ -20,7 +20,13 @@ export type AgentEventType =
   | "pipeline:progress"
   // System
   | "system:rate_limit"
-  | "system:retry";
+  | "system:retry"
+  // Integration health
+  | "integration:health_check"
+  | "integration:auth_expired"
+  | "integration:connector_paused"
+  | "integration:connector_resumed"
+  | "integration:publish_retry";
 
 export type EventLevel = "debug" | "info" | "warn" | "error";
 
@@ -71,6 +77,8 @@ function inferLevel(eventType: AgentEventType): EventLevel {
       return "error";
     case "system:rate_limit":
     case "system:retry":
+    case "integration:auth_expired":
+    case "integration:connector_paused":
       return "warn";
     case "text:chunk":
       return "debug";
