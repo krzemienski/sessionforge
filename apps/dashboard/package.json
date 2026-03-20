@@ -37,6 +37,7 @@
     "diff": "^7.0.0",
     "drizzle-orm": "^0.39",
     "highlight.js": "^11.11.1",
+    "ioredis": "^5",
     "jszip": "^3.10.1",
     "lexical": "^0.41.0",
     "lucide-react": "^0.576.0",
