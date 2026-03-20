@@ -4,6 +4,7 @@ export const STATUS_COLORS: Record<string, string> = {
   idea: "text-sf-text-muted bg-sf-bg-tertiary",
   draft: "text-sf-info bg-sf-info/10",
   in_review: "text-sf-warning bg-sf-warning/10",
+  approved: "text-sf-success bg-sf-success/20",
   published: "text-sf-success bg-sf-success/10",
   archived: "text-sf-text-muted bg-sf-bg-tertiary",
 };
@@ -23,6 +24,7 @@ export const STATUS_TABS = [
   { label: "Ideas", value: "idea" },
   { label: "Drafts", value: "draft" },
   { label: "In Review", value: "in_review" },
+  { label: "Approved", value: "approved" },
   { label: "Published", value: "published" },
   { label: "Archived", value: "archived" },
 ];
