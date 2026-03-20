@@ -2561,3 +2561,24 @@ export const experiments = pgTable(
     index("experiments_status_idx").on(table.status),
   ]
 );
+
+export const experimentVariants = pgTable(
+  "experiment_variants",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    experimentId: text("experiment_id")
+      .notNull()
+      .references(() => experiments.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    headlineText: text("headline_text").notNull(),
+    hookText: text("hook_text").notNull(),
+    trafficAllocation: real("traffic_allocation").notNull(),
+    isControl: boolean("is_control").default(false),
+    isWinner: boolean("is_winner").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("experiment_variants_experimentId_idx").on(table.experimentId),
+  ]
+);
