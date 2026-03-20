@@ -8,6 +8,7 @@ import { ApiKeysTab } from "@/components/settings/api-keys-tab";
 import { IntegrationsTab } from "@/components/settings/integrations-tab";
 import { WebhooksTab } from "@/components/settings/webhooks-tab";
 import { SourcesTab } from "@/components/settings/sources-tab";
+import { ApprovalSettingsTab } from "@/components/settings/approval-settings-tab";
 import { PortfolioSettingsForm } from "@/components/settings/portfolio-settings-form";
 
 const TABS = [
@@ -17,6 +18,7 @@ const TABS = [
   { id: "integrations", label: "Integrations" },
   { id: "webhooks", label: "Webhooks" },
   { id: "sources", label: "Sources" },
+  { id: "approval", label: "Approval" },
   { id: "portfolio", label: "Portfolio" },
 ] as const;
 
@@ -70,6 +72,7 @@ export default function SettingsPage() {
       {activeTab === "integrations" && <IntegrationsTab workspace={workspace} />}
       {activeTab === "webhooks" && <WebhooksTab workspace={workspace} />}
       {activeTab === "sources" && <SourcesTab workspace={workspace} />}
+      {activeTab === "approval" && <ApprovalSettingsTab workspace={workspace} />}
       {activeTab === "portfolio" && <PortfolioSettingsForm workspace={workspace} />}
     </div>
   );
