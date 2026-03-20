@@ -62,7 +62,7 @@ export async function GET(
   // Generate RSS items
   const rssItems = publishedPosts
     .map((post) => {
-      const postUrl = `${portfolioUrl}/posts/${post.id}`;
+      const postUrl = `${portfolioUrl}#post-${post.id}`;
       const pubDate = post.publishedAt
         ? new Date(post.publishedAt).toUTCString()
         : post.createdAt
