@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { workspaces, workspaceMembers } from "@sessionforge/db";
+import { workspaces, workspaceMembers, workspaceActivity } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { hasPermission, ROLES } from "@/lib/permissions";
@@ -113,4 +113,26 @@ async function authorizeUser(
   }
 
   return { workspace, member, role };
+}
+
+// ---------------------------------------------------------------------------
+// Audit logging utility
+// ---------------------------------------------------------------------------
+
+export async function logWorkspaceActivity(
+  workspaceId: string,
+  userId: string,
+  action: string,
+  resourceType?: string,
+  resourceId?: string,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  await db.insert(workspaceActivity).values({
+    workspaceId,
+    userId,
+    action,
+    resourceType: resourceType ?? null,
+    resourceId: resourceId ?? null,
+    metadata: metadata ?? null,
+  });
 }

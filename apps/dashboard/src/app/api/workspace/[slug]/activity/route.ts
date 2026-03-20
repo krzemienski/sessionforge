@@ -26,18 +26,24 @@ export async function GET(
       PERMISSIONS.ANALYTICS_READ
     );
 
-    // Get upload activity (last 10)
+    const { searchParams } = new URL(req.url);
+    const actionFilter = searchParams.get("action");
+    const limit = Math.min(
+      parseInt(searchParams.get("limit") ?? "50", 10) || 50,
+      100
+    );
+
+    const conditions = [eq(workspaceActivity.workspaceId, workspace.id)];
+    if (actionFilter) {
+      conditions.push(eq(workspaceActivity.action, actionFilter));
+    }
+
     const activity = await db
       .select()
       .from(workspaceActivity)
-      .where(
-        and(
-          eq(workspaceActivity.workspaceId, workspace.id),
-          eq(workspaceActivity.action, "session_upload")
-        )
-      )
+      .where(and(...conditions))
       .orderBy(desc(workspaceActivity.createdAt))
-      .limit(10);
+      .limit(limit);
 
     return NextResponse.json(activity);
   })(req);
