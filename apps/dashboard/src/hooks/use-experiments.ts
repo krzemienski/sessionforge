@@ -118,8 +118,8 @@ export function useAddVariant() {
     }: {
       experimentId: string;
       label: string;
-      headlineText?: string;
-      hookText?: string;
+      headlineText: string;
+      hookText: string;
       trafficAllocation: number;
       isControl?: boolean;
     }) => {

@@ -15,6 +15,13 @@ import {
   BarChart3,
 } from "lucide-react";
 import { VariantEditor, type VariantData } from "./variant-editor";
+import dynamic from "next/dynamic";
+import type { ExperimentKpi } from "@/lib/experiments/statistics";
+
+const ExperimentResults = dynamic(
+  () => import("./experiment-results").then((m) => m.ExperimentResults),
+  { ssr: false }
+);
 import {
   useCreateExperiment,
   useUpdateExperiment,
@@ -599,6 +606,16 @@ export function ExperimentSetupPanel({
             {/* Error */}
             {errorMessage && (
               <p className="text-sm text-sf-error">{errorMessage}</p>
+            )}
+
+            {/* Experiment Results (when running/paused/completed) */}
+            {isEditing && existingExperiment && (experimentStatus === "running" || experimentStatus === "paused" || experimentStatus === "completed") && (
+              <div className="border-t border-sf-border pt-4">
+                <ExperimentResults
+                  experimentId={existingExperiment.id}
+                  kpi={kpi as ExperimentKpi}
+                />
+              </div>
             )}
 
             {/* Actions */}

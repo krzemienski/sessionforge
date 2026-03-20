@@ -50,13 +50,13 @@ const KPI_LABELS: Record<ExperimentKpi, string> = {
   likes: "Likes",
   comments: "Comments",
   shares: "Shares",
-  engagementRate: "Engagement Rate",
+  engagement_rate: "Engagement Rate",
 };
 
 const VARIANT_COLORS = ["#00FF88", "#4488FF", "#FFAA00", "#CC88FF", "#FF6B6B"];
 
 function formatRate(rate: number, kpi: ExperimentKpi): string {
-  if (kpi === "engagementRate") {
+  if (kpi === "engagement_rate") {
     return `${(rate * 100).toFixed(2)}%`;
   }
   return `${(rate * 100).toFixed(2)}%`;
@@ -249,7 +249,7 @@ export function ExperimentResults({
               />
               <YAxis
                 tickFormatter={(v: number) =>
-                  kpi === "engagementRate" ? `${(v * 100).toFixed(0)}%` : `${(v * 100).toFixed(0)}%`
+                  kpi === "engagement_rate" ? `${(v * 100).toFixed(0)}%` : `${(v * 100).toFixed(0)}%`
                 }
                 tick={{ fontSize: 12, fill: "var(--sf-text-secondary, #999)" }}
                 axisLine={{ stroke: "var(--sf-border, #333)" }}

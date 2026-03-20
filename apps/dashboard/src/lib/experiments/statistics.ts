@@ -10,7 +10,7 @@ export type ExperimentKpi =
   | "likes"
   | "comments"
   | "shares"
-  | "engagementRate";
+  | "engagement_rate";
 
 export type SignificanceLevel =
   | "not_significant"

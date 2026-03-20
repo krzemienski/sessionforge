@@ -80,7 +80,7 @@ function aggregateVariantResult(
     case "shares":
       metricValue = totals.shares;
       break;
-    case "engagementRate": {
+    case "engagement_rate": {
       // Average engagement rate × sample size to convert to a proportion-like
       // count for the z-test
       const avgRate =
