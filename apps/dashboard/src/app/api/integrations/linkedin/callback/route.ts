@@ -2,9 +2,11 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { linkedinIntegrations, workspaces } from "@sessionforge/db";
+import { linkedinIntegrations } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { verifyLinkedInAuth, LinkedInApiError } from "@/lib/integrations/linkedin";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -101,11 +103,16 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${appUrl}/login`);
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, storedWorkspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
+  // Verify workspace access with integrations:manage permission
+  let workspace: Awaited<ReturnType<typeof getAuthorizedWorkspace>>["workspace"];
+  try {
+    const result = await getAuthorizedWorkspace(
+      session,
+      storedWorkspaceSlug,
+      PERMISSIONS.INTEGRATIONS_MANAGE
+    );
+    workspace = result.workspace;
+  } catch {
     return NextResponse.redirect(
       `${appUrl}/settings/integrations?linkedin_error=workspace_not_found`
     );

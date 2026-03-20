@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { workspaces, posts } from "@sessionforge/db";
+import { posts } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
@@ -12,6 +12,8 @@ import { TWITTER_THREAD_PROMPT } from "@/lib/ai/prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "@/lib/ai/prompts/social/linkedin-post";
 import { CHANGELOG_FROM_POST_PROMPT } from "@/lib/ai/prompts/repurpose/changelog-from-post";
 import { TLDR_PROMPT } from "@/lib/ai/prompts/repurpose/tldr";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -91,13 +93,11 @@ export async function POST(
       }
     }
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.CONTENT_CREATE
+    );
 
     const sourcePost = await db.query.posts.findFirst({
       where: eq(posts.id, postId),

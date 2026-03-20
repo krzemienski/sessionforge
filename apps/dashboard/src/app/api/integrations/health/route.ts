@@ -3,7 +3,6 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  workspaces,
   integrationHealthChecks,
   devtoIntegrations,
   ghostIntegrations,
@@ -15,6 +14,8 @@ import {
 import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -81,12 +82,7 @@ export async function GET(request: Request) {
     if (!workspaceSlug)
       throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    const { workspace } = await getAuthorizedWorkspace(session, workspaceSlug, PERMISSIONS.INTEGRATIONS_READ);
 
     // Fetch health check records for this workspace
     const healthChecks = await db.query.integrationHealthChecks.findMany({

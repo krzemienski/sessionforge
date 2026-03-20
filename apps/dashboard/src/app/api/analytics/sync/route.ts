@@ -3,8 +3,10 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getRedis } from "@/lib/redis";
-import { workspaces, platformSettings, contentMetrics } from "@sessionforge/db";
+import { platformSettings, contentMetrics } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -92,17 +94,18 @@ export async function POST(req: NextRequest) {
   const start = Date.now();
   const redis = await getRedis();
 
-  const workspace = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.ownerId, session.user.id))
-    .limit(1);
+  const body = await req.json().catch(() => ({}));
+  const workspaceSlug: string | undefined = body.workspaceSlug;
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "No workspace found" }, { status: 404 });
+  if (!workspaceSlug) {
+    return NextResponse.json({ error: "workspaceSlug is required" }, { status: 400 });
   }
 
-  const ws = workspace[0];
+  const { workspace: ws } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.ANALYTICS_MANAGE
+  );
 
   const settings = await db.query.platformSettings.findFirst({
     where: eq(platformSettings.workspaceId, ws.id),

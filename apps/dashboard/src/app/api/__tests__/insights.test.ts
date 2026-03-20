@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, beforeAll, mock } from "bun:test";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
 // Mutable mock state shared between mock factories and test cases
@@ -92,6 +93,51 @@ mock.module("@sessionforge/db", () => ({
   insightCategoryEnum: {
     enumValues: ["performance", "learning", "decision", "blocker", "achievement", "pattern"],
   },
+  workspaceMembers: {
+    workspaceId: "wm_workspaceId",
+    userId: "wm_userId",
+    role: "wm_role",
+  },
+  workspaceActivity: {
+    workspaceId: "wa_workspaceId",
+    userId: "wa_userId",
+    action: "wa_action",
+  },
+}));
+
+// Mock workspace-auth to use existing mockWorkspaceResult + mockAuthSession.
+// Uses the REAL AppError (imported above) so withApiHandler and try/catch recognise it.
+mock.module("@/lib/workspace-auth", () => {
+  const getAuthorizedWorkspace = async (session: any, slug: string, _perm?: string) => {
+    if (!mockWorkspaceResult) throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    if (mockWorkspaceResult.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    }
+    return { workspace: mockWorkspaceResult, role: "owner" };
+  };
+  const getAuthorizedWorkspaceById = async (session: any, id: string, _perm?: string) => {
+    if (!mockWorkspaceResult) throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    if (mockWorkspaceResult.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    }
+    return { workspace: mockWorkspaceResult, role: "owner" };
+  };
+  const logWorkspaceActivity = async () => {};
+  return { getAuthorizedWorkspace, getAuthorizedWorkspaceById, logWorkspaceActivity };
+});
+
+mock.module("@/lib/permissions", () => ({
+  PERMISSIONS: {
+    CONTENT_READ: "content:read",
+    CONTENT_CREATE: "content:create",
+    CONTENT_EDIT: "content:edit",
+    CONTENT_DELETE: "content:delete",
+    INSIGHTS_READ: "insights:read",
+    INSIGHTS_EXTRACT: "insights:extract",
+    WORKSPACE_SETTINGS: "workspace:settings",
+  },
+  ROLES: { OWNER: "owner" },
+  hasPermission: () => true,
 }));
 
 // Lightweight stand-ins for drizzle-orm/sql query builder helpers.
@@ -623,6 +669,7 @@ describe("POST /api/insights/extract", () => {
 describe("GET /api/insights/[id]", () => {
   beforeEach(() => {
     mockAuthSession = { user: { id: "user-1" } };
+    mockWorkspaceResult = { id: "ws-1", slug: "my-workspace", ownerId: "user-1" };
     mockInsightResult = {
       id: "insight-1",
       summary: "test insight",
@@ -684,7 +731,8 @@ describe("GET /api/insights/[id]", () => {
   // -------------------------------------------------------------------------
 
   describe("ownership verification", () => {
-    it("returns 403 when the workspace belongs to a different user", async () => {
+    it("returns 404 when the workspace belongs to a different user", async () => {
+      mockWorkspaceResult = { id: "ws-2", slug: "other-ws", ownerId: "other-user" };
       mockInsightResult = {
         id: "insight-1",
         summary: "test",
@@ -695,10 +743,11 @@ describe("GET /api/insights/[id]", () => {
         {} as Request,
         makeParams("insight-1")
       )) as unknown as MockResponse;
-      expect(res._status).toBe(403);
+      expect(res._status).toBe(404);
     });
 
-    it("returns Forbidden error body when ownership check fails", async () => {
+    it("returns Workspace not found error body when ownership check fails", async () => {
+      mockWorkspaceResult = { id: "ws-2", slug: "other-ws", ownerId: "other-user" };
       mockInsightResult = {
         id: "insight-1",
         summary: "test",
@@ -709,7 +758,7 @@ describe("GET /api/insights/[id]", () => {
         {} as Request,
         makeParams("insight-1")
       )) as unknown as MockResponse;
-      expect((res._body as Record<string, string>).error).toBe("Forbidden");
+      expect((res._body as Record<string, string>).error).toBe("Workspace not found");
     });
   });
 

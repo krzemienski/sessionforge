@@ -13,6 +13,8 @@ import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, devtoPublishSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,13 +31,15 @@ export async function GET(request: Request) {
 
     const post = await db.query.posts.findFirst({
       where: eq(posts.id, postId),
-      with: { workspace: true },
     });
 
     if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
 
-    if (post.workspace.ownerId !== session.user.id)
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    await getAuthorizedWorkspaceById(
+      session,
+      post.workspaceId,
+      PERMISSIONS.INTEGRATIONS_READ
+    );
 
     const publication = await db.query.devtoPublications.findFirst({
       where: eq(devtoPublications.postId, postId),
@@ -71,16 +75,19 @@ export async function POST(request: Request) {
 
     if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
 
-    if (
-      post.workspace.slug !== workspaceSlug ||
-      post.workspace.ownerId !== session.user.id
-    ) {
+    if (post.workspace.slug !== workspaceSlug) {
       throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
     }
 
+    await getAuthorizedWorkspaceById(
+      session,
+      post.workspaceId,
+      PERMISSIONS.PUBLISHING_PUBLISH
+    );
+
     // Publish-gate check: block if unresolved critical risk flags exist
-    const flags = post.riskFlags ?? [];
-    const gateResult = canPublish(flags);
+    const postFlags = post.riskFlags ?? [];
+    const gateResult = canPublish(postFlags);
 
     if (!gateResult.allowed) {
       if (!rawBody.overrideRiskFlags) {
@@ -190,23 +197,26 @@ export async function PUT(request: Request) {
 
     if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
 
-    if (
-      post.workspace.slug !== workspaceSlug ||
-      post.workspace.ownerId !== session.user.id
-    ) {
+    if (post.workspace.slug !== workspaceSlug) {
       throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
     }
 
-    // Publish-gate check: block if unresolved critical risk flags exist
-    const flags = post.riskFlags ?? [];
-    const gateResult = canPublish(flags);
+    await getAuthorizedWorkspaceById(
+      session,
+      post.workspaceId,
+      PERMISSIONS.PUBLISHING_PUBLISH
+    );
 
-    if (!gateResult.allowed) {
+    // Publish-gate check: block if unresolved critical risk flags exist
+    const putFlags = post.riskFlags ?? [];
+    const putGateResult = canPublish(putFlags);
+
+    if (!putGateResult.allowed) {
       if (!rawBody.overrideRiskFlags) {
         return NextResponse.json(
           {
             error: "unresolved_critical_flags",
-            flags: gateResult.blockingFlags,
+            flags: putGateResult.blockingFlags,
             requiresOverride: true,
           },
           { status: 409 }

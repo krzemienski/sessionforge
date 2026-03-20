@@ -2,13 +2,15 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { mediumIntegrations, workspaces } from "@sessionforge/db";
+import { mediumIntegrations } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import {
   exchangeCodeForToken,
   verifyMediumToken,
   MediumApiError,
 } from "@/lib/integrations/medium";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -58,12 +60,16 @@ export async function GET(request: Request) {
     );
   }
 
-  // Verify workspace exists and user owns it
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
+  // Verify workspace exists and user has integrations:manage permission
+  let workspace: Awaited<ReturnType<typeof getAuthorizedWorkspace>>["workspace"];
+  try {
+    const result = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.INTEGRATIONS_MANAGE
+    );
+    workspace = result.workspace;
+  } catch {
     return NextResponse.redirect(
       new URL("/?error=workspace_not_found", request.url)
     );

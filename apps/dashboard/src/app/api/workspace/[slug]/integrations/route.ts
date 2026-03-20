@@ -1,9 +1,13 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces, integrationSettings } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm/sql";
+import { integrationSettings } from "@sessionforge/db";
+import { eq } from "drizzle-orm/sql";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,113 +18,97 @@ function maskToken(token: string | null | undefined): string | null {
 }
 
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  req: Request,
+  ctx: { params: Promise<{ slug: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { slug } = await ctx.params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { slug } = await params;
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      slug,
+      PERMISSIONS.INTEGRATIONS_READ
+    );
 
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.ownerId, session.user.id),
-        eq(workspaces.slug, slug)
-      )
-    )
-    .limit(1);
+    const wsId = workspace.id;
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const rows = await db
+      .select()
+      .from(integrationSettings)
+      .where(eq(integrationSettings.workspaceId, wsId))
+      .limit(1);
 
-  const wsId = workspace[0].id;
+    if (!rows.length) {
+      return NextResponse.json({
+        hashnodeApiToken: null,
+        hashnodePublicationId: null,
+        hashnodeDefaultCanonicalDomain: null,
+      });
+    }
 
-  const rows = await db
-    .select()
-    .from(integrationSettings)
-    .where(eq(integrationSettings.workspaceId, wsId))
-    .limit(1);
+    const settings = rows[0];
 
-  if (!rows.length) {
     return NextResponse.json({
-      hashnodeApiToken: null,
-      hashnodePublicationId: null,
-      hashnodeDefaultCanonicalDomain: null,
+      hashnodeApiToken: maskToken(settings.hashnodeApiToken),
+      hashnodePublicationId: settings.hashnodePublicationId,
+      hashnodeDefaultCanonicalDomain: settings.hashnodeDefaultCanonicalDomain,
     });
-  }
-
-  const settings = rows[0];
-
-  return NextResponse.json({
-    hashnodeApiToken: maskToken(settings.hashnodeApiToken),
-    hashnodePublicationId: settings.hashnodePublicationId,
-    hashnodeDefaultCanonicalDomain: settings.hashnodeDefaultCanonicalDomain,
-  });
+  })(req);
 }
 
 export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  req: Request,
+  ctx: { params: Promise<{ slug: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { slug } = await ctx.params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { slug } = await params;
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      slug,
+      PERMISSIONS.INTEGRATIONS_MANAGE
+    );
 
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.ownerId, session.user.id),
-        eq(workspaces.slug, slug)
-      )
-    )
-    .limit(1);
+    const wsId = workspace.id;
+    const body = await req.json().catch(() => ({}));
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const { hashnodeToken, hashnodePublicationId, hashnodeDefaultCanonicalDomain } =
+      body as Record<string, unknown>;
 
-  const wsId = workspace[0].id;
-  const body = await req.json().catch(() => ({}));
+    const updateValues: Record<string, unknown> = {};
+    if (hashnodeToken !== undefined) updateValues.hashnodeApiToken = hashnodeToken;
+    if (hashnodePublicationId !== undefined) updateValues.hashnodePublicationId = hashnodePublicationId;
+    if (hashnodeDefaultCanonicalDomain !== undefined)
+      updateValues.hashnodeDefaultCanonicalDomain = hashnodeDefaultCanonicalDomain;
 
-  const { hashnodeToken, hashnodePublicationId, hashnodeDefaultCanonicalDomain } =
-    body as Record<string, unknown>;
-
-  const updateValues: Record<string, unknown> = {};
-  if (hashnodeToken !== undefined) updateValues.hashnodeApiToken = hashnodeToken;
-  if (hashnodePublicationId !== undefined) updateValues.hashnodePublicationId = hashnodePublicationId;
-  if (hashnodeDefaultCanonicalDomain !== undefined)
-    updateValues.hashnodeDefaultCanonicalDomain = hashnodeDefaultCanonicalDomain;
-
-  const existing = await db
-    .select({ id: integrationSettings.id })
-    .from(integrationSettings)
-    .where(eq(integrationSettings.workspaceId, wsId))
-    .limit(1);
-
-  let result;
-  if (existing.length > 0) {
-    [result] = await db
-      .update(integrationSettings)
-      .set(updateValues)
+    const existing = await db
+      .select({ id: integrationSettings.id })
+      .from(integrationSettings)
       .where(eq(integrationSettings.workspaceId, wsId))
-      .returning();
-  } else {
-    [result] = await db
-      .insert(integrationSettings)
-      .values({ workspaceId: wsId, ...updateValues })
-      .returning();
-  }
+      .limit(1);
 
-  return NextResponse.json({
-    hashnodeApiToken: maskToken(result.hashnodeApiToken),
-    hashnodePublicationId: result.hashnodePublicationId,
-    hashnodeDefaultCanonicalDomain: result.hashnodeDefaultCanonicalDomain,
-  });
+    let result;
+    if (existing.length > 0) {
+      [result] = await db
+        .update(integrationSettings)
+        .set(updateValues)
+        .where(eq(integrationSettings.workspaceId, wsId))
+        .returning();
+    } else {
+      [result] = await db
+        .insert(integrationSettings)
+        .values({ workspaceId: wsId, ...updateValues })
+        .returning();
+    }
+
+    return NextResponse.json({
+      hashnodeApiToken: maskToken(result.hashnodeApiToken),
+      hashnodePublicationId: result.hashnodePublicationId,
+      hashnodeDefaultCanonicalDomain: result.hashnodeDefaultCanonicalDomain,
+    });
+  })(req);
 }

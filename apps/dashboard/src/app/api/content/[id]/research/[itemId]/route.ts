@@ -7,6 +7,8 @@ import { eq, and } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -34,23 +36,21 @@ const researchItemUpdateSchema = z.object({
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-async function verifyResearchItemOwnership(
+async function getResearchItemWithAuth(
   postId: string,
   itemId: string,
-  userId: string
+  session: NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>,
+  permission: (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
 ) {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
-    with: { workspace: true },
   });
 
   if (!post) {
     throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
   }
 
-  if (post.workspace.ownerId !== userId) {
-    throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-  }
+  await getAuthorizedWorkspaceById(session, post.workspaceId, permission);
 
   const item = await db.query.researchItems.findFirst({
     where: and(
@@ -77,7 +77,7 @@ export async function PATCH(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    await verifyResearchItemOwnership(id, itemId, session.user.id);
+    await getResearchItemWithAuth(id, itemId, session, PERMISSIONS.CONTENT_EDIT);
 
     const rawBody = await request.json().catch(() => ({}));
     const data = parseBody(researchItemUpdateSchema, rawBody);
@@ -117,7 +117,7 @@ export async function DELETE(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    await verifyResearchItemOwnership(id, itemId, session.user.id);
+    await getResearchItemWithAuth(id, itemId, session, PERMISSIONS.CONTENT_DELETE);
 
     await db
       .delete(researchItems)

@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { posts, scheduledPublications } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { createPublishSchedule, cancelPublishMessage } from "@/lib/qstash";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,6 @@ export async function PUT(
 
   const { id } = await params;
 
-  // Verify ownership
   const existing = await db.query.posts.findFirst({
     where: eq(posts.id, id),
     with: { workspace: true },
@@ -27,9 +28,7 @@ export async function PUT(
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
   if (existing.status !== "scheduled") {
     return NextResponse.json(
@@ -51,7 +50,6 @@ export async function PUT(
   try {
     const newScheduledDate = new Date(scheduledFor);
 
-    // Validate that the scheduled time is in the future
     if (newScheduledDate <= new Date()) {
       return NextResponse.json(
         { error: "Scheduled time must be in the future" },
@@ -59,7 +57,6 @@ export async function PUT(
       );
     }
 
-    // Cancel the old QStash message if it exists
     if (existing.qstashScheduleId) {
       try {
         await cancelPublishMessage(existing.qstashScheduleId);
@@ -68,10 +65,8 @@ export async function PUT(
       }
     }
 
-    // Create new QStash schedule
     const newQstashScheduleId = await createPublishSchedule(id, newScheduledDate);
 
-    // Update post with new scheduled time and QStash schedule ID
     await db
       .update(posts)
       .set({
@@ -81,7 +76,6 @@ export async function PUT(
       })
       .where(eq(posts.id, id));
 
-    // Update scheduledPublications record
     await db
       .update(scheduledPublications)
       .set({
@@ -91,7 +85,6 @@ export async function PUT(
       })
       .where(eq(scheduledPublications.postId, id));
 
-    // Fetch the updated post
     const updatedPost = await db.query.posts.findFirst({
       where: eq(posts.id, id),
       with: { workspace: true, insight: true },
@@ -119,7 +112,6 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Verify ownership
   const existing = await db.query.posts.findFirst({
     where: eq(posts.id, id),
     with: { workspace: true },
@@ -129,9 +121,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.CONTENT_DELETE);
 
   if (existing.status !== "scheduled") {
     return NextResponse.json(
@@ -141,16 +131,14 @@ export async function DELETE(
   }
 
   try {
-    // Cancel the QStash message if it exists
     if (existing.qstashScheduleId) {
       try {
         await cancelPublishMessage(existing.qstashScheduleId);
       } catch (error) {
-        // Log but continue - we still want to update the database
+        // Log but continue
       }
     }
 
-    // Update post status to draft and clear scheduling fields
     await db
       .update(posts)
       .set({
@@ -161,7 +149,6 @@ export async function DELETE(
       })
       .where(eq(posts.id, id));
 
-    // Delete the scheduledPublications record
     await db
       .delete(scheduledPublications)
       .where(eq(scheduledPublications.postId, id));

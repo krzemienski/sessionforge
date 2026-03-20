@@ -1,11 +1,13 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm/sql";
+import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,88 +20,60 @@ export async function GET(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const rows = await db
-      .select()
-      .from(workspaces)
-      .where(
-        and(
-          eq(workspaces.ownerId, session.user.id),
-          eq(workspaces.slug, slug)
-        )
-      )
-      .limit(1);
+    const { workspace } = await getAuthorizedWorkspace(session, slug);
 
-    if (!rows.length) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
-
-    return NextResponse.json(rows[0]);
+    return NextResponse.json(workspace);
   })(req);
 }
 
 export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  req: Request,
+  ctx: { params: Promise<{ slug: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { slug } = await ctx.params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { slug } = await params;
-  const body = await req.json();
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      slug,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
-  const rows = await db
-    .select()
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.ownerId, session.user.id),
-        eq(workspaces.slug, slug)
-      )
-    )
-    .limit(1);
+    const body = await req.json();
 
-  if (!rows.length) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const updated = await db
+      .update(workspaces)
+      .set({
+        name: body.name,
+        slug: body.slug,
+        sessionBasePath: body.sessionBasePath,
+      })
+      .where(eq(workspaces.id, workspace.id))
+      .returning();
 
-  const updated = await db
-    .update(workspaces)
-    .set({
-      name: body.name,
-      slug: body.slug,
-      sessionBasePath: body.sessionBasePath,
-    })
-    .where(eq(workspaces.id, rows[0].id))
-    .returning();
-
-  return NextResponse.json(updated[0]);
+    return NextResponse.json(updated[0]);
+  })(req);
 }
 
 export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  req: Request,
+  ctx: { params: Promise<{ slug: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { slug } = await ctx.params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { slug } = await params;
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      slug,
+      PERMISSIONS.WORKSPACE_DELETE
+    );
 
-  const rows = await db
-    .select()
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.ownerId, session.user.id),
-        eq(workspaces.slug, slug)
-      )
-    )
-    .limit(1);
+    await db.delete(workspaces).where(eq(workspaces.id, workspace.id));
 
-  if (!rows.length) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
-
-  await db.delete(workspaces).where(eq(workspaces.id, rows[0].id));
-
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  })(req);
 }

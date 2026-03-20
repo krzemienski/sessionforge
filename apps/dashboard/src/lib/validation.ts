@@ -180,6 +180,36 @@ export const triggerExecuteSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Workspace member management schemas
+// ---------------------------------------------------------------------------
+
+const memberRoleValues = [
+  "owner",
+  "editor",
+  "publisher",
+  "reviewer",
+  "analyst",
+  "viewer",
+] as const;
+
+export const memberInviteSchema = z.object({
+  email: z.string().email("valid email is required"),
+  role: z.enum(memberRoleValues, {
+    errorMap: () => ({ message: `role must be one of: ${memberRoleValues.join(", ")}` }),
+  }),
+});
+
+export const memberUpdateRoleSchema = z.object({
+  role: z.enum(memberRoleValues, {
+    errorMap: () => ({ message: `role must be one of: ${memberRoleValues.join(", ")}` }),
+  }),
+});
+
+export const memberRemoveSchema = z.object({
+  userId: z.string().min(1, "userId is required"),
+});
+
+// ---------------------------------------------------------------------------
 // Approval workflow schemas
 // ---------------------------------------------------------------------------
 
@@ -209,4 +239,7 @@ export type DevtoPublishInput = z.infer<typeof devtoPublishSchema>;
 export type TriggerCreateInput = z.infer<typeof triggerCreateSchema>;
 export type TriggerUpdateInput = z.infer<typeof triggerUpdateSchema>;
 export type TriggerExecuteInput = z.infer<typeof triggerExecuteSchema>;
+export type MemberInviteInput = z.infer<typeof memberInviteSchema>;
+export type MemberUpdateRoleInput = z.infer<typeof memberUpdateRoleSchema>;
+export type MemberRemoveInput = z.infer<typeof memberRemoveSchema>;
 export type ApprovalSettingsInput = z.infer<typeof approvalSettingsSchema>;

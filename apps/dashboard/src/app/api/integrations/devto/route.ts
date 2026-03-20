@@ -2,12 +2,14 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { devtoIntegrations, workspaces } from "@sessionforge/db";
+import { devtoIntegrations } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { verifyDevtoApiKey, DevtoApiError } from "@/lib/integrations/devto";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, devtoConnectSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +24,11 @@ export async function GET(request: Request) {
     if (!workspaceSlug)
       throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.INTEGRATIONS_READ
+    );
 
     const integration = await db.query.devtoIntegrations.findFirst({
       where: eq(devtoIntegrations.workspaceId, workspace.id),
@@ -60,12 +61,11 @@ export async function POST(request: Request) {
     const rawBody = await request.json().catch(() => ({}));
     const { workspaceSlug, apiKey } = parseBody(devtoConnectSchema, rawBody);
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.INTEGRATIONS_MANAGE
+    );
 
     let user: Awaited<ReturnType<typeof verifyDevtoApiKey>>;
     try {
@@ -118,12 +118,11 @@ export async function DELETE(request: Request) {
     if (!workspaceSlug)
       throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.INTEGRATIONS_MANAGE
+    );
 
     const existing = await db.query.devtoIntegrations.findFirst({
       where: eq(devtoIntegrations.workspaceId, workspace.id),
