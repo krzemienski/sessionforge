@@ -46,7 +46,33 @@ export async function GET(
       .innerJoin(users, eq(workspaceMembers.userId, users.id))
       .where(eq(workspaceMembers.workspaceId, workspace.id));
 
-    return NextResponse.json({ members });
+    // Also include the workspace owner in the response
+    // (they may not be in workspaceMembers table)
+    const ownerInMembers = members.some((m) => m.userId === workspace.ownerId);
+
+    let ownerInfo = null;
+    if (!ownerInMembers) {
+      const ownerRows = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          image: users.image,
+        })
+        .from(users)
+        .where(eq(users.id, workspace.ownerId))
+        .limit(1);
+
+      if (ownerRows.length > 0) {
+        ownerInfo = ownerRows[0];
+      }
+    }
+
+    return NextResponse.json({
+      members,
+      ownerId: workspace.ownerId,
+      ...(ownerInfo ? { owner: ownerInfo } : {}),
+    });
   })(req);
 }
 

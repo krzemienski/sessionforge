@@ -210,6 +210,15 @@ export const memberRemoveSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Approval workflow schemas
+// ---------------------------------------------------------------------------
+
+export const approvalSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  requiredApprovers: z.number().int().min(1).optional(),
+});
+
+// ---------------------------------------------------------------------------
 // Inferred types (handy for route handlers)
 // ---------------------------------------------------------------------------
 
@@ -233,3 +242,4 @@ export type TriggerExecuteInput = z.infer<typeof triggerExecuteSchema>;
 export type MemberInviteInput = z.infer<typeof memberInviteSchema>;
 export type MemberUpdateRoleInput = z.infer<typeof memberUpdateRoleSchema>;
 export type MemberRemoveInput = z.infer<typeof memberRemoveSchema>;
+export type ApprovalSettingsInput = z.infer<typeof approvalSettingsSchema>;

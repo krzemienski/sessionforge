@@ -9,6 +9,10 @@ import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
+import {
+  validateStatusTransition,
+  WorkflowError,
+} from "@/lib/approval/workflow-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +72,35 @@ export async function PUT(
 
     const body = await request.json();
     const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled, versionType, editType } = body;
+
+    // Validate status transition and enforce approval workflow rules
+    if (status && status !== existing.status) {
+      try {
+        await validateStatusTransition(
+          id,
+          existing.workspaceId,
+          existing.status ?? "draft",
+          status,
+          session.user.id
+        );
+      } catch (error) {
+        if (error instanceof WorkflowError) {
+          const statusCode =
+            error.code === "approval_required" ? 403 :
+            error.code === "invalid_transition" ? 422 :
+            error.code === "not_reviewer" ? 403 : 400;
+
+          return NextResponse.json(
+            {
+              error: error.message,
+              code: error.code,
+            },
+            { status: statusCode }
+          );
+        }
+        throw error;
+      }
+    }
 
     const updated = await updatePost(existing.workspaceId, id, {
       title,
