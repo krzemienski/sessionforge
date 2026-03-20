@@ -4,7 +4,7 @@
  * Verifies that citation markers correctly convert between markdown and Lexical nodes.
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 
 // Citation transformer patterns (extracted from markdown-editor.tsx for testing)
 const CITATION_IMPORT_REGEX = /\[@([^:]+):(\d+)\]/;
