@@ -175,6 +175,7 @@ async function publishToDevtoPlatform(
     },
     platform: "devto",
     postId,
+    workspaceId,
   });
 
   // Emit observability for retries

@@ -132,6 +132,7 @@ export async function POST(request: Request) {
         },
         platform: "devto",
         postId,
+        workspaceId: post.workspaceId,
       });
 
       if (!retryResult.result.success) {

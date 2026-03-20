@@ -14,6 +14,7 @@ import { verifyGhostApiKey } from "./ghost";
 import { verifyMediumToken } from "./medium";
 import { verifyTwitterAuth } from "./twitter";
 import { verifyLinkedInAuth } from "./linkedin";
+import { decryptAppPassword } from "@/lib/wordpress/crypto";
 import { eventBus } from "@/lib/observability/event-bus";
 import { createAgentEvent } from "@/lib/observability/event-types";
 
@@ -208,13 +209,24 @@ export async function checkAllIntegrations(
   }
 
   if (wordpress?.isActive) {
-    checks.push(
-      checkWordPressHealth(
-        wordpress.siteUrl,
-        wordpress.username,
-        wordpress.encryptedAppPassword
-      )
-    );
+    try {
+      const appPassword = decryptAppPassword(wordpress.encryptedAppPassword);
+      checks.push(
+        checkWordPressHealth(
+          wordpress.siteUrl,
+          wordpress.username,
+          appPassword
+        )
+      );
+    } catch {
+      results.push({
+        platform: "wordpress",
+        status: "unhealthy",
+        responseTimeMs: 0,
+        errorMessage: "Failed to decrypt stored credentials",
+        errorCode: "decrypt_error",
+      });
+    }
   }
 
   const settled = await Promise.allSettled(checks);
