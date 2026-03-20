@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { socialAnalytics, workspaces } from "@sessionforge/db";
 import { eq, and, gte, sql } from "drizzle-orm";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,13 +30,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.ANALYTICS_READ
+  );
 
   const days = parseTimeframeDays(timeframe);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);

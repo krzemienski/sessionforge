@@ -12,6 +12,8 @@ import {
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, devtoPublishSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,13 +30,15 @@ export async function GET(request: Request) {
 
     const post = await db.query.posts.findFirst({
       where: eq(posts.id, postId),
-      with: { workspace: true },
     });
 
     if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
 
-    if (post.workspace.ownerId !== session.user.id)
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    await getAuthorizedWorkspaceById(
+      session,
+      post.workspaceId,
+      PERMISSIONS.INTEGRATIONS_READ
+    );
 
     const publication = await db.query.devtoPublications.findFirst({
       where: eq(devtoPublications.postId, postId),
@@ -70,12 +74,15 @@ export async function POST(request: Request) {
 
     if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
 
-    if (
-      post.workspace.slug !== workspaceSlug ||
-      post.workspace.ownerId !== session.user.id
-    ) {
+    if (post.workspace.slug !== workspaceSlug) {
       throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
     }
+
+    await getAuthorizedWorkspaceById(
+      session,
+      post.workspaceId,
+      PERMISSIONS.PUBLISHING_PUBLISH
+    );
 
     const integration = await db.query.devtoIntegrations.findFirst({
       where: and(
@@ -167,12 +174,15 @@ export async function PUT(request: Request) {
 
     if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
 
-    if (
-      post.workspace.slug !== workspaceSlug ||
-      post.workspace.ownerId !== session.user.id
-    ) {
+    if (post.workspace.slug !== workspaceSlug) {
       throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
     }
+
+    await getAuthorizedWorkspaceById(
+      session,
+      post.workspaceId,
+      PERMISSIONS.PUBLISHING_PUBLISH
+    );
 
     const publication = await db.query.devtoPublications.findFirst({
       where: eq(devtoPublications.postId, postId),

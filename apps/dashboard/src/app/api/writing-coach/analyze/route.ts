@@ -2,9 +2,11 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces, posts } from "@sessionforge/db";
+import { posts } from "@sessionforge/db";
 import { eq, and, count, isNotNull } from "drizzle-orm/sql";
 import { analyzeWorkspacePosts } from "@/lib/writing-coach";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -19,22 +21,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing workspace slug" }, { status: 400 });
   }
 
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.ownerId, session.user.id),
-        eq(workspaces.slug, slug)
-      )
-    )
-    .limit(1);
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    slug,
+    PERMISSIONS.CONTENT_READ
+  );
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
-
-  const wsId = workspace[0].id;
+  const wsId = workspace.id;
 
   // Count posts with markdown content
   const [{ value: postCount }] = await db

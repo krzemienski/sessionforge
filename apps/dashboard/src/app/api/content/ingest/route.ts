@@ -13,11 +13,10 @@
 
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm/sql";
 import { z } from "zod";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { createSSEStream, sseResponse } from "@/lib/ai/orchestration/streaming";
 import { extractURL } from "@/lib/ingestion/url-extractor";
 import { analyzeRepoWithTimeout } from "@/lib/ingestion/repo-analyzer";
@@ -61,11 +60,11 @@ export async function POST(request: Request): Promise<Response> {
 
   const { workspaceSlug, topic, userText, urls, repoUrls } = parsed.data;
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
+  let workspace: { id: string };
+  try {
+    const result = await getAuthorizedWorkspace(session, workspaceSlug, PERMISSIONS.CONTENT_CREATE);
+    workspace = result.workspace;
+  } catch {
     return Response.json({ error: "Workspace not found", code: ERROR_CODES.NOT_FOUND }, { status: 404 });
   }
 

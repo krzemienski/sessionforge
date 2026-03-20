@@ -2,8 +2,10 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { platformSettings, workspaces } from "@sessionforge/db";
+import { platformSettings } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +20,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.ANALYTICS_READ
+  );
 
   const settings = await db.query.platformSettings.findFirst({
     where: eq(platformSettings.workspaceId, workspace.id),
@@ -62,13 +62,11 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "workspaceSlug is required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.ANALYTICS_MANAGE
+  );
 
   const [updated] = await db
     .insert(platformSettings)

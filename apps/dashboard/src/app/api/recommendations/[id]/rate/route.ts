@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentRecommendations } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +27,7 @@ export async function POST(
     return NextResponse.json({ error: "Recommendation not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.CONTENT_READ);
 
   const body = await request.json();
   const { helpful } = body;

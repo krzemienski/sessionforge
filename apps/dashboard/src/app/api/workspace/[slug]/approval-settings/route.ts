@@ -2,11 +2,13 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces, approvalWorkflows } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm/sql";
+import { approvalWorkflows } from "@sessionforge/db";
+import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, approvalSettingsSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,41 +16,34 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { slug } = await params;
+    const { slug } = await params;
 
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.ownerId, session.user.id),
-        eq(workspaces.slug, slug)
-      )
-    )
-    .limit(1);
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      slug,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const rows = await db
+      .select()
+      .from(approvalWorkflows)
+      .where(eq(approvalWorkflows.workspaceId, workspace.id))
+      .limit(1);
 
-  const rows = await db
-    .select()
-    .from(approvalWorkflows)
-    .where(eq(approvalWorkflows.workspaceId, workspace[0].id))
-    .limit(1);
+    if (!rows.length) {
+      return NextResponse.json({
+        workspaceId: workspace.id,
+        enabled: false,
+        requiredApprovers: 1,
+      });
+    }
 
-  if (!rows.length) {
-    return NextResponse.json({
-      workspaceId: workspace[0].id,
-      enabled: false,
-      requiredApprovers: 1,
-    });
-  }
-
-  return NextResponse.json(rows[0]);
+    return NextResponse.json(rows[0]);
+  })(_req);
 }
 
 export async function PUT(
@@ -60,22 +55,13 @@ export async function PUT(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const workspace = await db
-      .select({ id: workspaces.id })
-      .from(workspaces)
-      .where(
-        and(
-          eq(workspaces.ownerId, session.user.id),
-          eq(workspaces.slug, slug)
-        )
-      )
-      .limit(1);
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      slug,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
-    if (!workspace.length) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
-
-    const wsId = workspace[0].id;
+    const wsId = workspace.id;
     const rawBody = await req.json().catch(() => ({}));
     const data = parseBody(approvalSettingsSchema, rawBody);
 

@@ -9,8 +9,10 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { agentEvents, workspaces } from "@sessionforge/db";
+import { agentEvents } from "@sessionforge/db";
 import { and, eq, gte, desc, type SQL } from "drizzle-orm/sql";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,20 +28,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "workspace required" }, { status: 400 });
   }
 
-  const [ws] = await db
-    .select()
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.slug, workspaceSlug),
-        eq(workspaces.ownerId, session.user.id),
-      ),
-    )
-    .limit(1);
-
-  if (!ws) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace: ws } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.ANALYTICS_READ
+  );
 
   const limit = Math.min(parseInt(params.get("limit") ?? "100", 10), 500);
   const offset = parseInt(params.get("offset") ?? "0", 10);

@@ -2,8 +2,11 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { automationRuns, agentRuns, workspaces } from "@sessionforge/db";
-import { eq, desc, and } from "drizzle-orm/sql";
+import { automationRuns, agentRuns } from "@sessionforge/db";
+import { eq, desc } from "drizzle-orm/sql";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -40,30 +43,19 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
-
     const workspaceSlug = searchParams.get("workspace");
-    const workspace = workspaceSlug
-      ? await db
-          .select({ id: workspaces.id })
-          .from(workspaces)
-          .where(
-            and(
-              eq(workspaces.slug, workspaceSlug),
-              eq(workspaces.ownerId, session.user.id)
-            )
-          )
-          .limit(1)
-      : await db
-          .select({ id: workspaces.id })
-          .from(workspaces)
-          .where(eq(workspaces.ownerId, session.user.id))
-          .limit(1);
 
-    if (!workspace.length) {
-      return NextResponse.json({ error: "No workspace found" }, { status: 404 });
+    if (!workspaceSlug) {
+      return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
     }
 
-    const wsId = workspace[0].id;
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.ANALYTICS_READ
+    );
+
+    const wsId = workspace.id;
 
     const [pipelineRows, agentRows] = await Promise.all([
       db
@@ -162,6 +154,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ events });
   } catch (error) {
+    // Re-throw AppError so withApiHandler pattern catches it properly
+    if (error instanceof AppError) throw error;
     console.error("[activity] Error:", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

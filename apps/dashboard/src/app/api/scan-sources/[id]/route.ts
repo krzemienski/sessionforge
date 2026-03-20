@@ -2,9 +2,11 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { scanSources, workspaces } from "@sessionforge/db";
+import { scanSources } from "@sessionforge/db";
 import { and, eq } from "drizzle-orm/sql";
 import { encryptPassword } from "@/lib/crypto/source-credentials";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export async function PUT(
   request: Request,
@@ -21,12 +23,11 @@ export async function PUT(
     return NextResponse.json({ error: "workspaceSlug required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.SESSIONS_SCAN
+  );
 
   const updateData: Record<string, unknown> = {};
   if (label !== undefined) updateData.label = label;
@@ -67,12 +68,11 @@ export async function DELETE(
     return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.SESSIONS_SCAN
+  );
 
   const [deleted] = await db
     .delete(scanSources)

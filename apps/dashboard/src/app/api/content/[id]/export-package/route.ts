@@ -7,6 +7,8 @@ import { eq, and, desc, count } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { computeSeoScore } from "@/lib/seo";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -54,9 +56,7 @@ export async function GET(
       throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
     }
 
-    if (post.workspace.ownerId !== session.user.id) {
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-    }
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.CONTENT_READ);
 
     // Fetch all associated data in parallel
     const [suppItems, mediaAssets, revisionRows, [{ total: revisionCount }]] = await Promise.all([

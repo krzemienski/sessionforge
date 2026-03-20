@@ -8,12 +8,16 @@ import {
   approvalDecisions,
   workspaceActivity,
 } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   getWorkflowSettings,
   canTransitionStatus,
   WorkflowError,
 } from "@/lib/approval/workflow-engine";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,128 +31,122 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, id),
-    with: {
-      workspace: true,
-      reviewers: {
-        with: {
-          user: true,
-          assigner: true,
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      with: {
+        workspace: true,
+        reviewers: {
+          with: {
+            user: true,
+            assigner: true,
+          },
+        },
+        approvalDecisions: {
+          with: {
+            reviewer: true,
+          },
         },
       },
-      approvalDecisions: {
-        with: {
-          reviewer: true,
-        },
+    });
+
+    if (!post) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
+
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.CONTENT_READ);
+
+    const workflowSettings = await getWorkflowSettings(post.workspaceId);
+
+    const approvedCount = post.approvalDecisions.filter(
+      (d) => d.decision === "approved"
+    ).length;
+
+    return NextResponse.json({
+      postId: id,
+      status: post.status,
+      workflow: workflowSettings,
+      reviewers: post.reviewers.map((r) => {
+        const latestDecision = post.approvalDecisions
+          .filter((d) => d.reviewerId === r.userId)
+          .sort(
+            (a, b) =>
+              new Date(b.createdAt ?? 0).getTime() -
+              new Date(a.createdAt ?? 0).getTime()
+          )[0];
+
+        return {
+          id: r.id,
+          userId: r.userId,
+          userName: r.user?.name ?? null,
+          userEmail: r.user?.email ?? null,
+          userImage: r.user?.image ?? null,
+          assignedBy: r.assigner?.name ?? null,
+          assignedAt: r.assignedAt,
+          decision: latestDecision?.decision ?? null,
+          decisionComment: latestDecision?.comment ?? null,
+          decisionAt: latestDecision?.createdAt ?? null,
+        };
+      }),
+      approvalProgress: {
+        approvedCount,
+        requiredApprovers: workflowSettings.requiredApprovers,
+        isApproved: approvedCount >= workflowSettings.requiredApprovers,
       },
-    },
-  });
-
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
-
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const workflowSettings = await getWorkflowSettings(post.workspaceId);
-
-  const approvedCount = post.approvalDecisions.filter(
-    (d) => d.decision === "approved"
-  ).length;
-
-  return NextResponse.json({
-    postId: id,
-    status: post.status,
-    workflow: workflowSettings,
-    reviewers: post.reviewers.map((r) => {
-      const latestDecision = post.approvalDecisions
-        .filter((d) => d.reviewerId === r.userId)
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt ?? 0).getTime() -
-            new Date(a.createdAt ?? 0).getTime()
-        )[0];
-
-      return {
-        id: r.id,
-        userId: r.userId,
-        userName: r.user?.name ?? null,
-        userEmail: r.user?.email ?? null,
-        userImage: r.user?.image ?? null,
-        assignedBy: r.assigner?.name ?? null,
-        assignedAt: r.assignedAt,
-        decision: latestDecision?.decision ?? null,
-        decisionComment: latestDecision?.comment ?? null,
-        decisionAt: latestDecision?.createdAt ?? null,
-      };
-    }),
-    approvalProgress: {
-      approvedCount,
-      requiredApprovers: workflowSettings.requiredApprovers,
-      isApproved: approvedCount >= workflowSettings.requiredApprovers,
-    },
-  });
+    });
+  })(_request);
 }
 
 /**
  * POST /api/content/[id]/review
  *
  * Submits a post for review, transitioning its status from "draft" to "in_review".
- * Only the workspace owner can submit posts for review.
+ * Requires content:edit permission on the workspace.
  */
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, id),
-    with: { workspace: true },
-  });
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      with: { workspace: true },
+    });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (!post) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
-  const workflowSettings = await getWorkflowSettings(post.workspaceId);
+    const workflowSettings = await getWorkflowSettings(post.workspaceId);
 
-  if (!workflowSettings.enabled) {
-    return NextResponse.json(
-      { error: "Approval workflow is not enabled for this workspace" },
-      { status: 400 }
-    );
-  }
+    if (!workflowSettings.enabled) {
+      throw new AppError(
+        "Approval workflow is not enabled for this workspace",
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
 
-  const currentStatus = post.status ?? "draft";
+    const currentStatus = post.status ?? "draft";
 
-  if (!canTransitionStatus(currentStatus, "in_review", true)) {
-    return NextResponse.json(
-      {
-        error: `Cannot submit for review: post status is "${currentStatus}". Only drafts can be submitted for review.`,
-      },
-      { status: 400 }
-    );
-  }
+    if (!canTransitionStatus(currentStatus, "in_review", true)) {
+      throw new AppError(
+        `Cannot submit for review: post status is "${currentStatus}". Only drafts can be submitted for review.`,
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
 
-  try {
     const [updated] = await db
       .update(posts)
       .set({ status: "in_review" })
@@ -169,18 +167,5 @@ export async function POST(
     });
 
     return NextResponse.json(updated);
-  } catch (error) {
-    if (error instanceof WorkflowError) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to submit for review",
-      },
-      { status: 500 }
-    );
-  }
+  })(_request);
 }

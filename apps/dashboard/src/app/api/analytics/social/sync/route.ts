@@ -3,7 +3,6 @@ import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  workspaces,
   twitterIntegrations,
   linkedinIntegrations,
   twitterPublications,
@@ -13,6 +12,9 @@ import {
 import { eq, and } from "drizzle-orm";
 import { getTweetAnalytics } from "@/lib/integrations/twitter";
 import { getLinkedInPostAnalytics } from "@/lib/integrations/linkedin";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -27,13 +29,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "workspaceSlug is required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.ANALYTICS_MANAGE
+  );
 
   const syncedAt = new Date();
   const start = Date.now();

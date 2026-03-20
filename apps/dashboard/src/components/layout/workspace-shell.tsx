@@ -42,10 +42,12 @@ function SystemHealthIndicator() {
 export function WorkspaceShell({
   workspace,
   userName,
+  role,
   children,
 }: {
   workspace: string;
   userName: string;
+  role?: string;
   children: React.ReactNode;
 }) {
   const router = useRouter();

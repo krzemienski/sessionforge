@@ -10,6 +10,8 @@ import { parseBody } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { z } from "zod";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 delete process.env.CLAUDECODE;
 
@@ -73,9 +75,10 @@ function resolveTypes(requested: string[]): SupplementaryType[] {
   return resolved;
 }
 
-async function verifyPostOwnership(
+async function getPostWithAuth(
   postId: string,
-  userId: string
+  session: Parameters<typeof getAuthorizedWorkspaceById>[0],
+  permission: Parameters<typeof getAuthorizedWorkspaceById>[2]
 ): Promise<{ post: NonNullable<Awaited<ReturnType<typeof db.query.posts.findFirst>>> }> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
@@ -86,9 +89,7 @@ async function verifyPostOwnership(
     throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
   }
 
-  if (post.workspace.ownerId !== userId) {
-    throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-  }
+  await getAuthorizedWorkspaceById(session, post.workspaceId, permission);
 
   return { post };
 }
@@ -124,7 +125,7 @@ export async function GET(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const { post } = await verifyPostOwnership(id, session.user.id);
+    const { post } = await getPostWithAuth(id, session, PERMISSIONS.CONTENT_READ);
 
     const items = await db.query.supplementaryContent.findMany({
       where: and(
@@ -148,7 +149,7 @@ export async function POST(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const { post } = await verifyPostOwnership(id, session.user.id);
+    const { post } = await getPostWithAuth(id, session, PERMISSIONS.CONTENT_EDIT);
 
     const rawBody = await request.json().catch(() => ({}));
     const { types: requestedTypes } = parseBody(generateSchema, rawBody);

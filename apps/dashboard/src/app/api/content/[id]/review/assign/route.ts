@@ -10,13 +10,17 @@ import {
 } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
 import { getWorkflowSettings } from "@/lib/approval/workflow-engine";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/content/[id]/review/assign
  *
- * Assigns reviewers to a post. Only workspace owners can assign reviewers.
+ * Assigns reviewers to a post. Requires workspace:members permission.
  * Reviewers must be existing workspace members.
  *
  * Body: { reviewerIds: string[] }
@@ -25,74 +29,60 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, id),
-    with: { workspace: true },
-  });
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      with: { workspace: true },
+    });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (!post) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.WORKSPACE_MEMBERS);
 
-  const workflowSettings = await getWorkflowSettings(post.workspaceId);
+    const workflowSettings = await getWorkflowSettings(post.workspaceId);
 
-  if (!workflowSettings.enabled) {
-    return NextResponse.json(
-      { error: "Approval workflow is not enabled for this workspace" },
-      { status: 400 }
-    );
-  }
+    if (!workflowSettings.enabled) {
+      throw new AppError(
+        "Approval workflow is not enabled for this workspace",
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
 
-  let body: { reviewerIds?: string[] };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    );
-  }
+    const body = await request.json().catch(() => ({}));
+    const { reviewerIds } = body;
 
-  const { reviewerIds } = body;
+    if (!reviewerIds || !Array.isArray(reviewerIds) || reviewerIds.length === 0) {
+      throw new AppError(
+        "reviewerIds must be a non-empty array of user IDs",
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
 
-  if (!reviewerIds || !Array.isArray(reviewerIds) || reviewerIds.length === 0) {
-    return NextResponse.json(
-      { error: "reviewerIds must be a non-empty array of user IDs" },
-      { status: 400 }
-    );
-  }
+    // Verify all reviewer IDs are workspace members
+    const members = await db
+      .select({ userId: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.workspaceId, post.workspaceId));
 
-  // Verify all reviewer IDs are workspace members
-  const members = await db
-    .select({ userId: workspaceMembers.userId })
-    .from(workspaceMembers)
-    .where(eq(workspaceMembers.workspaceId, post.workspaceId));
+    const memberIds = new Set(members.map((m) => m.userId));
+    // Also include workspace owner as a valid reviewer
+    memberIds.add(post.workspace.ownerId);
 
-  const memberIds = new Set(members.map((m) => m.userId));
-  // Also include workspace owner as a valid reviewer
-  memberIds.add(post.workspace.ownerId);
+    const invalidIds = reviewerIds.filter((rid: string) => !memberIds.has(rid));
+    if (invalidIds.length > 0) {
+      throw new AppError(
+        `The following user IDs are not workspace members: ${invalidIds.join(", ")}`,
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
 
-  const invalidIds = reviewerIds.filter((rid) => !memberIds.has(rid));
-  if (invalidIds.length > 0) {
-    return NextResponse.json(
-      {
-        error: `The following user IDs are not workspace members: ${invalidIds.join(", ")}`,
-      },
-      { status: 400 }
-    );
-  }
-
-  try {
     // Insert reviewers, ignoring duplicates (unique constraint on postId+userId)
     const inserted = [];
     for (const userId of reviewerIds) {
@@ -153,23 +143,13 @@ export async function POST(
         assignedAt: r.assignedAt,
       })),
     });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to assign reviewers",
-      },
-      { status: 500 }
-    );
-  }
+  })(request);
 }
 
 /**
  * DELETE /api/content/[id]/review/assign
  *
- * Removes a reviewer from a post.
+ * Removes a reviewer from a post. Requires workspace:members permission.
  *
  * Body: { reviewerId: string } (the user ID of the reviewer to remove)
  */
@@ -177,67 +157,51 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, id),
-    with: { workspace: true },
-  });
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      with: { workspace: true },
+    });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (!post) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.WORKSPACE_MEMBERS);
 
-  let body: { reviewerId?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    );
-  }
+    const body = await request.json().catch(() => ({}));
+    const { reviewerId } = body;
 
-  const { reviewerId } = body;
+    if (!reviewerId || typeof reviewerId !== "string") {
+      throw new AppError("reviewerId is required", ERROR_CODES.BAD_REQUEST);
+    }
 
-  if (!reviewerId || typeof reviewerId !== "string") {
-    return NextResponse.json(
-      { error: "reviewerId is required" },
-      { status: 400 }
-    );
-  }
+    const deleted = await db
+      .delete(postReviewers)
+      .where(
+        and(eq(postReviewers.postId, id), eq(postReviewers.userId, reviewerId))
+      )
+      .returning();
 
-  const deleted = await db
-    .delete(postReviewers)
-    .where(
-      and(eq(postReviewers.postId, id), eq(postReviewers.userId, reviewerId))
-    )
-    .returning();
+    if (deleted.length === 0) {
+      throw new AppError("Reviewer not found for this post", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (deleted.length === 0) {
-    return NextResponse.json(
-      { error: "Reviewer not found for this post" },
-      { status: 404 }
-    );
-  }
+    // Log activity
+    await db.insert(workspaceActivity).values({
+      workspaceId: post.workspaceId,
+      userId: session.user.id,
+      action: "reviewer_removed",
+      resourceType: "post",
+      resourceId: id,
+      metadata: { removedReviewerId: reviewerId },
+    });
 
-  // Log activity
-  await db.insert(workspaceActivity).values({
-    workspaceId: post.workspaceId,
-    userId: session.user.id,
-    action: "reviewer_removed",
-    resourceType: "post",
-    resourceId: id,
-    metadata: { removedReviewerId: reviewerId },
-  });
-
-  return NextResponse.json({ removed: true });
+    return NextResponse.json({ removed: true });
+  })(request);
 }

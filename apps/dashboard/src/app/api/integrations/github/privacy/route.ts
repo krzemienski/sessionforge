@@ -4,9 +4,10 @@ import { db } from "@/lib/db";
 import {
   githubPrivacySettings,
   githubRepositories,
-  workspaces,
 } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 /**
  * GET /api/integrations/github/privacy
@@ -30,20 +31,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Verify workspace ownership
-    const workspace = await db.query.workspaces.findFirst({
-      where: and(
-        eq(workspaces.slug, workspaceSlug),
-        eq(workspaces.ownerId, session.user.id)
-      ),
-    });
-
-    if (!workspace) {
-      return NextResponse.json(
-        { error: "Workspace not found or access denied" },
-        { status: 404 }
-      );
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.INTEGRATIONS_READ
+    );
 
     // Get all privacy settings for the workspace
     const privacySettings = await db.query.githubPrivacySettings.findMany({
@@ -64,7 +56,9 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error("[GET /api/integrations/github/privacy] Error:", error);
+    if (error && typeof error === "object" && "code" in error) {
+      throw error; // Re-throw AppErrors for proper handling
+    }
     return NextResponse.json(
       {
         error: "Failed to fetch privacy settings",
@@ -116,20 +110,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify workspace ownership
-    const workspace = await db.query.workspaces.findFirst({
-      where: and(
-        eq(workspaces.slug, workspaceSlug),
-        eq(workspaces.ownerId, session.user.id)
-      ),
-    });
-
-    if (!workspace) {
-      return NextResponse.json(
-        { error: "Workspace not found or access denied" },
-        { status: 404 }
-      );
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.INTEGRATIONS_MANAGE
+    );
 
     // Verify repository belongs to workspace (if provided)
     if (repositoryId) {
@@ -193,7 +178,9 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("[POST /api/integrations/github/privacy] Error:", error);
+    if (error && typeof error === "object" && "code" in error) {
+      throw error; // Re-throw AppErrors for proper handling
+    }
     return NextResponse.json(
       {
         error: "Failed to add privacy exclusion",
@@ -231,20 +218,11 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Verify workspace ownership
-    const workspace = await db.query.workspaces.findFirst({
-      where: and(
-        eq(workspaces.slug, workspaceSlug),
-        eq(workspaces.ownerId, session.user.id)
-      ),
-    });
-
-    if (!workspace) {
-      return NextResponse.json(
-        { error: "Workspace not found or access denied" },
-        { status: 404 }
-      );
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.INTEGRATIONS_MANAGE
+    );
 
     // Delete the exclusion
     const deleted = await db
@@ -268,7 +246,9 @@ export async function DELETE(req: NextRequest) {
       message: "Exclusion removed successfully",
     });
   } catch (error) {
-    console.error("[DELETE /api/integrations/github/privacy] Error:", error);
+    if (error && typeof error === "object" && "code" in error) {
+      throw error; // Re-throw AppErrors for proper handling
+    }
     return NextResponse.json(
       {
         error: "Failed to remove privacy exclusion",

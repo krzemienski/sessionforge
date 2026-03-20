@@ -2,9 +2,11 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { contentTemplates, workspaces } from "@sessionforge/db";
+import { contentTemplates } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { getBuiltInTemplates } from "@/lib/templates";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +25,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id) {
-      return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
     // Fetch workspace-specific custom templates from the database
     let dbTemplates: Array<Record<string, unknown>> = [];
@@ -82,11 +82,8 @@ export async function GET(request: Request) {
     const templates = [...builtInTemplates, ...dbTemplates];
     return NextResponse.json({ templates });
   } catch (err) {
-    console.error("[templates] GET error:", err);
-    return NextResponse.json(
-      { error: "Failed to load templates" },
-      { status: 500 }
-    );
+    // Re-throw AppError (from getAuthorizedWorkspace) so it returns proper status
+    throw err;
   }
 }
 
@@ -113,13 +110,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.WORKSPACE_SETTINGS
+  );
 
   // Create a custom template for the workspace
   const [template] = await db

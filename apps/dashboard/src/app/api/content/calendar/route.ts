@@ -2,8 +2,12 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { posts, workspaces, contentTriggers } from "@sessionforge/db";
+import { posts, contentTriggers } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -117,32 +121,31 @@ function computeNextRun(cronExpression: string, from: Date = new Date()): string
 }
 
 export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { searchParams } = new URL(request.url);
-  const workspaceSlug = searchParams.get("workspace");
-  const yearParam = searchParams.get("year");
-  const monthParam = searchParams.get("month");
+    const { searchParams } = new URL(request.url);
+    const workspaceSlug = searchParams.get("workspace");
+    const yearParam = searchParams.get("year");
+    const monthParam = searchParams.get("month");
 
-  if (!workspaceSlug) {
-    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
-  }
+    if (!workspaceSlug) {
+      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
+    }
 
-  const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
-  const month = monthParam ? parseInt(monthParam, 10) : new Date().getMonth() + 1;
+    const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
+    const month = monthParam ? parseInt(monthParam, 10) : new Date().getMonth() + 1;
 
-  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
-    return NextResponse.json({ error: "Invalid year or month" }, { status: 400 });
-  }
+    if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+      throw new AppError("Invalid year or month", ERROR_CODES.BAD_REQUEST);
+    }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.CONTENT_READ
+    );
 
   const startOfMonth = new Date(year, month - 1, 1);
   const startOfNextMonth = new Date(year, month, 1);
@@ -181,4 +184,5 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ days, triggers, nextRuns });
+  })(request);
 }

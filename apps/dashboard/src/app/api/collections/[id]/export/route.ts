@@ -7,6 +7,8 @@ import { eq, asc } from "drizzle-orm";
 import { buildStaticSiteZip, staticSiteDownloadHeaders } from "@/lib/export/static-site-builder";
 import type { ExportablePost } from "@/lib/export/markdown-export";
 import type { ThemeId } from "@/lib/export/theme-manager";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,13 +31,11 @@ export async function GET(
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: (workspaces, { eq }) => eq(workspaces.id, collection.workspaceId),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Collection not found" }, { status: 404 });
-  }
+  await getAuthorizedWorkspaceById(
+    session,
+    collection.workspaceId,
+    PERMISSIONS.CONTENT_READ
+  );
 
   const { searchParams } = new URL(request.url);
   const themeParam = searchParams.get("theme") ?? collection.theme ?? "technical-blog";

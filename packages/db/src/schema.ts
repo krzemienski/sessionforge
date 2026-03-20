@@ -78,6 +78,9 @@ export const workspaceMemberRoleEnum = pgEnum("workspace_member_role", [
   "owner",
   "editor",
   "viewer",
+  "reviewer",
+  "publisher",
+  "analyst",
 ]);
 
 export const agentTypeEnum = pgEnum("agent_type", [
@@ -735,6 +738,7 @@ export const workspaceMembers = pgTable(
     invitedBy: text("invited_by").references(() => users.id, {
       onDelete: "set null",
     }),
+    customPermissions: jsonb("custom_permissions").$type<Record<string, boolean>>(),
     joinedAt: timestamp("joined_at").defaultNow(),
     createdAt: timestamp("created_at").defaultNow(),
   },
