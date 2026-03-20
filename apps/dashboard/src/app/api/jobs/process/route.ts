@@ -4,6 +4,7 @@ import {
   processExtractInsights,
   processGenerateContent,
   processPostBatch,
+  processRestoreBundle,
 } from "@/lib/queue/batch-processor";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +72,15 @@ export async function POST(req: NextRequest) {
       processPostBatch(jobId, job.workspaceId, postIds, operation).catch(
         () => undefined
       );
+      break;
+    }
+    case "restore_bundle": {
+      const bundle = metadata.bundle ?? null;
+      const workspaceId =
+        typeof metadata.workspaceId === "string"
+          ? metadata.workspaceId
+          : job.workspaceId;
+      processRestoreBundle(jobId, workspaceId, bundle).catch(() => undefined);
       break;
     }
     default:

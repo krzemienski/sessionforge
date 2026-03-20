@@ -15,6 +15,8 @@ import { runAgent } from "@/lib/ai/agent-runner";
 import { BLOG_TECHNICAL_PROMPT } from "@/lib/ai/prompts/blog/technical";
 import { getJob, updateJobProgress, completeJob, failJob } from "./job-tracker";
 import { recordUsage } from "@/lib/billing/usage";
+import { restoreBackupBundle } from "@/lib/backup/restore-bundle";
+import type { BackupBundle } from "@/lib/backup/backup-bundle";
 
 /**
  * Records usage for a single batch operation item toward workspace plan limits.
@@ -295,6 +297,47 @@ export async function processPostBatch(
       await updateJobProgress(jobId, { processedItems, successCount, errorCount });
     }
 
+    await completeJob(jobId, { processedItems, successCount, errorCount });
+  } catch (error) {
+    await failJob(
+      jobId,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+
+/**
+ * Processes a restore_bundle job by calling restoreBackupBundle() and updating job progress.
+ * The bundle data is read from the job metadata (stored as JSON when the job was created).
+ *
+ * @param jobId - The batch job record to track progress.
+ * @param workspaceId - The target workspace to restore into.
+ * @param bundleData - The raw bundle data from job metadata (BackupBundle shape).
+ */
+export async function processRestoreBundle(
+  jobId: string,
+  workspaceId: string,
+  bundleData: unknown
+): Promise<void> {
+  try {
+    if (!bundleData || typeof bundleData !== "object") {
+      await failJob(jobId, "Missing or invalid bundle data in job metadata");
+      return;
+    }
+
+    const bundle = bundleData as BackupBundle;
+
+    const summary = await restoreBackupBundle(bundle, { workspaceId });
+
+    const processedItems =
+      summary.postsCreated +
+      summary.postsFailed +
+      summary.seriesCreated +
+      summary.seriesFailed;
+    const successCount = summary.postsCreated + summary.seriesCreated;
+    const errorCount = summary.postsFailed + summary.seriesFailed;
+
+    await updateJobProgress(jobId, { processedItems, successCount, errorCount });
     await completeJob(jobId, { processedItems, successCount, errorCount });
   } catch (error) {
     await failJob(
