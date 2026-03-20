@@ -9,6 +9,8 @@ import {
   updateGhostPost,
   GhostApiError,
 } from "@/lib/integrations/ghost";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,16 +27,17 @@ export async function GET(request: Request) {
 
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
-    with: { workspace: true },
   });
 
   if (!post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(
+    session,
+    post.workspaceId,
+    PERMISSIONS.INTEGRATIONS_READ
+  );
 
   const publication = await db.query.ghostPublications.findFirst({
     where: eq(ghostPublications.postId, postId),
@@ -86,12 +89,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  if (
-    post.workspace.slug !== workspaceSlug ||
-    post.workspace.ownerId !== session.user.id
-  ) {
+  if (post.workspace.slug !== workspaceSlug) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  await getAuthorizedWorkspaceById(
+    session,
+    post.workspaceId,
+    PERMISSIONS.PUBLISHING_PUBLISH
+  );
 
   const integration = await db.query.ghostIntegrations.findFirst({
     where: and(
@@ -207,12 +213,15 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  if (
-    post.workspace.slug !== workspaceSlug ||
-    post.workspace.ownerId !== session.user.id
-  ) {
+  if (post.workspace.slug !== workspaceSlug) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  await getAuthorizedWorkspaceById(
+    session,
+    post.workspaceId,
+    PERMISSIONS.PUBLISHING_PUBLISH
+  );
 
   const publication = await db.query.ghostPublications.findFirst({
     where: eq(ghostPublications.postId, postId),
