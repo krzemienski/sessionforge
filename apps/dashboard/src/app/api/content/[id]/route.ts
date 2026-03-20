@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { updatePost } from "@/lib/ai/tools/post-manager";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,35 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled, versionType, editType } = body;
+  const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled, versionType, editType, overrideRiskFlags } = body;
+
+  // Publish-gate check: block status transition to 'published' if critical flags exist
+  if (status === "published" && existing.status !== "published") {
+    const flags = existing.riskFlags ?? [];
+    const gateResult = canPublish(flags);
+
+    if (!gateResult.allowed) {
+      if (!overrideRiskFlags) {
+        return NextResponse.json(
+          {
+            error: "unresolved_critical_flags",
+            flags: gateResult.blockingFlags,
+            requiresOverride: true,
+          },
+          { status: 409 }
+        );
+      }
+
+      // Verify override permission (owner role since they own the workspace)
+      const overridePolicy = getOverridePolicy("owner");
+      if (!overridePolicy.canOverride) {
+        return NextResponse.json(
+          { error: "Insufficient permissions to override risk flags" },
+          { status: 403 }
+        );
+      }
+    }
+  }
 
   try {
     const updated = await updatePost(existing.workspaceId, id, {

@@ -12,6 +12,7 @@ import {
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, devtoPublishSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,28 @@ export async function POST(request: Request) {
       post.workspace.ownerId !== session.user.id
     ) {
       throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    }
+
+    // Publish-gate check: block if unresolved critical risk flags exist
+    const flags = post.riskFlags ?? [];
+    const gateResult = canPublish(flags);
+
+    if (!gateResult.allowed) {
+      if (!rawBody.overrideRiskFlags) {
+        return NextResponse.json(
+          {
+            error: "unresolved_critical_flags",
+            flags: gateResult.blockingFlags,
+            requiresOverride: true,
+          },
+          { status: 409 }
+        );
+      }
+
+      const overridePolicy = getOverridePolicy("owner");
+      if (!overridePolicy.canOverride) {
+        throw new AppError("Insufficient permissions to override risk flags", ERROR_CODES.FORBIDDEN);
+      }
     }
 
     const integration = await db.query.devtoIntegrations.findFirst({

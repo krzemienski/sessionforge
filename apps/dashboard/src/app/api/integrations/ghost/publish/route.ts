@@ -9,6 +9,7 @@ import {
   updateGhostPost,
   GhostApiError,
 } from "@/lib/integrations/ghost";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,31 @@ export async function POST(request: Request) {
     post.workspace.ownerId !== session.user.id
   ) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Publish-gate check: block if unresolved critical risk flags exist
+  const flags = post.riskFlags ?? [];
+  const gateResult = canPublish(flags);
+
+  if (!gateResult.allowed) {
+    if (!body.overrideRiskFlags) {
+      return NextResponse.json(
+        {
+          error: "unresolved_critical_flags",
+          flags: gateResult.blockingFlags,
+          requiresOverride: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    const overridePolicy = getOverridePolicy("owner");
+    if (!overridePolicy.canOverride) {
+      return NextResponse.json(
+        { error: "Insufficient permissions to override risk flags" },
+        { status: 403 }
+      );
+    }
   }
 
   const integration = await db.query.ghostIntegrations.findFirst({

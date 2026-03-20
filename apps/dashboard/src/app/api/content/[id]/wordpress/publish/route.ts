@@ -7,6 +7,7 @@ import { eq, and } from "drizzle-orm/sql";
 import { decryptAppPassword } from "@/lib/wordpress/crypto";
 import { WordPressClient } from "@/lib/wordpress/client";
 import { markdownToHtml } from "@/lib/export";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,41 @@ export async function POST(
 
   if (post.workspace.ownerId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Publish-gate check: block if unresolved critical risk flags exist
+  // Parse body early to check for overrideRiskFlags
+  const body = await req.json().catch(() => ({})) as {
+    status?: "draft" | "publish";
+    excerpt?: string;
+    categories?: number[];
+    tags?: number[];
+    featuredMediaId?: number;
+    overrideRiskFlags?: boolean;
+  };
+
+  const flags = post.riskFlags ?? [];
+  const gateResult = canPublish(flags);
+
+  if (!gateResult.allowed) {
+    if (!body.overrideRiskFlags) {
+      return NextResponse.json(
+        {
+          error: "unresolved_critical_flags",
+          flags: gateResult.blockingFlags,
+          requiresOverride: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    const overridePolicy = getOverridePolicy("owner");
+    if (!overridePolicy.canOverride) {
+      return NextResponse.json(
+        { error: "Insufficient permissions to override risk flags" },
+        { status: 403 }
+      );
+    }
   }
 
   // 2. Fetch workspace WordPress connection
@@ -72,20 +108,13 @@ export async function POST(
   }
 
   // Parse and validate request body
-  const body = await req.json().catch(() => ({}));
   const {
     status = "draft",
     excerpt,
     categories,
     tags,
     featuredMediaId,
-  } = body as {
-    status?: "draft" | "publish";
-    excerpt?: string;
-    categories?: number[];
-    tags?: number[];
-    featuredMediaId?: number;
-  };
+  } = body;
 
   if (status !== "draft" && status !== "publish") {
     return NextResponse.json(

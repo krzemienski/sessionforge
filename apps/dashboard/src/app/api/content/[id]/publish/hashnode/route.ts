@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { posts, integrationSettings } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { publishToHashnode } from "@/lib/publishing/hashnode";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,42 @@ export async function POST(
 
   if (post.workspace.ownerId !== session.user.id) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Parse body early to check for overrideRiskFlags
+  const body = await request.json().catch(() => ({})) as {
+    tags?: string[];
+    subtitle?: string;
+    coverImageUrl?: string;
+    seoTitle?: string;
+    seoDescription?: string;
+    canonicalUrl?: string;
+    overrideRiskFlags?: boolean;
+  };
+
+  // Publish-gate check: block if unresolved critical risk flags exist
+  const flags = post.riskFlags ?? [];
+  const gateResult = canPublish(flags);
+
+  if (!gateResult.allowed) {
+    if (!body.overrideRiskFlags) {
+      return NextResponse.json(
+        {
+          error: "unresolved_critical_flags",
+          flags: gateResult.blockingFlags,
+          requiresOverride: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    const overridePolicy = getOverridePolicy("owner");
+    if (!overridePolicy.canOverride) {
+      return NextResponse.json(
+        { error: "Insufficient permissions to override risk flags" },
+        { status: 403 }
+      );
+    }
   }
 
   if (!post.markdown || !post.title) {
@@ -60,15 +97,6 @@ export async function POST(
       { status: 400 }
     );
   }
-
-  const body = await request.json().catch(() => ({})) as {
-    tags?: string[];
-    subtitle?: string;
-    coverImageUrl?: string;
-    seoTitle?: string;
-    seoDescription?: string;
-    canonicalUrl?: string;
-  };
 
   // Transform string[] tags to { slug, name }[] format
   const tags = body.tags?.map((tag) => ({
