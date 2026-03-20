@@ -70,7 +70,7 @@ export function BackupRestoreTab({ workspace }: BackupRestoreTabProps) {
       const res = await fetch("/api/backups/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspace }),
+        body: JSON.stringify({ workspaceSlug: workspace }),
       });
 
       if (!res.ok) {
@@ -119,8 +119,8 @@ export function BackupRestoreTab({ workspace }: BackupRestoreTabProps) {
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("workspace", workspace);
+      formData.append("bundle", file);
+      formData.append("workspaceSlug", workspace);
 
       const res = await fetch("/api/backups/validate", {
         method: "POST",
@@ -151,8 +151,8 @@ export function BackupRestoreTab({ workspace }: BackupRestoreTabProps) {
 
     try {
       const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("workspace", workspace);
+      formData.append("bundle", selectedFile);
+      formData.append("workspaceSlug", workspace);
 
       const res = await fetch("/api/backups/restore", {
         method: "POST",
