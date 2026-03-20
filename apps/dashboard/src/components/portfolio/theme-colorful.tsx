@@ -36,7 +36,7 @@ export function ThemeColorful({
             {/* RSS Link */}
             {showRss && (
               <a
-                href={`/${workspaceSlug}/rss`}
+                href={`/api/public/portfolio/${workspaceSlug}/rss`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold hover:text-yellow-200 transition-colors"

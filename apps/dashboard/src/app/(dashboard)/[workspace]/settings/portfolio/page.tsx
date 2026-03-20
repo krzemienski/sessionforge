@@ -18,7 +18,7 @@ export default function PortfolioSettingsPage() {
         <p className="text-sm text-sf-text-secondary mb-6">
           Configure your public portfolio page at{" "}
           <code className="font-code text-sf-accent">
-            sessionforge.dev/{workspace}
+            sessionforge.dev/p/{workspace}
           </code>
           {" "}to showcase your published content.
         </p>
