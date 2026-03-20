@@ -178,6 +178,8 @@ export const scheduledPublicationStatusEnum = pgEnum("scheduled_publication_stat
   "publishing",
   "published",
   "failed",
+  "retry_exhausted",
+  "paused",
 ]);
 
 export const recommendationTypeEnum = pgEnum("recommendation_type", [

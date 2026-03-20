@@ -2,10 +2,26 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, scheduledPublications, devtoIntegrations, devtoPublications } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
-import { verifyQStashRequest } from "@/lib/qstash";
-import { publishToDevto, DevtoApiError } from "@/lib/integrations/devto";
+import { verifyQStashRequest, isQStashAvailable, createPublishSchedule } from "@/lib/qstash";
+import { publishToDevto } from "@/lib/integrations/devto";
+import { publishWithRetry } from "@/lib/integrations/retry-publisher";
+import type { PublishResult } from "@/lib/scheduling/publisher";
 
 export const dynamic = "force-dynamic";
+
+/** Delay (in ms) before a fallback re-attempt is scheduled via QStash. */
+const FALLBACK_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Determines whether a publish error is an authentication failure.
+ */
+function isAuthFailure(errorMessage: string): boolean {
+  return (
+    errorMessage.includes("Authentication failed") ||
+    errorMessage.includes("401") ||
+    errorMessage.includes("403")
+  );
+}
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -32,7 +48,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  // Fetch scheduled publication
+  // Fetch scheduled publication (pending or retry_exhausted for re-attempts)
   const scheduled = await db.query.scheduledPublications.findFirst({
     where: and(
       eq(scheduledPublications.postId, postId),
@@ -40,9 +56,21 @@ export async function POST(request: Request) {
     ),
   });
 
-  if (!scheduled) {
+  // Also check for retry_exhausted publications (fallback re-attempts)
+  const retryExhausted = !scheduled
+    ? await db.query.scheduledPublications.findFirst({
+        where: and(
+          eq(scheduledPublications.postId, postId),
+          eq(scheduledPublications.status, "retry_exhausted")
+        ),
+      })
+    : null;
+
+  const publication = scheduled ?? retryExhausted;
+
+  if (!publication) {
     return NextResponse.json(
-      { error: "No pending scheduled publication found" },
+      { error: "No pending or retriable scheduled publication found" },
       { status: 404 }
     );
   }
@@ -51,88 +79,162 @@ export async function POST(request: Request) {
   await db
     .update(scheduledPublications)
     .set({ status: "publishing", updatedAt: new Date() })
-    .where(eq(scheduledPublications.id, scheduled.id));
+    .where(eq(scheduledPublications.id, publication.id));
 
-  try {
-    const platforms = scheduled.platforms as string[];
+  const platforms = publication.platforms as string[];
+  let allSucceeded = true;
+  let authFailureDetected = false;
+  let retryExhaustedDetected = false;
+  let lastError: string | undefined;
 
-    // Publish to each platform
-    for (const platform of platforms) {
-      if (platform === "devto") {
-        // Check for Dev.to integration
-        const integration = await db.query.devtoIntegrations.findFirst({
-          where: and(
-            eq(devtoIntegrations.workspaceId, post.workspaceId),
-            eq(devtoIntegrations.enabled, true)
-          ),
-        });
+  for (const platform of platforms) {
+    if (platform === "devto") {
+      // Check for Dev.to integration
+      const integration = await db.query.devtoIntegrations.findFirst({
+        where: and(
+          eq(devtoIntegrations.workspaceId, post.workspaceId),
+          eq(devtoIntegrations.enabled, true)
+        ),
+      });
 
-        if (!integration) {
-          throw new Error("Dev.to integration not configured or disabled");
+      if (!integration) {
+        allSucceeded = false;
+        lastError = "Dev.to integration not configured or disabled";
+        continue;
+      }
+
+      // Use retry-publisher for resilient publishing
+      const retryResult = await publishWithRetry({
+        publishFn: async (): Promise<PublishResult> => {
+          const result = await publishToDevto(integration.apiKey, {
+            title: post.title,
+            body_markdown: post.markdown,
+            published: true,
+            tags: [],
+          });
+
+          // Record publication
+          await db.insert(devtoPublications).values({
+            workspaceId: post.workspaceId,
+            postId,
+            integrationId: integration.id,
+            devtoArticleId: result.id,
+            devtoUrl: result.url,
+            publishedAsDraft: !result.published,
+            syncedAt: new Date(),
+          });
+
+          return {
+            platform: "devto",
+            success: true,
+            url: result.url,
+          };
+        },
+        platform: "devto",
+        postId,
+      });
+
+      if (!retryResult.result.success) {
+        allSucceeded = false;
+        lastError = retryResult.result.error;
+
+        // Check if this is an auth failure
+        if (lastError && isAuthFailure(lastError)) {
+          authFailureDetected = true;
+        } else if (retryResult.attempts >= 4) {
+          // Retries exhausted for non-auth failures
+          retryExhaustedDetected = true;
         }
-
-        // Check if already published
-        const existing = await db.query.devtoPublications.findFirst({
-          where: eq(devtoPublications.postId, postId),
-        });
-
-        if (existing) {
-          // Already published, skip
-          continue;
-        }
-
-        // Publish to Dev.to
-        const result = await publishToDevto(integration.apiKey, {
-          title: post.title,
-          body_markdown: post.markdown,
-          published: true,
-          tags: [],
-        });
-
-        // Record publication
-        await db.insert(devtoPublications).values({
-          workspaceId: post.workspaceId,
-          postId,
-          integrationId: integration.id,
-          devtoArticleId: result.id,
-          devtoUrl: result.url,
-          publishedAsDraft: !result.published,
-          syncedAt: new Date(),
-        });
       }
     }
+  }
 
-    // Update post status to published
-    await db
-      .update(posts)
-      .set({ status: "published", updatedAt: new Date() })
-      .where(eq(posts.id, postId));
-
-    // Update scheduled publication to published
+  // Handle auth failure: pause the scheduled publication
+  if (authFailureDetected) {
     await db
       .update(scheduledPublications)
       .set({
-        status: "published",
-        publishedAt: new Date(),
+        status: "paused",
+        error: lastError ?? "Authentication expired — will retry after re-authentication",
         updatedAt: new Date(),
       })
-      .where(eq(scheduledPublications.id, scheduled.id));
+      .where(eq(scheduledPublications.id, publication.id));
 
-    return NextResponse.json({ success: true, postId, published: true });
-  } catch (error) {
-    // Update scheduled publication to failed with error
+    return NextResponse.json(
+      {
+        success: false,
+        postId,
+        status: "paused",
+        error: "Authentication expired — publication paused for automatic retry",
+      },
+      { status: 200 }
+    );
+  }
+
+  // Handle retry exhaustion: mark retry_exhausted and schedule fallback via QStash
+  if (retryExhaustedDetected) {
+    await db
+      .update(scheduledPublications)
+      .set({
+        status: "retry_exhausted",
+        error: lastError ?? "Publishing failed after all retry attempts",
+        updatedAt: new Date(),
+      })
+      .where(eq(scheduledPublications.id, publication.id));
+
+    // Schedule a delayed re-attempt via QStash as a fallback queue
+    if (isQStashAvailable()) {
+      try {
+        const fallbackTime = new Date(Date.now() + FALLBACK_DELAY_MS);
+        await createPublishSchedule(postId, fallbackTime);
+      } catch {
+        // Fallback scheduling failed — the publication stays as retry_exhausted
+        // and can be manually retried or picked up by a future health check
+      }
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        postId,
+        status: "retry_exhausted",
+        error: "Publishing failed after all retries — fallback re-attempt scheduled",
+      },
+      { status: 200 }
+    );
+  }
+
+  if (!allSucceeded) {
+    // Non-auth, non-exhausted failure (e.g., integration not configured)
     await db
       .update(scheduledPublications)
       .set({
         status: "failed",
-        error: error instanceof Error ? error.message : "Publishing failed",
+        error: lastError ?? "Publishing failed",
         updatedAt: new Date(),
       })
-      .where(eq(scheduledPublications.id, scheduled.id));
+      .where(eq(scheduledPublications.id, publication.id));
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Publishing failed" },
+      { error: lastError ?? "Publishing failed" },
       { status: 500 }
     );
   }
+
+  // All platforms succeeded
+  await db
+    .update(posts)
+    .set({ status: "published", updatedAt: new Date() })
+    .where(eq(posts.id, postId));
+
+  await db
+    .update(scheduledPublications)
+    .set({
+      status: "published",
+      publishedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(scheduledPublications.id, publication.id));
+
+  return NextResponse.json({ success: true, postId, published: true });
 }
