@@ -1,11 +1,10 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { getRedis } from "@/lib/redis";
 import {
   checkAllIntegrations,
@@ -87,12 +86,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id)
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    const { workspace } = await getAuthorizedWorkspace(session, workspaceSlug, PERMISSIONS.INTEGRATIONS_MANAGE);
 
     // Rate limit: max 1 check per workspace per 60 seconds
     if (await isRateLimited(workspace.id)) {

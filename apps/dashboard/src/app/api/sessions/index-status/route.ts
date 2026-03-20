@@ -10,12 +10,11 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { SessionMiner } from "@/lib/sessions/miner";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,22 +30,13 @@ export async function GET(req: Request) {
       throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
     }
 
-    const ws = await db
-      .select({ id: workspaces.id })
-      .from(workspaces)
-      .where(
-        and(
-          eq(workspaces.slug, workspaceSlug),
-          eq(workspaces.ownerId, session.user.id)
-        )
-      )
-      .limit(1);
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.SESSIONS_READ
+    );
 
-    if (!ws.length) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
-
-    const miner = new SessionMiner(ws[0].id);
+    const miner = new SessionMiner(workspace.id);
     const status = await miner.getIndexStatus();
 
     return NextResponse.json({

@@ -1,13 +1,12 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm/sql";
 import { streamNewsletterWriter } from "@/lib/ai/agents/newsletter-writer";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, agentNewsletterSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { checkQuota, recordUsage } from "@/lib/billing/usage";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,13 +21,11 @@ export async function POST(request: Request) {
       rawBody
     );
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.CONTENT_CREATE
+    );
 
     const quota = await checkQuota(session.user.id, "content_generation");
     if (!quota.allowed) {

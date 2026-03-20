@@ -6,6 +6,8 @@ import { apiKeys } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +29,7 @@ export async function DELETE(
       throw new AppError("API key not found", ERROR_CODES.NOT_FOUND);
     }
 
-    if (existing.workspace.ownerId !== session.user.id) {
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-    }
+    await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.WORKSPACE_SETTINGS);
 
     await db.delete(apiKeys).where(eq(apiKeys.id, id));
 

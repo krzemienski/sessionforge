@@ -12,6 +12,8 @@ import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, sessionScanSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { checkQuota, recordUsage } from "@/lib/billing/usage";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,26 +25,18 @@ export async function POST(req: Request) {
     const rawBody = await req.json().catch(() => ({}));
     const { workspaceSlug, lookbackDays, fullRescan } = parseBody(sessionScanSchema, rawBody);
 
+    if (!workspaceSlug) {
+      throw new AppError("workspaceSlug is required", ERROR_CODES.BAD_REQUEST);
+    }
+
     const scanStartTime = new Date();
     const start = Date.now();
 
-    const workspace = workspaceSlug
-      ? await db
-          .select()
-          .from(workspaces)
-          .where(eq(workspaces.slug, workspaceSlug))
-          .limit(1)
-      : await db
-          .select()
-          .from(workspaces)
-          .where(eq(workspaces.ownerId, session.user.id))
-          .limit(1);
-
-    if (!workspace.length) {
-      throw new AppError("No workspace found", ERROR_CODES.NOT_FOUND);
-    }
-
-    const ws = workspace[0];
+    const { workspace: ws } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.SESSIONS_SCAN
+    );
 
     const quotaCheck = await checkQuota(session.user.id, "session_scan");
     if (!quotaCheck.allowed) {

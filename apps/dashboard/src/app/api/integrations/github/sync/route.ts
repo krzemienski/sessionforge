@@ -8,7 +8,6 @@ import {
   githubCommits,
   githubPullRequests,
   githubIssues,
-  workspaces,
 } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
 import {
@@ -17,6 +16,8 @@ import {
   fetchGitHubIssues,
   GitHubApiError,
 } from "@/lib/integrations/github";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,13 +35,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.INTEGRATIONS_MANAGE
+  );
 
   const repository = await db.query.githubRepositories.findFirst({
     where: and(

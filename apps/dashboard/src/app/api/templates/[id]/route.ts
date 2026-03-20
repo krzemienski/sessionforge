@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { contentTemplates } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +37,9 @@ export async function GET(
   }
 
   // Built-in templates (workspaceId is null) are accessible to everyone
-  // Custom templates require workspace ownership verification
-  if (template.workspaceId && template.workspace) {
-    if (template.workspace.ownerId !== session.user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  // Custom templates require workspace authorization
+  if (template.workspaceId) {
+    await getAuthorizedWorkspaceById(session, template.workspaceId, PERMISSIONS.WORKSPACE_SETTINGS);
   }
 
   return NextResponse.json({ template });
@@ -71,10 +71,11 @@ export async function PATCH(
     );
   }
 
-  // Verify workspace ownership
-  if (!existing.workspace || existing.workspace.ownerId !== session.user.id) {
+  if (!existing.workspaceId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.WORKSPACE_SETTINGS);
 
   const body = await request.json();
   const { name, description, structure, toneGuidance, exampleContent, isActive } = body;
@@ -123,10 +124,11 @@ export async function DELETE(
     );
   }
 
-  // Verify workspace ownership
-  if (!existing.workspace || existing.workspace.ownerId !== session.user.id) {
+  if (!existing.workspaceId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.WORKSPACE_SETTINGS);
 
   await db.delete(contentTemplates).where(eq(contentTemplates.id, id));
 

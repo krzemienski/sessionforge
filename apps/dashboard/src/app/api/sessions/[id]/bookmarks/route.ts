@@ -2,36 +2,34 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { claudeSessions, sessionBookmarks, workspaces } from "@sessionforge/db";
+import { claudeSessions, sessionBookmarks } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
+import type { Session } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 async function resolveSession(
-  userId: string,
+  session: Session,
   sessionId: string
-): Promise<{ workspaceId: string } | null> {
-  // Look up session first, then verify ownership via workspace
+): Promise<{ workspaceId: string }> {
   const rows = await db
     .select({ id: claudeSessions.id, workspaceId: claudeSessions.workspaceId })
     .from(claudeSessions)
     .where(eq(claudeSessions.id, sessionId))
     .limit(1);
 
-  if (!rows.length) return null;
+  if (!rows.length) {
+    throw new AppError("Session not found", ERROR_CODES.NOT_FOUND);
+  }
 
-  const ownerCheck = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.id, rows[0].workspaceId),
-        eq(workspaces.ownerId, userId)
-      )
-    )
-    .limit(1);
-
-  if (!ownerCheck.length) return null;
+  await getAuthorizedWorkspaceById(
+    session,
+    rows[0].workspaceId,
+    PERMISSIONS.SESSIONS_READ
+  );
 
   return { workspaceId: rows[0].workspaceId };
 }
@@ -45,10 +43,7 @@ export async function GET(
 
   const { id } = await params;
 
-  const resolved = await resolveSession(session.user.id, id);
-  if (!resolved) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  }
+  const resolved = await resolveSession(session, id);
 
   const bookmarks = await db
     .select()
@@ -69,10 +64,7 @@ export async function POST(
 
   const { id } = await params;
 
-  const resolved = await resolveSession(session.user.id, id);
-  if (!resolved) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  }
+  const resolved = await resolveSession(session, id);
 
   let body: { messageIndex?: unknown; label?: unknown; note?: unknown };
   try {
@@ -114,10 +106,7 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const resolved = await resolveSession(session.user.id, id);
-  if (!resolved) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  }
+  const resolved = await resolveSession(session, id);
 
   const { searchParams } = new URL(request.url);
   const bookmarkId = searchParams.get("bookmarkId");

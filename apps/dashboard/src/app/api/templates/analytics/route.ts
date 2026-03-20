@@ -2,8 +2,10 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { contentTemplates, workspaces } from "@sessionforge/db";
+import { contentTemplates } from "@sessionforge/db";
 import { eq, or, isNull } from "drizzle-orm";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,13 +23,11 @@ export async function GET(request: Request) {
     );
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.WORKSPACE_SETTINGS
+  );
 
   // Fetch both built-in templates (workspaceId is null) and workspace-specific templates
   const templates = await db.query.contentTemplates.findMany({

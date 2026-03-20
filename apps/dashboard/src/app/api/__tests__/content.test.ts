@@ -86,9 +86,60 @@ mock.module("@sessionforge/db", () => ({
     slug: "ws_slug",
     ownerId: "ws_ownerId",
   },
+  workspaceMembers: {
+    workspaceId: "wm_workspaceId",
+    userId: "wm_userId",
+    role: "wm_role",
+  },
+  workspaceActivity: {
+    workspaceId: "wa_workspaceId",
+    userId: "wa_userId",
+    action: "wa_action",
+  },
   toneProfileEnum: {
     enumValues: ["professional", "casual", "technical", "conversational"],
   },
+}));
+
+// Mock workspace-auth to use existing mockWorkspaceResult + mockAuthSession
+mock.module("@/lib/workspace-auth", () => {
+  class AppError extends Error {
+    code: string;
+    statusCode: number;
+    constructor(msg: string, code: string, status?: number) {
+      super(msg);
+      this.code = code;
+      this.statusCode = status ?? 500;
+    }
+  }
+  const getAuthorizedWorkspace = async (session: any, slug: string, _perm?: string) => {
+    if (!mockWorkspaceResult) throw new AppError("Workspace not found", "NOT_FOUND", 404);
+    if (mockWorkspaceResult.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", "NOT_FOUND", 404);
+    }
+    return { workspace: mockWorkspaceResult, role: "owner" };
+  };
+  const getAuthorizedWorkspaceById = async (session: any, id: string, _perm?: string) => {
+    if (!mockWorkspaceResult) throw new AppError("Workspace not found", "NOT_FOUND", 404);
+    if (mockWorkspaceResult.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", "NOT_FOUND", 404);
+    }
+    return { workspace: mockWorkspaceResult, role: "owner" };
+  };
+  const logWorkspaceActivity = async () => {};
+  return { getAuthorizedWorkspace, getAuthorizedWorkspaceById, logWorkspaceActivity };
+});
+
+mock.module("@/lib/permissions", () => ({
+  PERMISSIONS: {
+    CONTENT_READ: "content:read",
+    CONTENT_CREATE: "content:create",
+    CONTENT_EDIT: "content:edit",
+    CONTENT_DELETE: "content:delete",
+    WORKSPACE_SETTINGS: "workspace:settings",
+  },
+  ROLES: { OWNER: "owner" },
+  hasPermission: () => true,
 }));
 
 // Lightweight stand-ins for drizzle-orm/sql query builder helpers.

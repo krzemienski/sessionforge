@@ -7,6 +7,8 @@ import { eq, and } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -34,24 +36,22 @@ const researchItemCreateSchema = z.object({
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-async function verifyPostOwnership(
+async function getPostWithAuth(
   postId: string,
-  userId: string
+  session: NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>,
+  permission: (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
 ): Promise<{
   post: NonNullable<Awaited<ReturnType<typeof db.query.posts.findFirst>>>;
 }> {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
-    with: { workspace: true },
   });
 
   if (!post) {
     throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
   }
 
-  if (post.workspace.ownerId !== userId) {
-    throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-  }
+  await getAuthorizedWorkspaceById(session, post.workspaceId, permission);
 
   return { post };
 }
@@ -67,7 +67,7 @@ export async function GET(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const { post } = await verifyPostOwnership(id, session.user.id);
+    const { post } = await getPostWithAuth(id, session, PERMISSIONS.CONTENT_READ);
 
     // Optional tag filter via query params
     const { searchParams } = new URL(request.url);
@@ -103,7 +103,7 @@ export async function POST(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const { post } = await verifyPostOwnership(id, session.user.id);
+    const { post } = await getPostWithAuth(id, session, PERMISSIONS.CONTENT_CREATE);
 
     const rawBody = await request.json().catch(() => ({}));
     const data = parseBody(researchItemCreateSchema, rawBody);
