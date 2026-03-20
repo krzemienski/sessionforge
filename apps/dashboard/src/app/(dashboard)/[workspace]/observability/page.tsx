@@ -68,7 +68,7 @@ export default function ObservabilityPage() {
           (sum, s) => sum + (metrics.data!.stateCounts[s] ?? 0),
           0,
         ),
-        failureRate: metrics.data.failureRate,
+        failureRate: metrics.data.failureRate * 100,
         throughput: metrics.data.throughput,
         avgLatencyMs: metrics.data.avgDurationMs,
         queueDepth: metrics.data.queueDepth,

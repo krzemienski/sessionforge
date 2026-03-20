@@ -214,6 +214,21 @@ export async function GET(req: NextRequest) {
       stageLatency[stage] = { avgMs: avg, count: durations.length };
     }
 
+    // ── (7) Daily throughput breakdown ─────────────────────────────────
+    const dailyMap = new Map<string, { runs: number; failures: number }>();
+    for (const run of runs) {
+      if (!run.startedAt) continue;
+      const dateKey = run.startedAt.toISOString().slice(0, 10); // "YYYY-MM-DD"
+      const entry = dailyMap.get(dateKey) ?? { runs: 0, failures: 0 };
+      entry.runs++;
+      if (run.status === "failed") entry.failures++;
+      dailyMap.set(dateKey, entry);
+    }
+
+    const dailyThroughput = Array.from(dailyMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({ date, ...data }));
+
     return NextResponse.json({
       workspace: workspaceSlug,
       dateRange: {
@@ -227,6 +242,7 @@ export async function GET(req: NextRequest) {
       avgDurationMs,
       queueDepth,
       stageLatency,
+      dailyThroughput,
     });
   } catch (error) {
     console.error(

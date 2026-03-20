@@ -70,6 +70,20 @@ export async function GET(
     .orderBy(asc(agentEvents.createdAt))
     .limit(500);
 
+  // Map events to extract a message from the payload JSONB field
+  // The agent_events table has no `message` column, so we derive it
+  // from payload.message, payload.stage, or fall back to eventType
+  const mappedEvents = events.map((evt) => {
+    const payload = evt.payload as Record<string, unknown> | null;
+    return {
+      ...evt,
+      message:
+        (payload?.message as string) ??
+        (payload?.stage as string) ??
+        evt.eventType,
+    };
+  });
+
   // Build time window conditions for agent runs
   const agentRunConditions = [eq(agentRuns.workspaceId, workspace.id)];
   if (run.startedAt) {
@@ -113,7 +127,7 @@ export async function GET(
       triggerName: trigger?.name ?? null,
       triggerType: trigger?.triggerType ?? null,
     },
-    events,
+    events: mappedEvents,
     agentRuns: relatedAgentRuns,
     publishStatus,
   });
