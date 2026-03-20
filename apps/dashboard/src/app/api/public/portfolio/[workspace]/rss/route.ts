@@ -46,7 +46,7 @@ export async function GET(
 
   // Build RSS feed XML
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const portfolioUrl = `${baseUrl}/${workspaceSlug}`;
+  const portfolioUrl = `${baseUrl}/p/${workspaceSlug}`;
 
   // Escape XML special characters
   const escapeXml = (unsafe: string | null | undefined): string => {
@@ -87,7 +87,7 @@ export async function GET(
     <description>${escapeXml(portfolio.bio || `${workspace.name}'s portfolio`)}</description>
     <language>en</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
-    <atom:link href="${escapeXml(`${portfolioUrl}/rss`)}" rel="self" type="application/rss+xml" />
+    <atom:link href="${escapeXml(`${baseUrl}/api/public/portfolio/${workspaceSlug}/rss`)}" rel="self" type="application/rss+xml" />
 ${rssItems}
   </channel>
 </rss>`;
