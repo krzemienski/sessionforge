@@ -42,10 +42,17 @@ export async function POST(
       verificationStatus: true,
       riskFlags: true,
     },
+    with: {
+      workspace: true,
+    },
   });
 
   if (!post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
+  if (post.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => ({}));

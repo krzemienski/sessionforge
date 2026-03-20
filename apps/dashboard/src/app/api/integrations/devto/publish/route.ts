@@ -197,6 +197,28 @@ export async function PUT(request: Request) {
       throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
     }
 
+    // Publish-gate check: block if unresolved critical risk flags exist
+    const flags = post.riskFlags ?? [];
+    const gateResult = canPublish(flags);
+
+    if (!gateResult.allowed) {
+      if (!rawBody.overrideRiskFlags) {
+        return NextResponse.json(
+          {
+            error: "unresolved_critical_flags",
+            flags: gateResult.blockingFlags,
+            requiresOverride: true,
+          },
+          { status: 409 }
+        );
+      }
+
+      const overridePolicy = getOverridePolicy("owner");
+      if (!overridePolicy.canOverride) {
+        throw new AppError("Insufficient permissions to override risk flags", ERROR_CODES.FORBIDDEN);
+      }
+    }
+
     const publication = await db.query.devtoPublications.findFirst({
       where: eq(devtoPublications.postId, postId),
       with: { integration: true },

@@ -46,7 +46,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const { status, evidenceNotes } = body as {
     status: "verified" | "dismissed" | "overridden";
     evidenceNotes?: string;
@@ -79,14 +79,7 @@ export async function PATCH(
 
   // Recompute verification status
   const unresolvedCount = flags.filter((f) => f.status === "unresolved").length;
-  const hasCriticalOrHigh = flags.some(
-    (f) => (f.severity === "critical" || f.severity === "high") && f.status === "unresolved"
-  );
-  const verificationStatus = unresolvedCount === 0
-    ? "verified"
-    : hasCriticalOrHigh
-      ? "has_issues"
-      : "has_issues";
+  const verificationStatus = unresolvedCount === 0 ? "verified" : "has_issues";
 
   try {
     // Persist updated flags and status

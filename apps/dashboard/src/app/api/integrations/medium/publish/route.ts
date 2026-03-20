@@ -232,6 +232,31 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Publish-gate check: block if unresolved critical risk flags exist
+  const flags = post.riskFlags ?? [];
+  const gateResult = canPublish(flags);
+
+  if (!gateResult.allowed) {
+    if (!body.overrideRiskFlags) {
+      return NextResponse.json(
+        {
+          error: "unresolved_critical_flags",
+          flags: gateResult.blockingFlags,
+          requiresOverride: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    const overridePolicy = getOverridePolicy("owner");
+    if (!overridePolicy.canOverride) {
+      return NextResponse.json(
+        { error: "Insufficient permissions to override risk flags" },
+        { status: 403 }
+      );
+    }
+  }
+
   const publication = await db.query.mediumPublications.findFirst({
     where: eq(mediumPublications.postId, postId),
     with: { integration: true },
