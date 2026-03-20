@@ -47,6 +47,7 @@ import { EvidenceExplorer } from "@/components/editor/evidence-explorer";
 import { SupplementaryPanel } from "@/components/editor/supplementary-panel";
 import { MediaPanel } from "@/components/editor/media-panel";
 import { RepositoryPanel } from "@/components/editor/repository-panel";
+import { ResearchPanel } from "@/components/editor/research-panel";
 import { SeriesNavLinks } from "@/components/series/series-nav-links";
 import { CitationToggle, type CitationDensity } from "@/components/citations/citation-toggle";
 import { RepurposeButton } from "@/components/content/repurpose-button";
@@ -115,7 +116,7 @@ export default function ContentEditorPage() {
   const [externalMd, setExternalMd] = useState<string | null>(null);
   const [hashnodeModalOpen, setHashnodeModalOpen] = useState(false);
   const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository" | "citations" | "review">("chat");
+  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository" | "citations" | "review" | "research">("chat");
   const [citationsEnabled, setCitationsEnabled] = useState(true);
   const [citationDensity, setCitationDensity] = useState<CitationDensity>("all");
   const [highlightedCitation, setHighlightedCitation] = useState<string | null>(null);
@@ -510,7 +511,7 @@ export default function ContentEditorPage() {
               <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
                 {/* Sidebar tabs */}
                 <div className="flex gap-1 p-2 border-b border-sf-border">
-                  {(["chat", "seo", "evidence", "citations", "review", "supplementary", "media", "repository"] as const).map((tab) => (
+                  {(["chat", "seo", "evidence", "citations", "review", "supplementary", "media", "repository", "research"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setSidebarTab(tab)}
@@ -521,7 +522,7 @@ export default function ContentEditorPage() {
                           : "text-sf-text-secondary hover:bg-sf-bg-hover"
                       )}
                     >
-                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "citations" ? "Citations" : tab === "review" ? "Review" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : "More"}
+                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "citations" ? "Citations" : tab === "review" ? "Review" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : tab === "research" ? "Research" : "More"}
                     </button>
                   ))}
                 </div>
@@ -579,6 +580,11 @@ export default function ContentEditorPage() {
                     <RepositoryPanel
                       postId={postId}
                       workspace={workspace}
+                    />
+                  )}
+                  {sidebarTab === "research" && (
+                    <ResearchPanel
+                      postId={postId}
                     />
                   )}
                 </div>
