@@ -53,7 +53,7 @@ import { RepurposeButton } from "@/components/content/repurpose-button";
 import { RepurposeTracker } from "@/components/content/repurpose-tracker";
 import { useRiskFlags, useResolveFlag } from "@/hooks/use-risk-flags";
 import { useVerification } from "@/hooks/use-verification";
-import type { VerificationSummary } from "@/lib/verification/types";
+import type { RiskFlag, VerificationSummary } from "@/lib/verification/types";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -213,7 +213,7 @@ export default function ContentEditorPage() {
     // Check for unresolved critical flags that block publishing
     const flags = riskFlags.data?.flags ?? [];
     const blockingFlags = flags.filter(
-      (f: any) => f.severity === "critical" && f.status === "unresolved"
+      (f: RiskFlag) => f.severity === "critical" && f.status === "unresolved"
     );
     if (blockingFlags.length > 0) {
       setIsPublishGateOpen(true);
@@ -227,9 +227,17 @@ export default function ContentEditorPage() {
   const handleOverridePublish = useCallback(() => {
     setIsPublishGateOpen(false);
     setStatus('published');
-    update.mutate({ id: postId, title, markdown, status: 'published', versionType: "major", editType: "user_edit" });
+    // Mark blocking flags as overridden
+    const flags = riskFlags.data?.flags ?? [];
+    const blocking = flags.filter(
+      (f: RiskFlag) => f.severity === "critical" && f.status === "unresolved"
+    );
+    blocking.forEach((f: RiskFlag) => {
+      resolveFlag.mutate({ flagId: f.id, status: "overridden" });
+    });
+    update.mutate({ id: postId, title, markdown, status: 'published', versionType: "major", editType: "user_edit", overrideRiskFlags: true });
     lastSavedMarkdownRef.current = markdown;
-  }, [update, postId, title, markdown]);
+  }, [update, resolveFlag, postId, title, markdown, riskFlags.data]);
 
   const handleRunVerification = useCallback(() => {
     verification.mutate({ force: false });
@@ -767,7 +775,7 @@ export default function ContentEditorPage() {
         isOpen={isPublishGateOpen}
         onClose={() => setIsPublishGateOpen(false)}
         blockingFlags={(riskFlags.data?.flags ?? []).filter(
-          (f: any) => f.severity === "critical" && f.status === "unresolved"
+          (f: RiskFlag) => f.severity === "critical" && f.status === "unresolved"
         )}
         canOverride={true}
         onResolveFlags={() => {
