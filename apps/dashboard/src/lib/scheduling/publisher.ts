@@ -1,7 +1,12 @@
 import { db } from "@/lib/db";
 import { posts, devtoIntegrations, devtoPublications } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
-import { publishToDevto, DevtoApiError } from "@/lib/integrations/devto";
+import { publishToDevto } from "@/lib/integrations/devto";
+import { publishWithRetry } from "@/lib/integrations/retry-publisher";
+import { persistHealthCheckResults } from "@/lib/integrations/health-checker";
+import type { HealthCheckResult } from "@/lib/integrations/health-checker";
+import { eventBus } from "@/lib/observability/event-bus";
+import { createAgentEvent } from "@/lib/observability/event-types";
 
 export type Platform = "devto";
 
@@ -34,83 +39,192 @@ export class PublishingError extends Error {
   }
 }
 
+// ── Health status check ──
+
+/**
+ * Checks whether a connector is paused (auth_expired) by reading the
+ * integration table's healthStatus column. Returns true if paused.
+ */
+async function isConnectorPaused(
+  workspaceId: string,
+  platform: Platform
+): Promise<boolean> {
+  switch (platform) {
+    case "devto": {
+      const [row] = await db
+        .select({ healthStatus: devtoIntegrations.healthStatus })
+        .from(devtoIntegrations)
+        .where(
+          and(
+            eq(devtoIntegrations.workspaceId, workspaceId),
+            eq(devtoIntegrations.enabled, true)
+          )
+        )
+        .limit(1);
+      return row?.healthStatus === "paused";
+    }
+    default:
+      return false;
+  }
+}
+
+// ── Observability helpers ──
+
+function emitPublishEvent(
+  workspaceId: string,
+  platform: Platform,
+  action: string,
+  payload: Record<string, unknown> = {}
+): void {
+  const traceId = crypto.randomUUID();
+  eventBus.emit(
+    createAgentEvent(traceId, workspaceId, "publisher", "pipeline:stage", {
+      action,
+      platform,
+      ...payload,
+    })
+  );
+}
+
+function emitPublishError(
+  workspaceId: string,
+  platform: Platform,
+  error: string,
+  payload: Record<string, unknown> = {}
+): void {
+  const traceId = crypto.randomUUID();
+  eventBus.emit(
+    createAgentEvent(
+      traceId,
+      workspaceId,
+      "publisher",
+      "agent:error",
+      { platform, error, ...payload },
+      { level: "error" }
+    )
+  );
+}
+
+// ── Platform publish functions ──
+
 async function publishToDevtoPlatform(
   postId: string,
   workspaceId: string,
   postTitle: string,
   postMarkdown: string
 ): Promise<PublishResult> {
-  try {
-    // Check for Dev.to integration
-    const integration = await db.query.devtoIntegrations.findFirst({
-      where: and(
-        eq(devtoIntegrations.workspaceId, workspaceId),
-        eq(devtoIntegrations.enabled, true)
-      ),
-    });
-
-    if (!integration) {
-      return {
-        platform: "devto",
-        success: false,
-        error: "Dev.to integration not configured or disabled",
-      };
-    }
-
-    // Check if already published
-    const existing = await db.query.devtoPublications.findFirst({
-      where: eq(devtoPublications.postId, postId),
-    });
-
-    if (existing) {
-      return {
-        platform: "devto",
-        success: true,
-        skipped: true,
-        reason: "Already published to Dev.to",
-        url: existing.devtoUrl ?? undefined,
-      };
-    }
-
-    // Publish to Dev.to
-    const result = await publishToDevto(integration.apiKey, {
-      title: postTitle,
-      body_markdown: postMarkdown,
-      published: true,
-      tags: [],
-    });
-
-    // Record publication
-    await db.insert(devtoPublications).values({
-      workspaceId,
+  // (1) Check health status — skip if connector is paused
+  const paused = await isConnectorPaused(workspaceId, "devto");
+  if (paused) {
+    emitPublishEvent(workspaceId, "devto", "publish_skipped", {
       postId,
-      integrationId: integration.id,
-      devtoArticleId: result.id,
-      devtoUrl: result.url,
-      publishedAsDraft: !result.published,
-      syncedAt: new Date(),
+      reason: "connector_paused",
     });
-
-    return {
-      platform: "devto",
-      success: true,
-      url: result.url,
-    };
-  } catch (error) {
-    if (error instanceof DevtoApiError) {
-      return {
-        platform: "devto",
-        success: false,
-        error: error.message,
-      };
-    }
-
     return {
       platform: "devto",
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error publishing to Dev.to",
+      skipped: true,
+      reason: "connector_paused",
     };
   }
+
+  // Check for Dev.to integration
+  const integration = await db.query.devtoIntegrations.findFirst({
+    where: and(
+      eq(devtoIntegrations.workspaceId, workspaceId),
+      eq(devtoIntegrations.enabled, true)
+    ),
+  });
+
+  if (!integration) {
+    return {
+      platform: "devto",
+      success: false,
+      error: "Dev.to integration not configured or disabled",
+    };
+  }
+
+  // (2) Wrap the publish call with the retry-publisher
+  emitPublishEvent(workspaceId, "devto", "publish_attempt", { postId });
+
+  const retryResult = await publishWithRetry({
+    publishFn: async (): Promise<PublishResult> => {
+      const result = await publishToDevto(integration.apiKey, {
+        title: postTitle,
+        body_markdown: postMarkdown,
+        published: true,
+        tags: [],
+      });
+
+      // Record publication
+      await db.insert(devtoPublications).values({
+        workspaceId,
+        postId,
+        integrationId: integration.id,
+        devtoArticleId: result.id,
+        devtoUrl: result.url,
+        publishedAsDraft: !result.published,
+        syncedAt: new Date(),
+      });
+
+      return {
+        platform: "devto",
+        success: true,
+        url: result.url,
+      };
+    },
+    platform: "devto",
+    postId,
+    workspaceId,
+  });
+
+  // Emit observability for retries
+  if (retryResult.attempts > 1) {
+    emitPublishEvent(workspaceId, "devto", "publish_retried", {
+      postId,
+      attempts: retryResult.attempts,
+      idempotencyKey: retryResult.idempotencyKey,
+    });
+  }
+
+  // (3) On auth failure, update connector health status to paused
+  if (!retryResult.result.success && retryResult.result.error) {
+    const isAuthFailure =
+      retryResult.result.error.includes("Authentication failed") ||
+      retryResult.result.error.includes("401") ||
+      retryResult.result.error.includes("403");
+
+    if (isAuthFailure) {
+      const healthResult: HealthCheckResult = {
+        platform: "devto",
+        status: "auth_expired",
+        responseTimeMs: 0,
+        errorMessage: retryResult.result.error,
+        errorCode: "auth_expired",
+      };
+      await persistHealthCheckResults(workspaceId, [healthResult]);
+
+      emitPublishError(workspaceId, "devto", "auth_expired", {
+        postId,
+        attempts: retryResult.attempts,
+      });
+    } else {
+      emitPublishError(workspaceId, "devto", retryResult.result.error, {
+        postId,
+        attempts: retryResult.attempts,
+      });
+    }
+  }
+
+  if (retryResult.result.success && !retryResult.result.skipped) {
+    emitPublishEvent(workspaceId, "devto", "publish_success", {
+      postId,
+      url: retryResult.result.url,
+      attempts: retryResult.attempts,
+    });
+  }
+
+  return retryResult.result;
 }
 
 export async function publishToAllPlatforms(
@@ -156,7 +270,7 @@ export async function publishToAllPlatforms(
 
   // Calculate summary statistics
   const publishedCount = results.filter((r) => r.success && !r.skipped).length;
-  const failedCount = results.filter((r) => !r.success).length;
+  const failedCount = results.filter((r) => !r.success && !r.skipped).length;
   const skippedCount = results.filter((r) => r.skipped).length;
   const overallSuccess = failedCount === 0 && results.length > 0;
 
