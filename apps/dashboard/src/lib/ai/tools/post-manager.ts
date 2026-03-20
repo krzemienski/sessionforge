@@ -1,9 +1,14 @@
 import { db } from "@/lib/db";
-import { posts } from "@sessionforge/db";
+import { posts, workspaceActivity } from "@sessionforge/db";
 import { eq, and, desc } from "drizzle-orm";
 import type { contentTypeEnum, postStatusEnum, toneProfileEnum } from "@sessionforge/db";
 import { CitationExtractor } from "@/lib/citations/extractor";
 import { createRevision } from "@/lib/revisions/manager";
+import {
+  getWorkflowSettings,
+  validateStatusTransition,
+  WorkflowError,
+} from "@/lib/approval/workflow-engine";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
 type PostStatus = (typeof postStatusEnum.enumValues)[number];
@@ -38,6 +43,8 @@ export interface UpdatePostInput {
   versionType?: string;
   editType?: string;
   createdBy?: string;
+  /** User ID of the person making the update, required for workflow validation */
+  userId?: string;
   // SEO/GEO fields
   metaTitle?: string;
   metaDescription?: string;
@@ -119,21 +126,33 @@ export async function updatePost(
   postId: string,
   input: UpdatePostInput
 ) {
+  // Fetch the current post to validate status transitions
+  const currentPost = await db.query.posts.findFirst({
+    where: and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId)),
+  });
+
+  if (!currentPost) {
+    throw new Error(`Post ${postId} not found`);
+  }
+
+  // Enforce approval workflow when status is changing
+  if (input.status !== undefined && input.status !== currentPost.status) {
+    const userId = input.userId ?? input.createdBy ?? "system";
+    await validateStatusTransition(
+      postId,
+      workspaceId,
+      currentPost.status as PostStatus,
+      input.status,
+      userId
+    );
+  }
+
   // If markdown is being updated and we have versioning params, create a revision first
   if (
     input.markdown !== undefined &&
     input.versionType &&
     input.editType
   ) {
-    // Get the current post to extract title for the revision
-    const currentPost = await db.query.posts.findFirst({
-      where: and(eq(posts.id, postId), eq(posts.workspaceId, workspaceId)),
-    });
-
-    if (!currentPost) {
-      throw new Error(`Post ${postId} not found`);
-    }
-
     // Create a revision with the NEW markdown content
     await createRevision({
       postId,
@@ -188,6 +207,22 @@ export async function updatePost(
 
   if (!updated) {
     throw new Error(`Post ${postId} not found`);
+  }
+
+  // Log status transitions to workspaceActivity for audit trail
+  if (input.status !== undefined && input.status !== currentPost.status) {
+    await db.insert(workspaceActivity).values({
+      workspaceId,
+      userId: input.userId ?? input.createdBy ?? null,
+      action: "post_status_change",
+      resourceType: "post",
+      resourceId: postId,
+      metadata: {
+        previousStatus: currentPost.status,
+        newStatus: input.status,
+        postTitle: updated.title,
+      },
+    });
   }
 
   return updated;
