@@ -62,3 +62,118 @@ export function statusLabel(status: string) {
       return status;
   }
 }
+
+// --- Metrics types ---
+
+export interface StageLatency {
+  avgMs: number;
+  count: number;
+}
+
+export interface DailyThroughput {
+  date: string;
+  runs: number;
+  failures: number;
+}
+
+export interface PipelineMetrics {
+  workspace: string;
+  dateRange: { since: string; until: string };
+  totalRuns: number;
+  stateCounts: Record<string, number>;
+  failureRate: number;
+  throughput: number;
+  avgDurationMs: number;
+  queueDepth: number;
+  stageLatency: Record<string, StageLatency>;
+  dailyThroughput?: DailyThroughput[];
+}
+
+// --- Run detail types ---
+
+export interface RunDetail {
+  run: {
+    id: string;
+    triggerId: string | null;
+    workspaceId: string;
+    source: string;
+    status: string;
+    sessionsScanned: number;
+    insightsExtracted: number;
+    postId: string | null;
+    errorMessage: string | null;
+    startedAt: string;
+    completedAt: string | null;
+    durationMs: number | null;
+    triggerName: string | null;
+    triggerType: string | null;
+  };
+  events: Array<{
+    id: string;
+    agentType: string;
+    eventType: string;
+    level: string;
+    message: string;
+    createdAt: string;
+    [key: string]: unknown;
+  }>;
+  agentRuns: Array<{
+    id: string;
+    agentType: string;
+    status: string;
+    startedAt: string;
+    completedAt: string | null;
+    durationMs: number | null;
+    [key: string]: unknown;
+  }>;
+  publishStatus: {
+    postId: string;
+    title: string;
+    status: string;
+    contentType: string;
+    publishedAt: string | null;
+    createdAt: string | null;
+  } | null;
+}
+
+// --- Helper functions ---
+
+export function formatLatency(ms: number): string {
+  if (ms < 1_000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
+  const minutes = Math.floor(ms / 60_000);
+  const seconds = Math.round((ms % 60_000) / 1_000);
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+export function dateRangeFromTimeframe(timeframe: string): {
+  since: string;
+  until: string;
+} {
+  const now = new Date();
+  const until = now.toISOString();
+
+  let daysBack = 7;
+  switch (timeframe) {
+    case "1d":
+      daysBack = 1;
+      break;
+    case "7d":
+      daysBack = 7;
+      break;
+    case "14d":
+      daysBack = 14;
+      break;
+    case "30d":
+      daysBack = 30;
+      break;
+    case "90d":
+      daysBack = 90;
+      break;
+    default:
+      daysBack = 7;
+  }
+
+  const since = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1_000);
+  return { since: since.toISOString(), until };
+}
