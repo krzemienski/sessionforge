@@ -6,7 +6,7 @@ import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useGhostIntegration, useGhostPublication } from "@/hooks/use-ghost";
 import { useMediumIntegration, useMediumPublication } from "@/hooks/use-medium";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X } from "lucide-react";
+import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X, ShieldCheck } from "lucide-react";
 import dynamic from "next/dynamic";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import type { Layout } from "react-resizable-panels";
@@ -51,6 +51,7 @@ import { SeriesNavLinks } from "@/components/series/series-nav-links";
 import { CitationToggle, type CitationDensity } from "@/components/citations/citation-toggle";
 import { RepurposeButton } from "@/components/content/repurpose-button";
 import { RepurposeTracker } from "@/components/content/repurpose-tracker";
+import { useApprovalSettings, useReviewStatus, useSubmitForReview } from "@/hooks/use-approval";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -67,6 +68,11 @@ const SeoPanel = dynamic(
 const RevisionHistoryPanel = dynamic(
   () => import("@/components/editor/revision-history-panel").then((m) => m.RevisionHistoryPanel),
   { ssr: false, loading: () => <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg animate-pulse" /> }
+);
+
+const ApprovalPanel = dynamic(
+  () => import("@/components/editor/approval-panel").then((m) => m.ApprovalPanel),
+  { ssr: false }
 );
 
 const AUTO_SAVE_INTERVAL_MS = 2 * 60 * 1000;
@@ -108,7 +114,7 @@ export default function ContentEditorPage() {
   const [externalMd, setExternalMd] = useState<string | null>(null);
   const [hashnodeModalOpen, setHashnodeModalOpen] = useState(false);
   const [hashnodeUrl, setHashnodeUrl] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository" | "citations">("chat");
+  const [sidebarTab, setSidebarTab] = useState<"chat" | "seo" | "evidence" | "supplementary" | "media" | "repository" | "citations" | "review">("chat");
   const [citationsEnabled, setCitationsEnabled] = useState(true);
   const [citationDensity, setCitationDensity] = useState<CitationDensity>("all");
   const [highlightedCitation, setHighlightedCitation] = useState<string | null>(null);
@@ -124,6 +130,11 @@ export default function ContentEditorPage() {
   const [seoRefreshKey, setSeoRefreshKey] = useState(0);
   const initializedRef = useRef(false);
   const lastSavedMarkdownRef = useRef("");
+  const approvalSettings = useApprovalSettings(workspace);
+  const reviewStatus = useReviewStatus(postId);
+  const submitForReview = useSubmitForReview();
+  const isWorkflowEnabled = approvalSettings.data?.enabled === true;
+  const isApproved = reviewStatus.data?.status === "approved";
 
   useEffect(() => {
     if (post.data && !initializedRef.current) {
@@ -353,7 +364,10 @@ export default function ContentEditorPage() {
             onChange={(e) => setStatus(e.target.value)}
             className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-3 py-2 md:py-1 text-sm text-sf-text-primary min-h-[44px] md:min-h-0"
           >
+            <option value="idea">Idea</option>
             <option value="draft">Draft</option>
+            <option value="in_review">In Review</option>
+            <option value="approved">Approved</option>
             <option value="published">Published</option>
             <option value="archived">Archived</option>
           </select>
@@ -382,6 +396,26 @@ export default function ContentEditorPage() {
             <Save size={16} />
             {update.isPending ? "Saving..." : "Save"}
           </button>
+          {isWorkflowEnabled && (status === "draft" || status === "idea") && (
+            <button
+              onClick={() => submitForReview.mutate({ postId })}
+              disabled={submitForReview.isPending}
+              className="flex items-center gap-2 bg-amber-600 text-white px-4 py-2 rounded-sf font-medium text-sm hover:bg-amber-700 transition-colors disabled:opacity-50 min-h-[44px] md:min-h-0"
+            >
+              <ShieldCheck size={16} />
+              {submitForReview.isPending ? "Submitting..." : "Submit for Review"}
+            </button>
+          )}
+          {isWorkflowEnabled && !isApproved && status !== "published" && (
+            <button
+              disabled
+              title="Content must be approved before publishing"
+              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-muted px-4 py-2 rounded-sf font-medium text-sm cursor-not-allowed min-h-[44px] md:min-h-0"
+            >
+              <ShieldCheck size={16} />
+              Approval Required
+            </button>
+          )}
         </div>
       </div>
 
@@ -434,7 +468,7 @@ export default function ContentEditorPage() {
               <div className="flex-1 bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden flex flex-col min-h-0">
                 {/* Sidebar tabs */}
                 <div className="flex gap-1 p-2 border-b border-sf-border">
-                  {(["chat", "seo", "evidence", "citations", "supplementary", "media", "repository"] as const).map((tab) => (
+                  {(["chat", "seo", "evidence", "citations", "review", "supplementary", "media", "repository"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setSidebarTab(tab)}
@@ -445,7 +479,7 @@ export default function ContentEditorPage() {
                           : "text-sf-text-secondary hover:bg-sf-bg-hover"
                       )}
                     >
-                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "citations" ? "Citations" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : "More"}
+                      {tab === "chat" ? "AI Chat" : tab === "seo" ? "SEO" : tab === "evidence" ? "Evidence" : tab === "citations" ? "Citations" : tab === "review" ? "Review" : tab === "media" ? "Media" : tab === "repository" ? "Repo" : "More"}
                     </button>
                   ))}
                 </div>
@@ -475,6 +509,13 @@ export default function ContentEditorPage() {
                       onToggle={setCitationsEnabled}
                       density={citationDensity}
                       onDensityChange={setCitationDensity}
+                    />
+                  )}
+                  {sidebarTab === "review" && (
+                    <ApprovalPanel
+                      postId={postId}
+                      postStatus={status}
+                      workspace={workspace}
                     />
                   )}
                   {sidebarTab === "supplementary" && (
