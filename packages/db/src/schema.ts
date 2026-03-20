@@ -181,6 +181,8 @@ export const scheduledPublicationStatusEnum = pgEnum("scheduled_publication_stat
   "publishing",
   "published",
   "failed",
+  "retry_exhausted",
+  "paused",
 ]);
 
 export const recommendationTypeEnum = pgEnum("recommendation_type", [
@@ -195,6 +197,29 @@ export const portfolioThemeEnum = pgEnum("portfolio_theme", [
   "minimal",
   "developer-dark",
   "colorful",
+]);
+
+export const researchItemTypeEnum = pgEnum("research_item_type", [
+  "link",
+  "note",
+  "code_snippet",
+  "session_snippet",
+]);
+
+export const integrationHealthStatusEnum = pgEnum("integration_health_status", [
+  "healthy",
+  "degraded",
+  "unhealthy",
+  "paused",
+]);
+
+export const integrationPlatformEnum = pgEnum("integration_platform", [
+  "devto",
+  "ghost",
+  "medium",
+  "twitter",
+  "linkedin",
+  "wordpress",
 ]);
 
 // ── Types ──
@@ -789,6 +814,7 @@ export const devtoIntegrations = pgTable(
     apiKey: text("api_key").notNull(),
     username: text("username"),
     enabled: boolean("enabled").default(true),
+    healthStatus: integrationHealthStatusEnum("health_status").default("healthy"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -865,6 +891,7 @@ export const ghostIntegrations = pgTable(
     ghostUrl: text("ghost_url").notNull(),
     adminApiKey: text("admin_api_key").notNull(),
     enabled: boolean("enabled").default(true),
+    healthStatus: integrationHealthStatusEnum("health_status").default("healthy"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -913,6 +940,7 @@ export const mediumIntegrations = pgTable(
     username: text("username"),
     mediumUserId: text("medium_user_id"),
     enabled: boolean("enabled").default(true),
+    healthStatus: integrationHealthStatusEnum("health_status").default("healthy"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -1085,6 +1113,7 @@ export const wordpressConnections = pgTable(
     username: text("username").notNull(),
     encryptedAppPassword: text("encrypted_app_password").notNull(),
     isActive: boolean("is_active").default(true),
+    healthStatus: integrationHealthStatusEnum("health_status").default("healthy"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
   },
@@ -1806,6 +1835,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.id],
     references: [postStyleMetrics.postId],
   }),
+  researchItems: many(researchItems),
 }));
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
@@ -2120,6 +2150,7 @@ export const twitterIntegrations = pgTable(
     twitterUserId: text("twitter_user_id"),
     username: text("username"),
     enabled: boolean("enabled").default(true),
+    healthStatus: integrationHealthStatusEnum("health_status").default("healthy"),
     lastSyncAt: timestamp("last_sync_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
@@ -2142,6 +2173,7 @@ export const linkedinIntegrations = pgTable(
     linkedinUserId: text("linkedin_user_id"),
     username: text("username"),
     enabled: boolean("enabled").default(true),
+    healthStatus: integrationHealthStatusEnum("health_status").default("healthy"),
     lastSyncAt: timestamp("last_sync_at"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
@@ -2522,3 +2554,87 @@ export const postStyleMetricsRelations = relations(postStyleMetrics, ({ one }) =
     references: [workspaces.id],
   }),
 }));
+
+// ── Research Workspace & Source Notebook (from 026-research-workspace-source-notebook) ──
+
+export const researchItems = pgTable(
+  "research_items",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    type: researchItemTypeEnum("type").notNull(),
+    title: text("title").notNull(),
+    content: text("content"),
+    url: text("url"),
+    tags: jsonb("tags").$type<string[]>().default([]),
+    credibilityRating: integer("credibility_rating"),
+    sessionId: text("session_id").references(() => claudeSessions.id, {
+      onDelete: "set null",
+    }),
+    messageIndex: integer("message_index"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("researchItems_postId_idx").on(table.postId),
+    index("researchItems_workspaceId_idx").on(table.workspaceId),
+  ]
+);
+
+export const researchItemsRelations = relations(researchItems, ({ one }) => ({
+  post: one(posts, {
+    fields: [researchItems.postId],
+    references: [posts.id],
+  }),
+  workspace: one(workspaces, {
+    fields: [researchItems.workspaceId],
+    references: [workspaces.id],
+  }),
+  session: one(claudeSessions, {
+    fields: [researchItems.sessionId],
+    references: [claudeSessions.id],
+  }),
+}));
+
+// ── Integration Health Checks (from 023-automated-integration-health-checks) ──
+
+export const integrationHealthChecks = pgTable(
+  "integration_health_checks",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    platform: integrationPlatformEnum("platform").notNull(),
+    status: integrationHealthStatusEnum("status").notNull().default("healthy"),
+    lastCheckedAt: timestamp("last_checked_at").defaultNow(),
+    errorMessage: text("error_message"),
+    errorCode: text("error_code"),
+    responseTimeMs: integer("response_time_ms"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("integrationHealthChecks_workspace_platform_uidx").on(
+      table.workspaceId,
+      table.platform
+    ),
+    index("integrationHealthChecks_workspaceId_idx").on(table.workspaceId),
+  ]
+);
+
+export const integrationHealthChecksRelations = relations(
+  integrationHealthChecks,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [integrationHealthChecks.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);

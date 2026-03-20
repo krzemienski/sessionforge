@@ -10,7 +10,7 @@
  * integrated with database mocks to verify end-to-end citation flow.
  */
 
-import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock database state
@@ -38,39 +38,40 @@ const mockInsightData = {
 let capturedPostData: any = null;
 
 // Mock database functions
-const mockFindFirstInsight = mock(async () => mockInsightData);
+const mockFindFirstInsight = vi.fn(async () => mockInsightData);
 
 // insert chain: db.insert().values().returning()
-const mockInsertReturning = mock(async (values: any[]) => {
+const mockInsertReturning = vi.fn(async (values: any[]) => {
   // Capture the inserted data for assertions
   capturedPostData = values[0];
   return [capturedPostData];
 });
 
-const mockInsertValues = mock((values: any) => {
+const mockInsertValues = vi.fn((values: any) => {
   return { returning: () => mockInsertReturning([values]) };
 });
 
-const mockDbInsert = mock(() => ({ values: mockInsertValues }));
+const mockDbInsert = vi.fn(() => ({ values: mockInsertValues }));
 
 // ---------------------------------------------------------------------------
 // Register module mocks BEFORE any imports
 // ---------------------------------------------------------------------------
 
-mock.module("@/lib/db", () => ({
+vi.mock("@/lib/db", () => ({
   db: {
     query: {
       insights: {
-        findFirst: mockFindFirstInsight,
+        findFirst: (...args: any[]) => mockFindFirstInsight(...args),
       },
     },
-    insert: mockDbInsert,
+    insert: (...args: any[]) => mockDbInsert(...args),
   },
 }));
 
-mock.module("@sessionforge/db", () => ({
+vi.mock("@sessionforge/db", () => ({
   posts: {},
   insights: {},
+  postRevisions: {},
   insightCategoryEnum: {
     enumValues: ["tool_discovery"],
   },
@@ -83,14 +84,25 @@ mock.module("@sessionforge/db", () => ({
   toneProfileEnum: {
     enumValues: ["technical"],
   },
+  editTypeEnum: {
+    enumValues: ["ai_generated", "manual", "auto_save"],
+  },
+  versionTypeEnum: {
+    enumValues: ["major", "minor", "patch"],
+  },
 }));
 
-mock.module("drizzle-orm", () => ({
-  eq: mock(() => null),
-  and: mock(() => null),
-  or: mock(() => null),
-  desc: mock(() => null),
-  asc: mock(() => null),
+vi.mock("drizzle-orm", () => ({
+  eq: vi.fn(() => null),
+  and: vi.fn(() => null),
+  or: vi.fn(() => null),
+  desc: vi.fn(() => null),
+  asc: vi.fn(() => null),
+  inArray: vi.fn(() => null),
+}));
+
+vi.mock("diff", () => ({
+  diffLines: vi.fn(() => []),
 }));
 
 // ---------------------------------------------------------------------------
