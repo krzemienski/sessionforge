@@ -194,6 +194,22 @@ export const portfolioThemeEnum = pgEnum("portfolio_theme", [
   "colorful",
 ]);
 
+export const experimentStatusEnum = pgEnum("experiment_status", [
+  "draft",
+  "running",
+  "paused",
+  "completed",
+  "cancelled",
+]);
+
+export const experimentKpiEnum = pgEnum("experiment_kpi", [
+  "views",
+  "likes",
+  "comments",
+  "shares",
+  "engagement_rate",
+]);
+
 // ── Types ──
 
 export interface SeoMetadata {
@@ -2518,3 +2534,30 @@ export const postStyleMetricsRelations = relations(postStyleMetrics, ({ one }) =
     references: [workspaces.id],
   }),
 }));
+
+// ── Experiments (A/B Headline & Hook Testing) ──
+
+export const experiments = pgTable(
+  "experiments",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    kpi: experimentKpiEnum("kpi").notNull(),
+    status: experimentStatusEnum("status").default("draft"),
+    startsAt: timestamp("starts_at"),
+    endsAt: timestamp("ends_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("experiments_workspaceId_idx").on(table.workspaceId),
+    index("experiments_postId_idx").on(table.postId),
+    index("experiments_status_idx").on(table.status),
+  ]
+);
