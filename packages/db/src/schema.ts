@@ -138,6 +138,8 @@ export const batchJobTypeEnum = pgEnum("batch_job_type", [
   "generate_content",
   "batch_archive",
   "batch_delete",
+  "backup_bundle",
+  "restore_bundle",
 ]);
 
 export const batchJobStatusEnum = pgEnum("batch_job_status", [
@@ -198,6 +200,18 @@ export const portfolioThemeEnum = pgEnum("portfolio_theme", [
   "minimal",
   "developer-dark",
   "colorful",
+]);
+
+export const backupBundleStatusEnum = pgEnum("backup_bundle_status", [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+]);
+
+export const backupBundleFormatEnum = pgEnum("backup_bundle_format", [
+  "json",
+  "zip",
 ]);
 
 export const verificationStatusEnum = pgEnum("verification_status", [
@@ -2849,3 +2863,40 @@ export const integrationHealthChecksRelations = relations(
     }),
   })
 );
+
+// ── Backup Bundles ──
+
+export const backupBundles = pgTable(
+  "backup_bundles",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "set null" }),
+    status: backupBundleStatusEnum("status").notNull().default("pending"),
+    postCount: integer("post_count").notNull().default(0),
+    seriesCount: integer("series_count").notNull().default(0),
+    fileSizeBytes: integer("file_size_bytes"),
+    bundleFormat: backupBundleFormatEnum("bundle_format").notNull().default("zip"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("backupBundles_workspaceId_idx").on(table.workspaceId),
+    index("backupBundles_createdBy_idx").on(table.createdBy),
+    index("backupBundles_status_idx").on(table.status),
+  ]
+);
+
+export const backupBundlesRelations = relations(backupBundles, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [backupBundles.workspaceId],
+    references: [workspaces.id],
+  }),
+  createdByUser: one(users, {
+    fields: [backupBundles.createdBy],
+    references: [users.id],
+  }),
+}));
