@@ -8,6 +8,7 @@ import { ApiKeysTab } from "@/components/settings/api-keys-tab";
 import { IntegrationsTab } from "@/components/settings/integrations-tab";
 import { WebhooksTab } from "@/components/settings/webhooks-tab";
 import { SourcesTab } from "@/components/settings/sources-tab";
+import { BackupRestoreTab } from "@/components/settings/backup-restore-tab";
 
 const TABS = [
   { id: "general", label: "General" },
@@ -16,6 +17,7 @@ const TABS = [
   { id: "integrations", label: "Integrations" },
   { id: "webhooks", label: "Webhooks" },
   { id: "sources", label: "Sources" },
+  { id: "backup-restore", label: "Backup & Restore" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -68,6 +70,7 @@ export default function SettingsPage() {
       {activeTab === "integrations" && <IntegrationsTab workspace={workspace} />}
       {activeTab === "webhooks" && <WebhooksTab workspace={workspace} />}
       {activeTab === "sources" && <SourcesTab workspace={workspace} />}
+      {activeTab === "backup-restore" && <BackupRestoreTab workspace={workspace} />}
     </div>
   );
 }
