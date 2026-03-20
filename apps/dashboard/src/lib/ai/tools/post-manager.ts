@@ -100,6 +100,11 @@ export async function createPost(input: CreatePostInput) {
   const wordCount = countWords(input.markdown);
   const citations = extractCitations(input.markdown);
 
+  // Auto-set verificationStatus to 'pending' for AI-generated content
+  const isAIGenerated =
+    input.sourceMetadata?.generatedBy !== undefined &&
+    input.sourceMetadata.generatedBy !== "manual";
+
   const [created] = await db
     .insert(posts)
     .values({
@@ -115,6 +120,7 @@ export async function createPost(input: CreatePostInput) {
       wordCount,
       sourceMetadata: input.sourceMetadata,
       citations,
+      verificationStatus: isAIGenerated ? "pending" : "unverified",
     })
     .returning();
 

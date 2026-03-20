@@ -9,6 +9,8 @@
 | Docker (local) | With Claude CLI | Yes | Full functionality |
 | Docker (no CLI) | Gracefully disabled | Depends on mount | Content management without AI |
 
+> **Self-hosting with your own infrastructure?** See the comprehensive [Self-Hosted Deployment Guide](docs/self-hosted.md) for BYO PostgreSQL/Redis setup, feature parity table, and AI configuration.
+
 ---
 
 ## Vercel Deployment

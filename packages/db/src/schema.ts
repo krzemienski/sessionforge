@@ -214,6 +214,36 @@ export const backupBundleFormatEnum = pgEnum("backup_bundle_format", [
   "zip",
 ]);
 
+export const verificationStatusEnum = pgEnum("verification_status", [
+  "unverified",
+  "pending",
+  "verified",
+  "has_issues",
+]);
+
+export const riskSeverityEnum = pgEnum("risk_severity", [
+  "critical",
+  "high",
+  "medium",
+  "low",
+  "info",
+]);
+
+export const riskCategoryEnum = pgEnum("risk_category", [
+  "unsupported_claim",
+  "outdated_info",
+  "version_specific",
+  "subjective_opinion",
+  "unverified_metric",
+]);
+
+export const riskFlagStatusEnum = pgEnum("risk_flag_status", [
+  "unresolved",
+  "verified",
+  "dismissed",
+  "overridden",
+]);
+
 export const approvalDecisionTypeEnum = pgEnum("approval_decision_type", [
   "approved",
   "rejected",
@@ -262,6 +292,27 @@ export interface SeoMetadata {
   keywordDensity?: number | null;
   suggestedKeywords?: string[] | null;
   generatedAt?: string | null;
+}
+
+export interface RiskFlag {
+  id: string;
+  sentence: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  category:
+    | "unsupported_claim"
+    | "outdated_info"
+    | "version_specific"
+    | "subjective_opinion"
+    | "unverified_metric";
+  evidence: {
+    sessionId?: string;
+    messageIndex?: number;
+    text: string;
+    type: "session_snippet" | "insight" | "citation";
+  }[];
+  status: "unresolved" | "verified" | "dismissed" | "overridden";
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
 }
 
 
@@ -529,6 +580,9 @@ export const posts = pgTable(
         type: "tool_call" | "file_edit" | "conversation" | "evidence";
       }[]
     >(),
+    // ── Verification fields (from 024-factual-claim-verification-risk-flags) ──
+    verificationStatus: verificationStatusEnum("verification_status").default("unverified"),
+    riskFlags: jsonb("risk_flags").$type<RiskFlag[]>(),
     createdBy: text("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -545,6 +599,30 @@ export const posts = pgTable(
       table.createdAt
     ),
     index("posts_createdBy_idx").on(table.createdBy),
+  ]
+);
+
+// ── Risk Flag Resolutions (from 024-factual-claim-verification-risk-flags) ──
+
+export const riskFlagResolutions = pgTable(
+  "risk_flag_resolutions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    flagId: text("flag_id").notNull(),
+    status: riskFlagStatusEnum("status").notNull(),
+    resolvedBy: text("resolved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    evidenceNotes: text("evidence_notes"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("riskFlagResolutions_postId_idx").on(table.postId),
+    index("riskFlagResolutions_postId_flagId_idx").on(table.postId, table.flagId),
   ]
 );
 
@@ -1965,10 +2043,25 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
     fields: [posts.id],
     references: [postStyleMetrics.postId],
   }),
+  riskFlagResolutions: many(riskFlagResolutions),
   reviewers: many(postReviewers),
   approvalDecisions: many(approvalDecisions),
   researchItems: many(researchItems),
 }));
+
+export const riskFlagResolutionsRelations = relations(
+  riskFlagResolutions,
+  ({ one }) => ({
+    post: one(posts, {
+      fields: [riskFlagResolutions.postId],
+      references: [posts.id],
+    }),
+    resolver: one(users, {
+      fields: [riskFlagResolutions.resolvedBy],
+      references: [users.id],
+    }),
+  })
+);
 
 export const postRevisionsRelations = relations(postRevisions, ({ one }) => ({
   post: one(posts, {

@@ -7,6 +7,7 @@ import { eq, and } from "drizzle-orm/sql";
 import { decryptAppPassword } from "@/lib/wordpress/crypto";
 import { WordPressClient } from "@/lib/wordpress/client";
 import { markdownToHtml } from "@/lib/export";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
@@ -35,6 +36,38 @@ export async function POST(
     }
 
     await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.PUBLISHING_PUBLISH);
+
+    // Parse and validate request body early (needed for publish-gate override check)
+    const body = await req.json().catch(() => ({})) as {
+      status?: "draft" | "publish";
+      excerpt?: string;
+      categories?: number[];
+      tags?: number[];
+      featuredMediaId?: number;
+      overrideRiskFlags?: boolean;
+    };
+
+    // Publish-gate check: block if unresolved critical risk flags exist
+    const flags = post.riskFlags ?? [];
+    const gateResult = canPublish(flags);
+
+    if (!gateResult.allowed) {
+      if (!body.overrideRiskFlags) {
+        return NextResponse.json(
+          {
+            error: "unresolved_critical_flags",
+            flags: gateResult.blockingFlags,
+            requiresOverride: true,
+          },
+          { status: 409 }
+        );
+      }
+
+      const overridePolicy = getOverridePolicy("owner");
+      if (!overridePolicy.canOverride) {
+        throw new AppError("Insufficient permissions to override risk flags", ERROR_CODES.FORBIDDEN);
+      }
+    }
 
     // 2. Fetch workspace WordPress connection
     const connectionRows = await db
@@ -69,21 +102,14 @@ export async function POST(
       throw new AppError("Failed to decrypt stored credentials", ERROR_CODES.INTERNAL_ERROR);
     }
 
-    // Parse and validate request body
-    const body = await req.json().catch(() => ({}));
+    // Destructure body fields for WordPress
     const {
       status = "draft",
       excerpt,
       categories,
       tags,
       featuredMediaId,
-    } = body as {
-      status?: "draft" | "publish";
-      excerpt?: string;
-      categories?: number[];
-      tags?: number[];
-      featuredMediaId?: number;
-    };
+    } = body;
 
     if (status !== "draft" && status !== "publish") {
       throw new AppError("status must be 'draft' or 'publish'", ERROR_CODES.BAD_REQUEST);
