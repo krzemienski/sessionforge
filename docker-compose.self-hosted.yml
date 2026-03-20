@@ -72,7 +72,7 @@ services:
       # UPSTASH_QSTASH_NEXT_SIGNING_KEY: "${UPSTASH_QSTASH_NEXT_SIGNING_KEY}"
       # -----------------------------------------------------------------------
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/healthcheck || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
