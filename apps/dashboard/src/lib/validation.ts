@@ -180,6 +180,15 @@ export const triggerExecuteSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Approval workflow schemas
+// ---------------------------------------------------------------------------
+
+export const approvalSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  requiredApprovers: z.number().int().min(1).optional(),
+});
+
+// ---------------------------------------------------------------------------
 // Inferred types (handy for route handlers)
 // ---------------------------------------------------------------------------
 
@@ -200,3 +209,4 @@ export type DevtoPublishInput = z.infer<typeof devtoPublishSchema>;
 export type TriggerCreateInput = z.infer<typeof triggerCreateSchema>;
 export type TriggerUpdateInput = z.infer<typeof triggerUpdateSchema>;
 export type TriggerExecuteInput = z.infer<typeof triggerExecuteSchema>;
+export type ApprovalSettingsInput = z.infer<typeof approvalSettingsSchema>;
