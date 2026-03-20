@@ -9,6 +9,7 @@ import { IntegrationsTab } from "@/components/settings/integrations-tab";
 import { WebhooksTab } from "@/components/settings/webhooks-tab";
 import { SourcesTab } from "@/components/settings/sources-tab";
 import { BackupRestoreTab } from "@/components/settings/backup-restore-tab";
+import { PortfolioSettingsForm } from "@/components/settings/portfolio-settings-form";
 
 const TABS = [
   { id: "general", label: "General" },
@@ -18,6 +19,7 @@ const TABS = [
   { id: "webhooks", label: "Webhooks" },
   { id: "sources", label: "Sources" },
   { id: "backup-restore", label: "Backup & Restore" },
+  { id: "portfolio", label: "Portfolio" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -71,6 +73,7 @@ export default function SettingsPage() {
       {activeTab === "webhooks" && <WebhooksTab workspace={workspace} />}
       {activeTab === "sources" && <SourcesTab workspace={workspace} />}
       {activeTab === "backup-restore" && <BackupRestoreTab workspace={workspace} />}
+      {activeTab === "portfolio" && <PortfolioSettingsForm workspace={workspace} />}
     </div>
   );
 }
