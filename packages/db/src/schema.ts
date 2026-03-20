@@ -38,6 +38,7 @@ export const postStatusEnum = pgEnum("post_status", [
   "idea",
   "in_review",
   "scheduled",
+  "approved",
 ]);
 
 export const contentTypeEnum = pgEnum("content_type", [
@@ -1642,6 +1643,23 @@ export const recommendationFeedback = pgTable(
   ]
 );
 
+export const approvalWorkflows = pgTable(
+  "approval_workflows",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").default(false),
+    requiredApprovers: integer("required_approvers").default(1),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("approvalWorkflows_workspaceId_uidx").on(table.workspaceId),
+  ]
+);
+
 // ── Relations (PRD §4.3) ──
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1715,11 +1733,19 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   linkedinPublications: many(linkedinPublications),
   socialAnalytics: many(socialAnalytics),
   scanSources: many(scanSources),
+  approvalWorkflow: one(approvalWorkflows),
 }));
 
 export const styleSettingsRelations = relations(styleSettings, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [styleSettings.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+export const approvalWorkflowsRelations = relations(approvalWorkflows, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [approvalWorkflows.workspaceId],
     references: [workspaces.id],
   }),
 }));
