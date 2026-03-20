@@ -12,6 +12,7 @@ import {
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, devtoPublishSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
 
@@ -83,6 +84,28 @@ export async function POST(request: Request) {
       post.workspaceId,
       PERMISSIONS.PUBLISHING_PUBLISH
     );
+
+    // Publish-gate check: block if unresolved critical risk flags exist
+    const postFlags = post.riskFlags ?? [];
+    const gateResult = canPublish(postFlags);
+
+    if (!gateResult.allowed) {
+      if (!rawBody.overrideRiskFlags) {
+        return NextResponse.json(
+          {
+            error: "unresolved_critical_flags",
+            flags: gateResult.blockingFlags,
+            requiresOverride: true,
+          },
+          { status: 409 }
+        );
+      }
+
+      const overridePolicy = getOverridePolicy("owner");
+      if (!overridePolicy.canOverride) {
+        throw new AppError("Insufficient permissions to override risk flags", ERROR_CODES.FORBIDDEN);
+      }
+    }
 
     const integration = await db.query.devtoIntegrations.findFirst({
       where: and(
@@ -183,6 +206,28 @@ export async function PUT(request: Request) {
       post.workspaceId,
       PERMISSIONS.PUBLISHING_PUBLISH
     );
+
+    // Publish-gate check: block if unresolved critical risk flags exist
+    const putFlags = post.riskFlags ?? [];
+    const putGateResult = canPublish(putFlags);
+
+    if (!putGateResult.allowed) {
+      if (!rawBody.overrideRiskFlags) {
+        return NextResponse.json(
+          {
+            error: "unresolved_critical_flags",
+            flags: putGateResult.blockingFlags,
+            requiresOverride: true,
+          },
+          { status: 409 }
+        );
+      }
+
+      const overridePolicy = getOverridePolicy("owner");
+      if (!overridePolicy.canOverride) {
+        throw new AppError("Insufficient permissions to override risk flags", ERROR_CODES.FORBIDDEN);
+      }
+    }
 
     const publication = await db.query.devtoPublications.findFirst({
       where: eq(devtoPublications.postId, postId),

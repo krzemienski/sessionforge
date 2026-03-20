@@ -21,6 +21,7 @@ import { handleMarkdownEditorTool } from "./tools/markdown-editor";
 import { handleSkillLoaderTool } from "./tools/skill-loader";
 import { handleEvidenceTool } from "./tools/evidence-tools";
 import { handleIngestionTool } from "./tools/ingestion-tools";
+import { handleVerificationTool } from "./tools/verification-tools";
 import { handleResearchTool } from "./tools/research-tools";
 
 import type { AgentType } from "./orchestration/tool-registry";
@@ -45,6 +46,7 @@ const TOOL_GROUP_HANDLERS: Record<string, ToolHandler> = {
   markdown: handleMarkdownEditorTool,
   evidence: handleEvidenceTool,
   ingestion: handleIngestionTool,
+  verification: handleVerificationTool,
   research: handleResearchTool,
 };
 
@@ -80,6 +82,11 @@ const TOOL_NAME_TO_GROUP: Record<string, string> = {
   get_external_source: "ingestion",
   get_repo_analysis: "ingestion",
   get_content_brief: "ingestion",
+  // verification tools (claim verification)
+  verify_claims: "verification",
+  get_risk_flags: "verification",
+  resolve_risk_flag: "verification",
+  get_verification_summary: "verification",
   // research tools (workspace research notebook)
   get_research_notebook: "research",
   get_research_item: "research",
@@ -99,6 +106,7 @@ const AGENT_TOOL_GROUPS: Record<AgentType, string[]> = {
   "evidence-writer": ["session", "insight", "post", "evidence", "ingestion", "research"],
   "supplementary-writer": ["post"],
   "content-strategist": ["insight", "analytics", "recommendation"],
+  "claim-verifier": ["session", "insight", "post", "verification"],
 };
 
 // ── Zod schemas for each tool ──
@@ -268,6 +276,35 @@ const TOOL_SCHEMAS: Record<string, { description: string; schema: z.AnyZodObject
   get_content_brief: {
     description: "Get the structured content brief extracted from the user's text input.",
     schema: z.object({}),
+  },
+  // ── Verification tools (claim verification) ──
+  verify_claims: {
+    description: "Run claim extraction and risk scoring on a post. Analyzes the markdown content for factual claims, scores them against available evidence, and stores the resulting risk flags.",
+    schema: z.object({
+      postId: z.string().describe("The post ID to verify"),
+    }),
+  },
+  get_risk_flags: {
+    description: "Fetch stored risk flags for a post. Returns all flags with their severity, category, evidence, and resolution status.",
+    schema: z.object({
+      postId: z.string().describe("The post ID to get risk flags for"),
+    }),
+  },
+  resolve_risk_flag: {
+    description: "Mark a risk flag as verified or dismissed with optional evidence notes. Updates the flag status and creates a resolution record.",
+    schema: z.object({
+      postId: z.string().describe("The post ID containing the flag"),
+      flagId: z.string().describe("The ID of the risk flag to resolve"),
+      resolution: z.enum(["verified", "dismissed"]).describe("Resolution status: 'verified' (claim confirmed) or 'dismissed' (flag not applicable)"),
+      resolvedBy: z.string().describe("User ID of the person resolving the flag"),
+      evidenceNotes: z.string().optional().describe("Optional notes or evidence supporting the resolution"),
+    }),
+  },
+  get_verification_summary: {
+    description: "Get aggregate verification statistics for a post including flag counts by severity, unresolved count, and overall verification status.",
+    schema: z.object({
+      postId: z.string().describe("The post ID to get verification summary for"),
+    }),
   },
   // ── Research tools (workspace research notebook) ──
   get_research_notebook: {

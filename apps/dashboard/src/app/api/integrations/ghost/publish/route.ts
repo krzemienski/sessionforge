@@ -9,6 +9,7 @@ import {
   updateGhostPost,
   GhostApiError,
 } from "@/lib/integrations/ghost";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
 
@@ -98,6 +99,31 @@ export async function POST(request: Request) {
     post.workspaceId,
     PERMISSIONS.PUBLISHING_PUBLISH
   );
+
+  // Publish-gate check: block if unresolved critical risk flags exist
+  const flags = post.riskFlags ?? [];
+  const gateResult = canPublish(flags);
+
+  if (!gateResult.allowed) {
+    if (!body.overrideRiskFlags) {
+      return NextResponse.json(
+        {
+          error: "unresolved_critical_flags",
+          flags: gateResult.blockingFlags,
+          requiresOverride: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    const overridePolicy = getOverridePolicy("owner");
+    if (!overridePolicy.canOverride) {
+      return NextResponse.json(
+        { error: "Insufficient permissions to override risk flags" },
+        { status: 403 }
+      );
+    }
+  }
 
   const integration = await db.query.ghostIntegrations.findFirst({
     where: and(
@@ -222,6 +248,31 @@ export async function PUT(request: Request) {
     post.workspaceId,
     PERMISSIONS.PUBLISHING_PUBLISH
   );
+
+  // Publish-gate check: block if unresolved critical risk flags exist
+  const putFlags = post.riskFlags ?? [];
+  const putGateResult = canPublish(putFlags);
+
+  if (!putGateResult.allowed) {
+    if (!body.overrideRiskFlags) {
+      return NextResponse.json(
+        {
+          error: "unresolved_critical_flags",
+          flags: putGateResult.blockingFlags,
+          requiresOverride: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    const overridePolicy = getOverridePolicy("owner");
+    if (!overridePolicy.canOverride) {
+      return NextResponse.json(
+        { error: "Insufficient permissions to override risk flags" },
+        { status: 403 }
+      );
+    }
+  }
 
   const publication = await db.query.ghostPublications.findFirst({
     where: eq(ghostPublications.postId, postId),

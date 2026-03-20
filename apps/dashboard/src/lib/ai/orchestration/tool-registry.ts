@@ -12,6 +12,7 @@ import { skillLoaderTools } from "../tools/skill-loader";
 import { analyticsTools } from "../tools/analytics-tools";
 import { recommendationTools } from "../tools/recommendation-tools";
 import { githubContextTools } from "../tools/github-context";
+import { verificationTools } from "../tools/verification-tools";
 
 /** Union of all recognised agent identifiers in the system. */
 export type AgentType =
@@ -25,7 +26,8 @@ export type AgentType =
   | "evidence-writer"
   | "repurpose-writer"
   | "supplementary-writer"
-  | "content-strategist";
+  | "content-strategist"
+  | "claim-verifier";
 
 /** Shape of an Anthropic tool definition passed to `client.messages.create`. */
 type AnthropicTool = {
@@ -54,6 +56,7 @@ const ALL_TOOLS: Record<string, AnthropicTool[]> = {
   analytics: analyticsTools as AnthropicTool[],
   recommendation: recommendationTools as AnthropicTool[],
   github: githubContextTools as AnthropicTool[],
+  verification: verificationTools as AnthropicTool[],
 };
 
 /**
@@ -73,6 +76,7 @@ const AGENT_TOOL_SETS: Partial<Record<AgentType, (keyof typeof ALL_TOOLS)[]>> = 
   "repurpose-writer": ["post"],
   "supplementary-writer": ["post"],
   "content-strategist": ["insight", "analytics", "recommendation"],
+  "claim-verifier": ["session", "insight", "post", "verification"],
 };
 
 /**

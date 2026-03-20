@@ -20,6 +20,7 @@ const OPUS_AGENTS: AgentType[] = [
   "editor-chat",
   "repurpose-writer",
   "newsletter-writer",
+  "claim-verifier",
 ];
 
 /** Claude Haiku model identifier — used for fast, lightweight tasks. */

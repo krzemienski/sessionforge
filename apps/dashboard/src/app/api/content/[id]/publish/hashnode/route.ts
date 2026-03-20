@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { posts, integrationSettings } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { publishToHashnode } from "@/lib/publishing/hashnode";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
@@ -33,6 +34,38 @@ export async function POST(
     }
 
     await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.PUBLISHING_PUBLISH);
+
+    // Publish-gate check: block if unresolved critical risk flags exist
+    const body = await request.json().catch(() => ({})) as {
+      tags?: string[];
+      subtitle?: string;
+      coverImageUrl?: string;
+      seoTitle?: string;
+      seoDescription?: string;
+      canonicalUrl?: string;
+      overrideRiskFlags?: boolean;
+    };
+
+    const flags = post.riskFlags ?? [];
+    const gateResult = canPublish(flags);
+
+    if (!gateResult.allowed) {
+      if (!body.overrideRiskFlags) {
+        return NextResponse.json(
+          {
+            error: "unresolved_critical_flags",
+            flags: gateResult.blockingFlags,
+            requiresOverride: true,
+          },
+          { status: 409 }
+        );
+      }
+
+      const overridePolicy = getOverridePolicy("owner");
+      if (!overridePolicy.canOverride) {
+        throw new AppError("Insufficient permissions to override risk flags", ERROR_CODES.FORBIDDEN);
+      }
+    }
 
     if (!post.markdown || !post.title) {
       throw new AppError(
@@ -63,15 +96,6 @@ export async function POST(
         ERROR_CODES.BAD_REQUEST
       );
     }
-
-    const body = await request.json().catch(() => ({})) as {
-      tags?: string[];
-      subtitle?: string;
-      coverImageUrl?: string;
-      seoTitle?: string;
-      seoDescription?: string;
-      canonicalUrl?: string;
-    };
 
     // Transform string[] tags to { slug, name }[] format
     const tags = body.tags?.map((tag) => ({

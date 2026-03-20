@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { updatePost } from "@/lib/ai/tools/post-manager";
+import { canPublish, getOverridePolicy } from "@/lib/verification/publish-gate";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
@@ -71,7 +72,31 @@ export async function PUT(
     await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
     const body = await request.json();
-    const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled, versionType, editType } = body;
+    const { title, markdown, status, toneUsed, badgeEnabled, platformFooterEnabled, versionType, editType, overrideRiskFlags } = body;
+
+    // Publish-gate check: block status transition to 'published' if critical flags exist
+    if (status === "published" && existing.status !== "published") {
+      const flags = existing.riskFlags ?? [];
+      const gateResult = canPublish(flags);
+
+      if (!gateResult.allowed) {
+        if (!overrideRiskFlags) {
+          return NextResponse.json(
+            {
+              error: "unresolved_critical_flags",
+              flags: gateResult.blockingFlags,
+              requiresOverride: true,
+            },
+            { status: 409 }
+          );
+        }
+
+        const overridePolicy = getOverridePolicy("owner");
+        if (!overridePolicy.canOverride) {
+          throw new AppError("Insufficient permissions to override risk flags", ERROR_CODES.FORBIDDEN);
+        }
+      }
+    }
 
     // Validate status transition and enforce approval workflow rules
     if (status && status !== existing.status) {
