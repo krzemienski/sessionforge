@@ -2,9 +2,11 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { scanSources, workspaces } from "@sessionforge/db";
+import { scanSources } from "@sessionforge/db";
 import { and, eq } from "drizzle-orm/sql";
 import { checkRemoteConnection } from "@/lib/sessions/ssh-scanner";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export async function POST(
   request: Request,
@@ -21,12 +23,11 @@ export async function POST(
     return NextResponse.json({ error: "workspaceSlug required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.SESSIONS_SCAN
+  );
 
   const [source] = await db
     .select()

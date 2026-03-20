@@ -2,9 +2,13 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { batchJobs, workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { batchJobs } from "@sessionforge/db";
+import { eq } from "drizzle-orm";
 import { cancelJob } from "@/lib/queue/job-tracker";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,46 +16,27 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { jobId } = await params;
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(eq(workspaces.ownerId, session.user.id))
-    .limit(1);
+    const job = await db.query.batchJobs.findFirst({
+      where: eq(batchJobs.id, jobId),
+    });
 
-  if (!workspace.length) {
-    return NextResponse.json({ error: "No workspace found" }, { status: 404 });
-  }
+    if (!job) {
+      throw new AppError("Job not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  const rows = await db
-    .select()
-    .from(batchJobs)
-    .where(
-      and(
-        eq(batchJobs.workspaceId, workspace[0].id),
-        eq(batchJobs.id, jobId)
-      )
-    )
-    .limit(1);
+    await getAuthorizedWorkspaceById(session, job.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
-  if (!rows.length) {
-    return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  }
+    if (job.status !== "pending" && job.status !== "processing") {
+      throw new AppError("Job is already in a terminal state", ERROR_CODES.BAD_REQUEST, 409);
+    }
 
-  const job = rows[0];
+    await cancelJob(jobId);
 
-  if (job.status !== "pending" && job.status !== "processing") {
-    return NextResponse.json(
-      { error: "Job is already in a terminal state" },
-      { status: 409 }
-    );
-  }
-
-  await cancelJob(jobId);
-
-  return NextResponse.json({ jobId, status: "cancelled" });
+    return NextResponse.json({ jobId, status: "cancelled" });
+  })(_req);
 }

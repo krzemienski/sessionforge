@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { webhookEndpoints } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +27,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Webhook endpoint not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.WORKSPACE_SETTINGS);
 
   const body = await request.json();
   const { url, events, enabled } = body;
@@ -74,9 +74,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Webhook endpoint not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.WORKSPACE_SETTINGS);
 
   await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, id));
 

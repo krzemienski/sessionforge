@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { writingSkills } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +27,7 @@ export async function GET(
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
   }
 
-  if (skill.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, skill.workspaceId, PERMISSIONS.CONTENT_READ);
 
   return NextResponse.json({ skill });
 }
@@ -50,9 +50,7 @@ export async function PUT(
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.CONTENT_CREATE);
 
   const body = await request.json();
   const { name, description, instructions, appliesTo, enabled } = body;
@@ -98,9 +96,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, existing.workspaceId, PERMISSIONS.CONTENT_DELETE);
 
   await db.delete(writingSkills).where(eq(writingSkills.id, id));
 

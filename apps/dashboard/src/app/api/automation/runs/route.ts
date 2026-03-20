@@ -2,50 +2,54 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { automationRuns, workspaces } from "@sessionforge/db";
+import { automationRuns } from "@sessionforge/db";
 import { eq, desc } from "drizzle-orm/sql";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { searchParams } = new URL(request.url);
-  const workspaceSlug = searchParams.get("workspace");
+    const { searchParams } = new URL(request.url);
+    const workspaceSlug = searchParams.get("workspace");
 
-  if (!workspaceSlug) {
-    return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
-  }
+    if (!workspaceSlug) {
+      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
+    }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.CONTENT_READ
+    );
 
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+    const rawRuns = await db.query.automationRuns.findMany({
+      where: eq(automationRuns.workspaceId, workspace.id),
+      with: { trigger: true },
+      orderBy: [desc(automationRuns.startedAt)],
+      limit: 50,
+    });
 
-  const rawRuns = await db.query.automationRuns.findMany({
-    where: eq(automationRuns.workspaceId, workspace.id),
-    with: { trigger: true },
-    orderBy: [desc(automationRuns.startedAt)],
-    limit: 50,
-  });
+    const runs = rawRuns.map(({ trigger, ...run }) => ({
+      id: run.id,
+      triggerId: run.triggerId,
+      triggerName: trigger?.name ?? null,
+      status: run.status,
+      sessionsScanned: run.sessionsScanned,
+      insightsExtracted: run.insightsExtracted,
+      postId: run.postId,
+      errorMessage: run.errorMessage,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      durationMs: run.durationMs,
+    }));
 
-  const runs = rawRuns.map(({ trigger, ...run }) => ({
-    id: run.id,
-    triggerId: run.triggerId,
-    triggerName: trigger?.name ?? null,
-    status: run.status,
-    sessionsScanned: run.sessionsScanned,
-    insightsExtracted: run.insightsExtracted,
-    postId: run.postId,
-    errorMessage: run.errorMessage,
-    startedAt: run.startedAt,
-    completedAt: run.completedAt,
-    durationMs: run.durationMs,
-  }));
-
-  return NextResponse.json({ runs });
+    return NextResponse.json({ runs });
+  })(request);
 }

@@ -12,6 +12,8 @@ import {
   createFileWatchSchedule,
   deleteTriggerSchedule,
 } from "@/lib/qstash";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +35,11 @@ export async function GET(
       throw new AppError("Trigger not found", ERROR_CODES.NOT_FOUND);
     }
 
-    if (trigger.workspace.ownerId !== session.user.id) {
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-    }
+    await getAuthorizedWorkspaceById(
+      session,
+      trigger.workspaceId,
+      PERMISSIONS.CONTENT_READ
+    );
 
     return NextResponse.json(trigger);
   })(req);
@@ -59,9 +63,11 @@ export async function PUT(
       throw new AppError("Trigger not found", ERROR_CODES.NOT_FOUND);
     }
 
-    if (existing.workspace.ownerId !== session.user.id) {
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-    }
+    await getAuthorizedWorkspaceById(
+      session,
+      existing.workspaceId,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
     const rawBody = await req.json().catch(() => ({}));
     const { name, triggerType, contentType, lookbackWindow, cronExpression, enabled, debounceMinutes } =
@@ -172,9 +178,11 @@ export async function DELETE(
       throw new AppError("Trigger not found", ERROR_CODES.NOT_FOUND);
     }
 
-    if (existing.workspace.ownerId !== session.user.id) {
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-    }
+    await getAuthorizedWorkspaceById(
+      session,
+      existing.workspaceId,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
     if (existing.qstashScheduleId) {
       try {

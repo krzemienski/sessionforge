@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { collections, collectionPosts, posts } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,21 +18,20 @@ export async function POST(
 
   const { id } = await params;
 
-  // Verify collection exists and user owns it
   const collection = await db.query.collections.findFirst({
     where: eq(collections.id, id),
-    with: {
-      workspace: true,
-    },
+    with: { workspace: true },
   });
 
   if (!collection) {
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  if (collection.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(
+    session,
+    collection.workspaceId,
+    PERMISSIONS.CONTENT_EDIT
+  );
 
   const body = await request.json();
   const { postId, order } = body;
@@ -70,7 +71,6 @@ export async function POST(
 
     return NextResponse.json(newCollectionPost, { status: 201 });
   } catch (error) {
-    // Handle unique constraint violation (post already in this collection)
     if (error instanceof Error && error.message.includes("unique constraint")) {
       return NextResponse.json(
         { error: "Post is already in this collection" },
@@ -93,21 +93,20 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Verify collection exists and user owns it
   const collection = await db.query.collections.findFirst({
     where: eq(collections.id, id),
-    with: {
-      workspace: true,
-    },
+    with: { workspace: true },
   });
 
   if (!collection) {
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  if (collection.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(
+    session,
+    collection.workspaceId,
+    PERMISSIONS.CONTENT_DELETE
+  );
 
   // Get postId from query params or body
   const { searchParams } = new URL(request.url);
@@ -115,7 +114,6 @@ export async function DELETE(
 
   let postId = postIdFromQuery;
 
-  // If not in query params, check request body
   if (!postId) {
     try {
       const body = await request.json();
@@ -132,7 +130,6 @@ export async function DELETE(
     );
   }
 
-  // Verify the post is actually in this collection
   const existingCollectionPost = await db.query.collectionPosts.findFirst({
     where: and(eq(collectionPosts.collectionId, id), eq(collectionPosts.postId, postId)),
   });
@@ -160,21 +157,20 @@ export async function PUT(
 
   const { id } = await params;
 
-  // Verify collection exists and user owns it
   const collection = await db.query.collections.findFirst({
     where: eq(collections.id, id),
-    with: {
-      workspace: true,
-    },
+    with: { workspace: true },
   });
 
   if (!collection) {
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  if (collection.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(
+    session,
+    collection.workspaceId,
+    PERMISSIONS.CONTENT_EDIT
+  );
 
   const body = await request.json();
   const { postIds } = body;

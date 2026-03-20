@@ -2,12 +2,14 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces, portfolioSettings } from "@sessionforge/db";
+import { portfolioSettings } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { z } from "zod";
 import { parseBody } from "@/lib/validation";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -37,13 +39,11 @@ export async function GET(request: Request) {
       throw new AppError("workspace query param required", ERROR_CODES.VALIDATION_ERROR);
     }
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.CONTENT_READ
+    );
 
     const settings = await db.query.portfolioSettings.findFirst({
       where: eq(portfolioSettings.workspaceId, workspace.id),
@@ -77,13 +77,11 @@ export async function PATCH(req: Request) {
     const rawBody = await req.json().catch(() => ({}));
     const data = parseBody(portfolioSettingsUpdateSchema, rawBody);
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, data.workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      data.workspaceSlug,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
     const wsId = workspace.id;
 
