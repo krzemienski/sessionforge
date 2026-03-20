@@ -62,8 +62,6 @@ export function PostGrid({
   collections,
 }: PostGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSeries, setSelectedSeries] = useState<string>("all");
-  const [selectedCollection, setSelectedCollection] = useState<string>("all");
   const [selectedContentType, setSelectedContentType] = useState<string>("all");
 
   // Get unique content types
@@ -97,7 +95,6 @@ export function PostGrid({
     }
 
     // TODO: Filter by series/collection when post relationships are available
-    // For now, series and collection filters are shown but don't filter yet
 
     return filtered;
   }, [posts, searchQuery, selectedContentType]);
@@ -126,8 +123,6 @@ export function PostGrid({
 
   const hasActiveFilters =
     searchQuery ||
-    selectedSeries !== "all" ||
-    selectedCollection !== "all" ||
     selectedContentType !== "all";
 
   return (
@@ -151,38 +146,6 @@ export function PostGrid({
 
         {/* Filter Dropdowns */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Series Filter */}
-          {series.length > 0 && (
-            <select
-              value={selectedSeries}
-              onChange={(e) => setSelectedSeries(e.target.value)}
-              className="px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-sf-text-primary text-sm focus:outline-none focus:border-sf-accent"
-            >
-              <option value="all">All Series</option>
-              {series.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Collection Filter */}
-          {collections.length > 0 && (
-            <select
-              value={selectedCollection}
-              onChange={(e) => setSelectedCollection(e.target.value)}
-              className="px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-sf-text-primary text-sm focus:outline-none focus:border-sf-accent"
-            >
-              <option value="all">All Collections</option>
-              {collections.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
-          )}
-
           {/* Content Type Filter */}
           {contentTypes.length > 1 && (
             <select
@@ -205,8 +168,6 @@ export function PostGrid({
           <button
             onClick={() => {
               setSearchQuery("");
-              setSelectedSeries("all");
-              setSelectedCollection("all");
               setSelectedContentType("all");
             }}
             className="text-sm text-sf-accent hover:underline"
@@ -312,6 +273,7 @@ export function PostGrid({
             {filteredPinnedPosts.map((post) => (
               <article
                 key={post.id}
+                id={`post-${post.id}`}
                 className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6 hover:border-sf-accent/50 transition-colors relative"
               >
                 {/* Pinned Badge */}
@@ -366,6 +328,7 @@ export function PostGrid({
             {filteredPosts.map((post) => (
               <article
                 key={post.id}
+                id={`post-${post.id}`}
                 className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6 hover:border-sf-accent/50 transition-colors"
               >
                 <h3 className="text-lg font-semibold mb-2 text-sf-text-primary">
