@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Plus, X, Link, GitBranch, FileText, Zap, ChevronLeft } from "lucide-react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Plus, X, Link, GitBranch, FileText, Zap, ChevronLeft, BookOpen, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useResearchItems } from "@/hooks/use-research";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,15 @@ interface ArcOption {
   icon: string;
 }
 
+interface ResearchItem {
+  id: string;
+  type: "link" | "note" | "code_snippet" | "session_snippet";
+  title: string;
+  content?: string | null;
+  url?: string | null;
+  tags?: string[];
+}
+
 interface ProgressState {
   phase: Phase;
   message: string;
@@ -40,6 +50,8 @@ interface ProgressState {
 export default function NewContentPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const draftPostId = searchParams.get("postId");
 
   const [topic, setTopic] = useState("");
   const [userText, setUserText] = useState("");
@@ -49,6 +61,7 @@ export default function NewContentPage() {
   const [arcs, setArcs] = useState<ArcOption[]>([]);
   const [selectedArc, setSelectedArc] = useState<string | null>(null);
   const [arcsLoading, setArcsLoading] = useState(false);
+  const [selectedResearchIds, setSelectedResearchIds] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<ProgressState>({
     phase: "idle",
     message: "",
@@ -56,6 +69,18 @@ export default function NewContentPage() {
   });
 
   const abortRef = useRef<AbortController | null>(null);
+
+  // ── Fetch research items for draft post ──
+
+  const { data: researchData } = useResearchItems(draftPostId ?? "", {});
+  const researchItems: ResearchItem[] = researchData?.items ?? [];
+
+  // Select all research items by default when they load
+  useEffect(() => {
+    if (researchItems.length > 0 && selectedResearchIds.size === 0) {
+      setSelectedResearchIds(new Set(researchItems.map((item: ResearchItem) => item.id)));
+    }
+  }, [researchItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch arc suggestions when topic changes (debounced) ──
 
@@ -103,6 +128,31 @@ export default function NewContentPage() {
   const setRepo = (i: number, val: string) =>
     setRepoUrls((prev) => prev.map((u, idx) => (idx === i ? val : u)));
 
+  // ── Research item selection helpers ──
+
+  const toggleResearchItem = (id: string) =>
+    setSelectedResearchIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAllResearch = () => {
+    if (selectedResearchIds.size === researchItems.length) {
+      setSelectedResearchIds(new Set());
+    } else {
+      setSelectedResearchIds(new Set(researchItems.map((item: ResearchItem) => item.id)));
+    }
+  };
+
+  const researchTypeIcon: Record<string, string> = {
+    link: "🔗",
+    note: "📝",
+    code_snippet: "💻",
+    session_snippet: "💬",
+  };
+
   // ── Generation ──
 
   const handleGenerate = async () => {
@@ -127,6 +177,8 @@ export default function NewContentPage() {
           urls: validUrls,
           repoUrls: validRepos,
           narrativeArc: selectedArc || undefined,
+          postId: draftPostId || undefined,
+          researchItemIds: selectedResearchIds.size > 0 ? Array.from(selectedResearchIds) : undefined,
         }),
         signal: abortRef.current.signal,
       });
@@ -406,6 +458,74 @@ export default function NewContentPage() {
               </button>
             )}
           </div>
+
+          {/* Research Notebook */}
+          {draftPostId && researchItems.length > 0 && (
+            <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-semibold text-sf-text-primary">
+                  <BookOpen size={14} className="inline mr-1.5 opacity-70" />
+                  Research Notebook
+                </label>
+                <button
+                  type="button"
+                  onClick={toggleAllResearch}
+                  className="text-xs text-sf-accent hover:text-sf-accent-dim transition-colors"
+                >
+                  {selectedResearchIds.size === researchItems.length
+                    ? "Deselect all"
+                    : "Select all"}
+                </button>
+              </div>
+              <p className="text-xs text-sf-text-muted mb-3">
+                {researchItems.length} research item{researchItems.length !== 1 ? "s" : ""} from your
+                draft. Selected items will be used as source constraints for generation.
+              </p>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {researchItems.map((item: ResearchItem) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => toggleResearchItem(item.id)}
+                    className={cn(
+                      "w-full text-left px-3 py-2 rounded-sf border transition-colors flex items-start gap-2",
+                      selectedResearchIds.has(item.id)
+                        ? "border-sf-accent bg-sf-accent/10"
+                        : "border-sf-border bg-sf-bg-tertiary hover:border-sf-border-focus"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5",
+                        selectedResearchIds.has(item.id)
+                          ? "border-sf-accent bg-sf-accent"
+                          : "border-sf-border"
+                      )}
+                    >
+                      {selectedResearchIds.has(item.id) && (
+                        <Check size={10} className="text-sf-bg-primary" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs">
+                          {researchTypeIcon[item.type] ?? "📄"}
+                        </span>
+                        <span className="text-sm font-medium text-sf-text-primary truncate">
+                          {item.title}
+                        </span>
+                      </div>
+                      {item.url && (
+                        <p className="text-xs text-sf-text-muted truncate mt-0.5">
+                          {item.url}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Narrative Arc selection */}
           {(arcs.length > 0 || arcsLoading) && (
