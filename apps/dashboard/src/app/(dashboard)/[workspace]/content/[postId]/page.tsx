@@ -250,7 +250,7 @@ export default function ContentEditorPage() {
   const isMediumConnected = mediumIntegration.data?.connected && mediumIntegration.data?.enabled;
   const isAlreadyPublishedMedium = mediumPublication.data?.published === true;
 
-  const activeExperiment = experiments.data?.find(
+  const activeExperiment = experiments.data?.experiments?.find(
     (exp: { status: string }) => exp.status === "running" || exp.status === "paused" || exp.status === "scheduled"
   ) ?? null;
 

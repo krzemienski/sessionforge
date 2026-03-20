@@ -40,8 +40,8 @@ export function useCreateExperiment() {
       endsAt?: string;
       variants: {
         label: string;
-        headlineText?: string;
-        hookText?: string;
+        headlineText: string;
+        hookText: string;
         trafficAllocation: number;
         isControl?: boolean;
       }[];
@@ -157,11 +157,11 @@ export function useUpdateVariant() {
       trafficAllocation?: number;
     }) => {
       const res = await fetch(
-        `/api/experiments/${experimentId}/variants/${variantId}`,
+        `/api/experiments/${experimentId}/variants`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
+          body: JSON.stringify({ variantId, ...data }),
         }
       );
       if (!res.ok) {
@@ -188,7 +188,7 @@ export function useRemoveVariant() {
       variantId: string;
     }) => {
       const res = await fetch(
-        `/api/experiments/${experimentId}/variants/${variantId}`,
+        `/api/experiments/${experimentId}/variants?variantId=${variantId}`,
         { method: "DELETE" }
       );
       if (!res.ok) {
@@ -216,15 +216,18 @@ export function useRecordResults() {
       variantId: string;
       impressions?: number;
       clicks?: number;
-      conversions?: number;
-      engagementScore?: number;
+      views?: number;
+      likes?: number;
+      comments?: number;
+      shares?: number;
+      engagementRate?: number;
     }) => {
       const res = await fetch(
-        `/api/experiments/${experimentId}/variants/${variantId}/results`,
+        `/api/experiments/${experimentId}/results`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
+          body: JSON.stringify({ variantId, ...data }),
         }
       );
       if (!res.ok) {
