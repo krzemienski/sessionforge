@@ -58,6 +58,50 @@ mock.module("@sessionforge/db", () => ({
     id: "ws_id",
     ownerId: "ws_ownerId",
   },
+  workspaceMembers: {
+    workspaceId: "wm_workspaceId",
+    userId: "wm_userId",
+    role: "wm_role",
+  },
+  workspaceActivity: {
+    workspaceId: "wa_workspaceId",
+    userId: "wa_userId",
+    action: "wa_action",
+  },
+}));
+
+// Mock workspace-auth to use existing mockWorkspaceResult + mockAuthSession
+mock.module("@/lib/workspace-auth", () => {
+  class AppError extends Error {
+    code: string;
+    statusCode: number;
+    constructor(msg: string, code: string, status?: number) {
+      super(msg);
+      this.code = code;
+      this.statusCode = status ?? 500;
+    }
+  }
+  const getAuthorizedWorkspace = async (session: any, slug: string, _perm?: string) => {
+    if (!mockWorkspaceResult.length) throw new AppError("Workspace not found", "NOT_FOUND", 404);
+    return { workspace: { ...mockWorkspaceResult[0], slug, ownerId: session.user.id }, role: "owner" };
+  };
+  const getAuthorizedWorkspaceById = async (session: any, id: string, _perm?: string) => {
+    if (!mockWorkspaceResult.length) throw new AppError("Workspace not found", "NOT_FOUND", 404);
+    return { workspace: { ...mockWorkspaceResult[0], ownerId: session.user.id }, role: "owner" };
+  };
+  const logWorkspaceActivity = async () => {};
+  return { getAuthorizedWorkspace, getAuthorizedWorkspaceById, logWorkspaceActivity };
+});
+
+mock.module("@/lib/permissions", () => ({
+  PERMISSIONS: {
+    CONTENT_READ: "content:read",
+    SESSIONS_READ: "sessions:read",
+    SESSIONS_SCAN: "sessions:scan",
+    WORKSPACE_SETTINGS: "workspace:settings",
+  },
+  ROLES: { OWNER: "owner" },
+  hasPermission: () => true,
 }));
 
 // Provide lightweight stand-ins for drizzle-orm query builder helpers.
