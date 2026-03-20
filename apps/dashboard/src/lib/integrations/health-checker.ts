@@ -14,6 +14,8 @@ import { verifyGhostApiKey } from "./ghost";
 import { verifyMediumToken } from "./medium";
 import { verifyTwitterAuth } from "./twitter";
 import { verifyLinkedInAuth } from "./linkedin";
+import { eventBus } from "@/lib/observability/event-bus";
+import { createAgentEvent } from "@/lib/observability/event-types";
 
 // ── Types ──
 
@@ -262,6 +264,29 @@ export async function persistHealthCheckResults(
 ): Promise<void> {
   for (const result of results) {
     const dbStatus = toDbStatus(result.status);
+    const traceId = crypto.randomUUID();
+
+    // Emit health check event
+    eventBus.emit(
+      createAgentEvent(traceId, workspaceId, "integration-health", "integration:health_check", {
+        platform: result.platform,
+        status: result.status,
+        responseTimeMs: result.responseTimeMs,
+        errorMessage: result.errorMessage,
+        errorCode: result.errorCode,
+      })
+    );
+
+    // Emit auth_expired event when credentials are invalid
+    if (result.status === "auth_expired") {
+      eventBus.emit(
+        createAgentEvent(traceId, workspaceId, "integration-health", "integration:auth_expired", {
+          platform: result.platform,
+          errorMessage: result.errorMessage,
+          errorCode: result.errorCode,
+        })
+      );
+    }
 
     // Upsert the health check record (unique on workspace + platform)
     const existing = await db
@@ -309,6 +334,7 @@ async function updateIntegrationStatus(
 ): Promise<void> {
   const dbStatus = toDbStatus(result.status);
   const table = getIntegrationTable(result.platform);
+  const traceId = crypto.randomUUID();
 
   if (result.platform === "wordpress") {
     // WordPress uses isActive instead of enabled
@@ -317,6 +343,13 @@ async function updateIntegrationStatus(
         .update(wordpressConnections)
         .set({ healthStatus: dbStatus, isActive: false })
         .where(eq(wordpressConnections.workspaceId, workspaceId));
+
+      eventBus.emit(
+        createAgentEvent(traceId, workspaceId, "integration-health", "integration:connector_paused", {
+          platform: result.platform,
+          reason: "auth_expired",
+        })
+      );
     } else if (result.status === "healthy") {
       // Restore if previously paused
       const [row] = await db
@@ -330,6 +363,13 @@ async function updateIntegrationStatus(
           .update(wordpressConnections)
           .set({ healthStatus: dbStatus, isActive: true })
           .where(eq(wordpressConnections.workspaceId, workspaceId));
+
+        eventBus.emit(
+          createAgentEvent(traceId, workspaceId, "integration-health", "integration:connector_resumed", {
+            platform: result.platform,
+            previousStatus: "paused",
+          })
+        );
       } else {
         await db
           .update(wordpressConnections)
@@ -351,6 +391,13 @@ async function updateIntegrationStatus(
       .update(table)
       .set({ healthStatus: dbStatus, enabled: false } as Record<string, unknown>)
       .where(eq(table.workspaceId, workspaceId));
+
+    eventBus.emit(
+      createAgentEvent(traceId, workspaceId, "integration-health", "integration:connector_paused", {
+        platform: result.platform,
+        reason: "auth_expired",
+      })
+    );
   } else if (result.status === "healthy") {
     // Restore if previously paused due to auth
     const [row] = await db
@@ -364,6 +411,13 @@ async function updateIntegrationStatus(
         .update(table)
         .set({ healthStatus: dbStatus, enabled: true } as Record<string, unknown>)
         .where(eq(table.workspaceId, workspaceId));
+
+      eventBus.emit(
+        createAgentEvent(traceId, workspaceId, "integration-health", "integration:connector_resumed", {
+          platform: result.platform,
+          previousStatus: "paused",
+        })
+      );
     } else {
       await db
         .update(table)

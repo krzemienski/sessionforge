@@ -16,6 +16,8 @@ import {
 } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import type { Platform, PublishResult } from "@/lib/scheduling/publisher";
+import { eventBus } from "@/lib/observability/event-bus";
+import { createAgentEvent } from "@/lib/observability/event-types";
 
 // ── Types ──
 
@@ -26,6 +28,8 @@ export interface RetryPublishOptions {
   platform: Platform;
   /** Post ID for idempotency and duplicate checking. */
   postId: string;
+  /** Workspace ID for observability event emission. */
+  workspaceId?: string;
   /** Maximum number of attempts (including the initial attempt). Default: 4 */
   maxAttempts?: number;
   /** Delay in milliseconds before each retry attempt (indexed by retry number). */
@@ -131,11 +135,13 @@ export async function publishWithRetry(
     publishFn,
     platform,
     postId,
+    workspaceId,
     maxAttempts = DEFAULT_MAX_ATTEMPTS,
     delays = DEFAULT_DELAYS,
   } = options;
 
   const idempotencyKey = generateIdempotencyKey(postId, platform);
+  const traceId = crypto.randomUUID();
 
   let lastError: unknown;
 
@@ -165,6 +171,16 @@ export async function publishWithRetry(
 
       // Auth failures: return immediately with auth_expired status
       if (isAuthError(errorInfo)) {
+        if (workspaceId) {
+          eventBus.emit(
+            createAgentEvent(traceId, workspaceId, "retry-publisher", "integration:auth_expired", {
+              platform,
+              postId,
+              attempt,
+              errorMessage: errorInfo.message,
+            })
+          );
+        }
         return {
           result: {
             platform,
@@ -195,6 +211,21 @@ export async function publishWithRetry(
         if (isLastAttempt) break;
 
         const delay = delays[attempt - 1] ?? delays[delays.length - 1];
+
+        if (workspaceId) {
+          eventBus.emit(
+            createAgentEvent(traceId, workspaceId, "retry-publisher", "integration:publish_retry", {
+              platform,
+              postId,
+              attempt,
+              maxAttempts,
+              nextDelayMs: delay,
+              errorMessage: errorInfo.message,
+              errorStatus: errorInfo.status,
+            })
+          );
+        }
+
         await sleep(delay);
         continue;
       }
