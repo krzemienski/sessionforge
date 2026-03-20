@@ -11,14 +11,13 @@
 
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm/sql";
 import { z } from "zod";
 import { createSSEStream, sseResponse } from "@/lib/ai/orchestration/streaming";
 import { SessionMiner } from "@/lib/sessions/miner";
 import { classifyEvidence } from "@/lib/sessions/evidence-classifier";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,24 +64,20 @@ export async function POST(req: Request) {
       const { workspaceSlug, topic, limit } = parsed.data;
 
       // Resolve workspace
-      const ws = await db
-        .select({ id: workspaces.id, sessionBasePath: workspaces.sessionBasePath })
-        .from(workspaces)
-        .where(
-          and(
-            eq(workspaces.slug, workspaceSlug),
-            eq(workspaces.ownerId, session.user.id)
-          )
-        )
-        .limit(1);
-
-      if (!ws.length) {
+      let workspaceId: string;
+      try {
+        const { workspace } = await getAuthorizedWorkspace(
+          session,
+          workspaceSlug,
+          PERMISSIONS.CONTENT_READ
+        );
+        workspaceId = workspace.id;
+      } catch {
         send("error", { message: "Workspace not found" });
         close();
         return;
       }
 
-      const workspaceId = ws[0].id;
       const miner = new SessionMiner(workspaceId);
 
       // Phase 1: Index

@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { series, seriesPosts, posts } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,21 +18,16 @@ export async function POST(
 
   const { id } = await params;
 
-  // Verify series exists and user owns it
   const seriesItem = await db.query.series.findFirst({
     where: eq(series.id, id),
-    with: {
-      workspace: true,
-    },
+    with: { workspace: true },
   });
 
   if (!seriesItem) {
     return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  if (seriesItem.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, seriesItem.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
   const body = await request.json();
   const { postId, position } = body;
@@ -42,7 +39,6 @@ export async function POST(
     );
   }
 
-  // Verify post exists and belongs to same workspace
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
   });
@@ -58,13 +54,9 @@ export async function POST(
     );
   }
 
-  // Check if post is already in another series
-  // (posts can only be in one series but multiple collections per spec)
   const existingSeriesPost = await db.query.seriesPosts.findFirst({
     where: eq(seriesPosts.postId, postId),
-    with: {
-      series: true,
-    },
+    with: { series: true },
   });
 
   if (existingSeriesPost) {
@@ -88,7 +80,6 @@ export async function POST(
 
     return NextResponse.json(newSeriesPost, { status: 201 });
   } catch (error) {
-    // Handle unique constraint violation (post already in this series)
     if (error instanceof Error && error.message.includes("unique constraint")) {
       return NextResponse.json(
         { error: "Post is already in this series" },
@@ -111,29 +102,22 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Verify series exists and user owns it
   const seriesItem = await db.query.series.findFirst({
     where: eq(series.id, id),
-    with: {
-      workspace: true,
-    },
+    with: { workspace: true },
   });
 
   if (!seriesItem) {
     return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  if (seriesItem.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, seriesItem.workspaceId, PERMISSIONS.CONTENT_DELETE);
 
-  // Get postId from query params or body
   const { searchParams } = new URL(request.url);
   const postIdFromQuery = searchParams.get("postId");
 
   let postId = postIdFromQuery;
 
-  // If not in query params, check request body
   if (!postId) {
     try {
       const body = await request.json();
@@ -150,7 +134,6 @@ export async function DELETE(
     );
   }
 
-  // Verify the post is actually in this series
   const existingSeriesPost = await db.query.seriesPosts.findFirst({
     where: and(eq(seriesPosts.seriesId, id), eq(seriesPosts.postId, postId)),
   });
@@ -178,21 +161,16 @@ export async function PUT(
 
   const { id } = await params;
 
-  // Verify series exists and user owns it
   const seriesItem = await db.query.series.findFirst({
     where: eq(series.id, id),
-    with: {
-      workspace: true,
-    },
+    with: { workspace: true },
   });
 
   if (!seriesItem) {
     return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
 
-  if (seriesItem.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(session, seriesItem.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
   const body = await request.json();
   const { postIds } = body;
@@ -204,12 +182,10 @@ export async function PUT(
     );
   }
 
-  // Get all posts currently in this series
   const existingSeriesPosts = await db.query.seriesPosts.findMany({
     where: eq(seriesPosts.seriesId, id),
   });
 
-  // Validate that all provided postIds are actually in this series
   const existingPostIds = new Set(existingSeriesPosts.map((sp) => sp.postId));
   const invalidPostIds = postIds.filter((postId) => !existingPostIds.has(postId));
 
@@ -222,7 +198,6 @@ export async function PUT(
     );
   }
 
-  // Check if all posts in the series are included in the reorder
   if (postIds.length !== existingSeriesPosts.length) {
     return NextResponse.json(
       {
@@ -233,7 +208,6 @@ export async function PUT(
   }
 
   try {
-    // Update the order for each post
     const updates = postIds.map((postId, index) =>
       db
         .update(seriesPosts)
@@ -243,7 +217,6 @@ export async function PUT(
 
     await Promise.all(updates);
 
-    // Return the updated series posts
     const updatedSeriesPosts = await db.query.seriesPosts.findMany({
       where: eq(seriesPosts.seriesId, id),
     });

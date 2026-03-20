@@ -17,9 +17,12 @@ import {
   agentEvents,
   agentRuns,
   posts,
-  workspaces,
 } from "@sessionforge/db";
-import { and, eq, gte, lte, desc, asc } from "drizzle-orm/sql";
+import { and, eq, gte, lte, asc } from "drizzle-orm/sql";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,108 +30,106 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  // Fetch the automation run with its trigger relation
-  const run = await db.query.automationRuns.findFirst({
-    where: eq(automationRuns.id, id),
-    with: { trigger: true },
-  });
-
-  if (!run) {
-    return NextResponse.json({ error: "Run not found" }, { status: 404 });
-  }
-
-  // Verify workspace ownership
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.id, run.workspaceId),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Run not found" }, { status: 404 });
-  }
-
-  // Build time window conditions for related queries
-  const timeConditions = [eq(agentEvents.workspaceId, workspace.id)];
-  if (run.startedAt) {
-    timeConditions.push(gte(agentEvents.createdAt, run.startedAt));
-  }
-  if (run.completedAt) {
-    timeConditions.push(lte(agentEvents.createdAt, run.completedAt));
-  }
-
-  // Fetch associated agent events within the run's time window
-  const events = await db
-    .select()
-    .from(agentEvents)
-    .where(and(...timeConditions))
-    .orderBy(asc(agentEvents.createdAt))
-    .limit(500);
-
-  // Map events to extract a message from the payload JSONB field
-  // The agent_events table has no `message` column, so we derive it
-  // from payload.message, payload.stage, or fall back to eventType
-  const mappedEvents = events.map((evt) => {
-    const payload = evt.payload as Record<string, unknown> | null;
-    return {
-      ...evt,
-      message:
-        (payload?.message as string) ??
-        (payload?.stage as string) ??
-        evt.eventType,
-    };
-  });
-
-  // Build time window conditions for agent runs
-  const agentRunConditions = [eq(agentRuns.workspaceId, workspace.id)];
-  if (run.startedAt) {
-    agentRunConditions.push(gte(agentRuns.startedAt, run.startedAt));
-  }
-  if (run.completedAt) {
-    agentRunConditions.push(lte(agentRuns.startedAt, run.completedAt));
-  }
-
-  // Fetch associated agent runs within the run's time window
-  const relatedAgentRuns = await db
-    .select()
-    .from(agentRuns)
-    .where(and(...agentRunConditions))
-    .orderBy(asc(agentRuns.startedAt));
-
-  // Fetch publish status if a postId exists
-  let publishStatus = null;
-  if (run.postId) {
-    const post = await db.query.posts.findFirst({
-      where: eq(posts.id, run.postId),
+    // Fetch the automation run with its trigger relation
+    const run = await db.query.automationRuns.findFirst({
+      where: eq(automationRuns.id, id),
+      with: { trigger: true },
     });
-    if (post) {
-      publishStatus = {
-        postId: post.id,
-        title: post.title,
-        status: post.status,
-        contentType: post.contentType,
-        publishedAt: post.publishedAt,
-        createdAt: post.createdAt,
-      };
+
+    if (!run) {
+      throw new AppError("Run not found", ERROR_CODES.NOT_FOUND);
     }
-  }
 
-  // Destructure trigger from run for the response
-  const { trigger, ...runData } = run;
+    // Verify workspace access via RBAC
+    const { workspace } = await getAuthorizedWorkspaceById(
+      session,
+      run.workspaceId,
+      PERMISSIONS.ANALYTICS_READ
+    );
 
-  return NextResponse.json({
-    run: {
-      ...runData,
-      triggerName: trigger?.name ?? null,
-      triggerType: trigger?.triggerType ?? null,
-    },
-    events: mappedEvents,
-    agentRuns: relatedAgentRuns,
-    publishStatus,
-  });
+    // Build time window conditions for related queries
+    const timeConditions = [eq(agentEvents.workspaceId, workspace.id)];
+    if (run.startedAt) {
+      timeConditions.push(gte(agentEvents.createdAt, run.startedAt));
+    }
+    if (run.completedAt) {
+      timeConditions.push(lte(agentEvents.createdAt, run.completedAt));
+    }
+
+    // Fetch associated agent events within the run's time window
+    const events = await db
+      .select()
+      .from(agentEvents)
+      .where(and(...timeConditions))
+      .orderBy(asc(agentEvents.createdAt))
+      .limit(500);
+
+    // Map events to extract a message from the payload JSONB field
+    // The agent_events table has no `message` column, so we derive it
+    // from payload.message, payload.stage, or fall back to eventType
+    const mappedEvents = events.map((evt) => {
+      const payload = evt.payload as Record<string, unknown> | null;
+      return {
+        ...evt,
+        message:
+          (payload?.message as string) ??
+          (payload?.stage as string) ??
+          evt.eventType,
+      };
+    });
+
+    // Build time window conditions for agent runs
+    const agentRunConditions = [eq(agentRuns.workspaceId, workspace.id)];
+    if (run.startedAt) {
+      agentRunConditions.push(gte(agentRuns.startedAt, run.startedAt));
+    }
+    if (run.completedAt) {
+      agentRunConditions.push(lte(agentRuns.startedAt, run.completedAt));
+    }
+
+    // Fetch associated agent runs within the run's time window
+    const relatedAgentRuns = await db
+      .select()
+      .from(agentRuns)
+      .where(and(...agentRunConditions))
+      .orderBy(asc(agentRuns.startedAt));
+
+    // Fetch publish status if a postId exists
+    let publishStatus = null;
+    if (run.postId) {
+      const post = await db.query.posts.findFirst({
+        where: eq(posts.id, run.postId),
+      });
+      if (post) {
+        publishStatus = {
+          postId: post.id,
+          title: post.title,
+          status: post.status,
+          contentType: post.contentType,
+          publishedAt: post.publishedAt,
+          createdAt: post.createdAt,
+        };
+      }
+    }
+
+    // Destructure trigger from run for the response
+    const { trigger, ...runData } = run;
+
+    return NextResponse.json({
+      run: {
+        ...runData,
+        triggerName: trigger?.name ?? null,
+        triggerType: trigger?.triggerType ?? null,
+      },
+      events: mappedEvents,
+      agentRuns: relatedAgentRuns,
+      publishStatus,
+    });
+  })(_req);
 }

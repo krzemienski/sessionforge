@@ -11,6 +11,9 @@ import { indexSessions } from "@/lib/sessions/indexer";
 import { checkQuota, recordUsage } from "@/lib/billing/usage";
 import { createPipelineInstrumentation } from "@/lib/observability/instrument-pipeline";
 import { analyzeCorpus } from "@/lib/ai/agents/corpus-analyzer";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -34,29 +37,36 @@ export async function GET(req: NextRequest) {
   const analyzeAfterScan = searchParams.get("analyzeAfterScan") !== "false";
   const workspaceSlug = searchParams.get("workspaceSlug");
 
-  const workspace = workspaceSlug
-    ? await db
-        .select()
-        .from(workspaces)
-        .where(eq(workspaces.slug, workspaceSlug))
-        .limit(1)
-    : await db
-        .select()
-        .from(workspaces)
-        .where(eq(workspaces.ownerId, session.user.id))
-        .limit(1);
-
-  if (!workspace.length) {
+  if (!workspaceSlug) {
     return new Response(
-      sseEvent({ type: "error", message: "No workspace found" }),
+      sseEvent({ type: "error", message: "workspaceSlug query param required" }),
       {
-        status: 404,
+        status: 400,
         headers: { "Content-Type": "text/event-stream" },
       }
     );
   }
 
-  const ws = workspace[0];
+  let ws: typeof workspaces.$inferSelect;
+  try {
+    const result = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.SESSIONS_SCAN
+    );
+    ws = result.workspace;
+  } catch (err) {
+    if (err instanceof AppError) {
+      return new Response(
+        sseEvent({ type: "error", message: err.message }),
+        {
+          status: err.statusCode,
+          headers: { "Content-Type": "text/event-stream" },
+        }
+      );
+    }
+    throw err;
+  }
 
   const quotaCheck = await checkQuota(session.user.id, "session_scan");
   if (!quotaCheck.allowed) {

@@ -2,10 +2,12 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { claudeSessions, workspaces } from "@sessionforge/db";
+import { claudeSessions } from "@sessionforge/db";
 import { eq, desc, asc, gte, lte, and, sql, isNotNull, isNull } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,25 +33,17 @@ export async function GET(req: Request) {
     const hasSummaryParam = searchParams.get("hasSummary");
 
     const workspaceSlug = searchParams.get("workspace");
-    const workspace = workspaceSlug
-      ? await db
-          .select({ id: workspaces.id })
-          .from(workspaces)
-          .where(and(eq(workspaces.slug, workspaceSlug), eq(workspaces.ownerId, session.user.id)))
-          .limit(1)
-      : await db
-          .select({ id: workspaces.id })
-          .from(workspaces)
-          .where(eq(workspaces.ownerId, session.user.id))
-          .limit(1);
-
-    if (!workspace.length) {
-      throw new AppError("No workspace found", ERROR_CODES.NOT_FOUND);
+    if (!workspaceSlug) {
+      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
     }
 
-    const wsId = workspace[0].id;
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.SESSIONS_READ
+    );
 
-    const conditions = [eq(claudeSessions.workspaceId, wsId)];
+    const conditions = [eq(claudeSessions.workspaceId, workspace.id)];
     if (project) {
       conditions.push(eq(claudeSessions.projectName, project));
     }

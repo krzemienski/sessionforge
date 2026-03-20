@@ -2,9 +2,11 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { githubIntegrations, workspaces, accounts } from "@sessionforge/db";
+import { githubIntegrations, accounts } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm";
 import { verifyGitHubToken, GitHubApiError } from "@/lib/integrations/github";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +21,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.INTEGRATIONS_READ
+  );
 
   const integration = await db.query.githubIntegrations.findFirst({
     where: eq(githubIntegrations.workspaceId, workspace.id),
@@ -60,13 +60,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "workspaceSlug is required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.INTEGRATIONS_MANAGE
+  );
 
   // Get GitHub OAuth token from better-auth accounts table
   const githubAccount = await db.query.accounts.findFirst({

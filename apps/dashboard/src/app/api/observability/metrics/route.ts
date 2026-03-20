@@ -19,46 +19,32 @@ import { db } from "@/lib/db";
 import {
   automationRuns,
   agentEvents,
-  workspaces,
   contentTriggers,
 } from "@sessionforge/db";
 import { and, eq, gte, lte, sql, type SQL } from "drizzle-orm/sql";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  try {
+  return withApiHandler(async () => {
     const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
     const params = req.nextUrl.searchParams;
     const workspaceSlug = params.get("workspace");
     if (!workspaceSlug) {
-      return NextResponse.json(
-        { error: "workspace required" },
-        { status: 400 },
-      );
+      throw new AppError("workspace required", ERROR_CODES.BAD_REQUEST);
     }
 
-    const [ws] = await db
-      .select()
-      .from(workspaces)
-      .where(
-        and(
-          eq(workspaces.slug, workspaceSlug),
-          eq(workspaces.ownerId, session.user.id),
-        ),
-      )
-      .limit(1);
-
-    if (!ws) {
-      return NextResponse.json(
-        { error: "Workspace not found" },
-        { status: 404 },
-      );
-    }
+    const { workspace: ws } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.ANALYTICS_READ
+    );
 
     // Date range defaults: last 30 days → now
     const now = new Date();
@@ -244,14 +230,5 @@ export async function GET(req: NextRequest) {
       stageLatency,
       dailyThroughput,
     });
-  } catch (error) {
-    console.error(
-      "[observability/metrics] Error:",
-      error instanceof Error ? error.message : error,
-    );
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 },
-    );
-  }
+  })(req);
 }

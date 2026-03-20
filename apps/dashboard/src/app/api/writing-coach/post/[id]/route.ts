@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { posts, postStyleMetrics, workspaces } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
 import { analyzePostStyle } from "@/lib/writing-coach/style-analyzer";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,17 +19,15 @@ export async function GET(
 
   const { id: postId } = await params;
 
-  // Fetch the post and verify ownership via workspace
+  // Fetch the post
   const [post] = await db
     .select({
       id: posts.id,
       workspaceId: posts.workspaceId,
       markdown: posts.markdown,
       editDistance: posts.editDistance,
-      ownerId: workspaces.ownerId,
     })
     .from(posts)
-    .innerJoin(workspaces, eq(posts.workspaceId, workspaces.id))
     .where(eq(posts.id, postId))
     .limit(1);
 
@@ -35,9 +35,12 @@ export async function GET(
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  if (post.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  // Verify workspace access via RBAC
+  await getAuthorizedWorkspaceById(
+    session,
+    post.workspaceId,
+    PERMISSIONS.CONTENT_READ
+  );
 
   // Check if we have existing metrics
   const [metrics] = await db

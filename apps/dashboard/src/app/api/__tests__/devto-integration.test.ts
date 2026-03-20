@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, beforeAll, mock } from "bun:test";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 // ---------------------------------------------------------------------------
 // Mutable mock state shared between mock factories and test cases
@@ -57,6 +58,46 @@ mock.module("next/headers", () => ({
 mock.module("@sessionforge/db", () => ({
   devtoIntegrations: { workspaceId: "dti_workspaceId" },
   workspaces: { slug: "ws_slug", ownerId: "ws_ownerId" },
+  workspaceMembers: {
+    workspaceId: "wm_workspaceId",
+    userId: "wm_userId",
+    role: "wm_role",
+  },
+  workspaceActivity: {
+    workspaceId: "wa_workspaceId",
+    userId: "wa_userId",
+    action: "wa_action",
+  },
+}));
+
+// Mock workspace-auth to use existing mockWorkspace + mockAuthSession
+mock.module("@/lib/workspace-auth", () => {
+  const getAuthorizedWorkspace = async (session: any, slug: string, _perm?: string) => {
+    if (!mockWorkspace) throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    if (mockWorkspace.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    }
+    return { workspace: { ...mockWorkspace, slug }, role: "owner" };
+  };
+  const getAuthorizedWorkspaceById = async (session: any, id: string, _perm?: string) => {
+    if (!mockWorkspace) throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    if (mockWorkspace.ownerId !== session.user.id) {
+      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
+    }
+    return { workspace: mockWorkspace, role: "owner" };
+  };
+  const logWorkspaceActivity = async () => {};
+  return { getAuthorizedWorkspace, getAuthorizedWorkspaceById, logWorkspaceActivity };
+});
+
+mock.module("@/lib/permissions", () => ({
+  PERMISSIONS: {
+    INTEGRATIONS_READ: "integrations:read",
+    INTEGRATIONS_MANAGE: "integrations:manage",
+    WORKSPACE_SETTINGS: "workspace:settings",
+  },
+  ROLES: { OWNER: "owner" },
+  hasPermission: () => true,
 }));
 
 mock.module("drizzle-orm/sql", () => ({

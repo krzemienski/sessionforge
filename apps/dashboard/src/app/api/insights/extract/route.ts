@@ -2,16 +2,16 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { claudeSessions, workspaces } from "@sessionforge/db";
+import { claudeSessions } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
-import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, insightExtractSchema } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
-import { fireWebhookEvent } from "@/lib/webhooks/events";
 import { checkQuota, recordUsage } from "@/lib/billing/usage";
 import { createAgentMcpServer } from "@/lib/ai/mcp-server-factory";
 import { runAgentStreaming } from "@/lib/ai/agent-runner";
 import { INSIGHT_EXTRACTION_PROMPT } from "@/lib/ai/prompts/insight-extraction";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -42,12 +42,22 @@ export async function POST(req: Request) {
 
   const { sessionIds, workspaceSlug } = parsed;
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found", code: "NOT_FOUND" }, { status: 404 });
+  let workspace: Awaited<ReturnType<typeof getAuthorizedWorkspace>>["workspace"];
+  try {
+    const result = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.INSIGHTS_EXTRACT
+    );
+    workspace = result.workspace;
+  } catch (err) {
+    if (err instanceof AppError) {
+      return NextResponse.json(
+        { error: err.message, code: err.statusCode === 403 ? "FORBIDDEN" : "NOT_FOUND" },
+        { status: err.statusCode }
+      );
+    }
+    throw err;
   }
 
   const quota = await checkQuota(session.user.id, "insight_extraction");

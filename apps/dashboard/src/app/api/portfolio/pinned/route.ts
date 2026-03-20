@@ -2,12 +2,14 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces, portfolioSettings, posts } from "@sessionforge/db";
+import { portfolioSettings, posts } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { z } from "zod";
 import { parseBody } from "@/lib/validation";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,14 +29,11 @@ export async function POST(request: Request) {
     const rawBody = await request.json().catch(() => ({}));
     const data = parseBody(pinnedPostRequestSchema, rawBody);
 
-    // Verify workspace ownership
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, data.workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      data.workspaceSlug,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
     // Verify post exists and belongs to workspace
     const post = await db.query.posts.findFirst({
@@ -108,14 +107,11 @@ export async function DELETE(request: Request) {
     const rawBody = await request.json().catch(() => ({}));
     const data = parseBody(pinnedPostRequestSchema, rawBody);
 
-    // Verify workspace ownership
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, data.workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      data.workspaceSlug,
+      PERMISSIONS.WORKSPACE_SETTINGS
+    );
 
     // Get portfolio settings
     const settings = await db.query.portfolioSettings.findFirst({

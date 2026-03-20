@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { posts, postPerformanceMetrics } from "@sessionforge/db";
 import { eq, desc } from "drizzle-orm";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -11,42 +15,39 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  // Verify ownership
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, id),
-    with: { workspace: true },
-  });
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      with: { workspace: true },
+    });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (!post) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
-  const body = await request.json();
-  const { views, likes, comments, shares, platform } = body;
+    const body = await request.json();
+    const { views, likes, comments, shares, platform } = body;
 
-  if (
-    views === undefined ||
-    likes === undefined ||
-    comments === undefined ||
-    shares === undefined ||
-    !platform
-  ) {
-    return NextResponse.json(
-      { error: "views, likes, comments, shares, and platform are required" },
-      { status: 400 }
-    );
-  }
+    if (
+      views === undefined ||
+      likes === undefined ||
+      comments === undefined ||
+      shares === undefined ||
+      !platform
+    ) {
+      throw new AppError(
+        "views, likes, comments, shares, and platform are required",
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
 
-  try {
     // Calculate engagement rate: (likes + comments + shares) / views
     // Avoid division by zero
     const engagementRate = views > 0 ? (likes + comments + shares) / views : 0;
@@ -65,38 +66,30 @@ export async function POST(
       .returning();
 
     return NextResponse.json(metric, { status: 201 });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to record performance metrics" },
-      { status: 500 }
-    );
-  }
+  })(request);
 }
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  // Verify ownership
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, id),
-    with: { workspace: true },
-  });
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      with: { workspace: true },
+    });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (!post) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  if (post.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.CONTENT_READ);
 
-  try {
     // Fetch all performance metrics for this post
     const metrics = await db.query.postPerformanceMetrics.findMany({
       where: eq(postPerformanceMetrics.postId, id),
@@ -172,10 +165,5 @@ export async function GET(
       byPlatform: platformSummary,
       metrics,
     });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch performance metrics" },
-      { status: 500 }
-    );
-  }
+  })(request);
 }
