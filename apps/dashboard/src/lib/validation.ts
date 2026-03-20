@@ -233,6 +233,18 @@ export const experimentUpdateSchema = z.object({
   endsAt: z.string().datetime().optional().nullable(),
 });
 
+export const variantUpdateSchema = z.object({
+  label: z.string().min(1, "label cannot be empty").optional(),
+  headlineText: z.string().min(1, "headlineText cannot be empty").optional(),
+  hookText: z.string().min(1, "hookText cannot be empty").optional(),
+  trafficAllocation: z
+    .number()
+    .min(0, "trafficAllocation must be >= 0")
+    .max(1, "trafficAllocation must be <= 1")
+    .optional(),
+  isControl: z.boolean().optional(),
+});
+
 export const resultRecordSchema = z.object({
   variantId: z.string().min(1, "variantId is required"),
   impressions: z.number().int().nonnegative().optional(),
@@ -267,6 +279,7 @@ export type TriggerCreateInput = z.infer<typeof triggerCreateSchema>;
 export type TriggerUpdateInput = z.infer<typeof triggerUpdateSchema>;
 export type TriggerExecuteInput = z.infer<typeof triggerExecuteSchema>;
 export type VariantCreateInput = z.infer<typeof variantCreateSchema>;
+export type VariantUpdateInput = z.infer<typeof variantUpdateSchema>;
 export type ExperimentCreateInput = z.infer<typeof experimentCreateSchema>;
 export type ExperimentUpdateInput = z.infer<typeof experimentUpdateSchema>;
 export type ResultRecordInput = z.infer<typeof resultRecordSchema>;
