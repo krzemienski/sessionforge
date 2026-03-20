@@ -8,9 +8,8 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest } from "next/server";
-import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
-import { and, eq } from "drizzle-orm/sql";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { sseBroadcaster } from "@/lib/observability/sse-broadcaster";
 
 export const dynamic = "force-dynamic";
@@ -27,20 +26,11 @@ export async function GET(req: NextRequest) {
     return new Response("workspaceSlug required", { status: 400 });
   }
 
-  const [ws] = await db
-    .select()
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.slug, workspaceSlug),
-        eq(workspaces.ownerId, session.user.id),
-      ),
-    )
-    .limit(1);
-
-  if (!ws) {
-    return new Response("Workspace not found", { status: 404 });
-  }
+  const { workspace: ws } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.ANALYTICS_READ
+  );
 
   const traceId = params.get("traceId") ?? undefined;
   const agentType = params.get("agentType") ?? undefined;

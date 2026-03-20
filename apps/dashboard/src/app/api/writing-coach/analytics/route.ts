@@ -2,8 +2,10 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces, postStyleMetrics, posts } from "@sessionforge/db";
-import { eq, and, gte, desc, sql } from "drizzle-orm";
+import { postStyleMetrics, posts } from "@sessionforge/db";
+import { eq, and, gte, desc } from "drizzle-orm";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,26 +45,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Look up workspace
-  const workspace = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(
-      and(
-        eq(workspaces.ownerId, session.user.id),
-        eq(workspaces.slug, workspaceSlug)
-      )
-    )
-    .limit(1);
+  // Look up workspace with RBAC
+  const { workspace } = await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.CONTENT_READ
+  );
 
-  if (!workspace.length) {
-    return NextResponse.json(
-      { error: "Workspace not found" },
-      { status: 404 }
-    );
-  }
-
-  const wsId = workspace[0].id;
+  const wsId = workspace.id;
 
   // Calculate date threshold based on timeframe
   const daysMap: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };

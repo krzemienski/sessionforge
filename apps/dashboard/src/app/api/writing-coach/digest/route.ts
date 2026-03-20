@@ -2,8 +2,10 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces, postStyleMetrics, posts } from "@sessionforge/db";
-import { eq, and, gte, desc, sql } from "drizzle-orm";
+import { workspaces, workspaceMembers, postStyleMetrics, posts } from "@sessionforge/db";
+import { eq, and, gte, desc, sql, or } from "drizzle-orm";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -190,33 +192,48 @@ function determineRecommendedFocusArea(
 /**
  * GET /api/writing-coach/digest
  *
- * Generates weekly digest data for all user workspaces (UI preview mode).
+ * Generates weekly digest data for user workspaces (UI preview mode).
  * Does NOT send email - just returns the data.
+ * Query params: workspace (optional slug to scope to a single workspace)
  */
-export async function GET() {
+export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // Get all workspaces owned by the authenticated user
-    const userWorkspaces = await db
-      .select({
-        id: workspaces.id,
-        slug: workspaces.slug,
-      })
-      .from(workspaces)
-      .where(eq(workspaces.ownerId, session.user.id));
+    const { searchParams } = new URL(request.url);
+    const workspaceSlug = searchParams.get("workspace");
 
-    // Compute digest for each workspace
+    let targetWorkspaces: Array<{ id: string; slug: string }>;
+
+    if (workspaceSlug) {
+      // Single workspace - use RBAC
+      const { workspace } = await getAuthorizedWorkspace(
+        session,
+        workspaceSlug,
+        PERMISSIONS.CONTENT_READ
+      );
+      targetWorkspaces = [{ id: workspace.id, slug: workspace.slug }];
+    } else {
+      // All owned workspaces (backward compat)
+      targetWorkspaces = await db
+        .select({
+          id: workspaces.id,
+          slug: workspaces.slug,
+        })
+        .from(workspaces)
+        .where(eq(workspaces.ownerId, session.user.id));
+    }
+
     const workspaceDigests: WorkspaceDigest[] = [];
 
-    for (const workspace of userWorkspaces) {
-      const weeklyDigest = await computeWorkspaceDigest(workspace.id);
+    for (const ws of targetWorkspaces) {
+      const weeklyDigest = await computeWorkspaceDigest(ws.id);
       workspaceDigests.push({
-        id: workspace.id,
-        slug: workspace.slug,
+        id: ws.id,
+        slug: ws.slug,
         weeklyDigest,
       });
     }
@@ -238,33 +255,48 @@ export async function GET() {
  * POST /api/writing-coach/digest
  *
  * Weekly digest endpoint (can be called by QStash or manually).
- * Computes weekly digest for all user workspaces and returns the data.
+ * Computes weekly digest for user workspaces and returns the data.
  * In a production implementation, this would also send digest emails.
+ * Body params: workspaceSlug (optional - scope to a single workspace)
  */
-export async function POST() {
+export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // Get all workspaces owned by the authenticated user
-    const userWorkspaces = await db
-      .select({
-        id: workspaces.id,
-        slug: workspaces.slug,
-      })
-      .from(workspaces)
-      .where(eq(workspaces.ownerId, session.user.id));
+    const body = await request.json().catch(() => ({}));
+    const workspaceSlug: string | undefined = body.workspaceSlug;
 
-    // Compute digest for each workspace
+    let targetWorkspaces: Array<{ id: string; slug: string }>;
+
+    if (workspaceSlug) {
+      // Single workspace - use RBAC
+      const { workspace } = await getAuthorizedWorkspace(
+        session,
+        workspaceSlug,
+        PERMISSIONS.CONTENT_READ
+      );
+      targetWorkspaces = [{ id: workspace.id, slug: workspace.slug }];
+    } else {
+      // All owned workspaces (backward compat)
+      targetWorkspaces = await db
+        .select({
+          id: workspaces.id,
+          slug: workspaces.slug,
+        })
+        .from(workspaces)
+        .where(eq(workspaces.ownerId, session.user.id));
+    }
+
     const workspaceDigests: WorkspaceDigest[] = [];
 
-    for (const workspace of userWorkspaces) {
-      const weeklyDigest = await computeWorkspaceDigest(workspace.id);
+    for (const ws of targetWorkspaces) {
+      const weeklyDigest = await computeWorkspaceDigest(ws.id);
       workspaceDigests.push({
-        id: workspace.id,
-        slug: workspace.slug,
+        id: ws.id,
+        slug: ws.slug,
         weeklyDigest,
       });
     }
