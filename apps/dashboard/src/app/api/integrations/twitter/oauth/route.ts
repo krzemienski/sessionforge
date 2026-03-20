@@ -1,9 +1,8 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
-import { eq } from "drizzle-orm";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -40,13 +39,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "workspace query param required" }, { status: 400 });
   }
 
-  const workspace = await db.query.workspaces.findFirst({
-    where: eq(workspaces.slug, workspaceSlug),
-  });
-
-  if (!workspace || workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-  }
+  await getAuthorizedWorkspace(
+    session,
+    workspaceSlug,
+    PERMISSIONS.INTEGRATIONS_MANAGE
+  );
 
   const clientId = process.env.TWITTER_CLIENT_ID;
   if (!clientId) {

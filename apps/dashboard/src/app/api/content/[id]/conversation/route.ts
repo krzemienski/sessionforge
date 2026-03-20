@@ -6,6 +6,8 @@ import { posts, postConversations } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +26,7 @@ export async function GET(
     });
 
     if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
-    if (post.workspace.ownerId !== session.user.id)
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.CONTENT_READ);
 
     const conversation = await db.query.postConversations.findFirst({
       where: and(
@@ -53,8 +54,7 @@ export async function PUT(
     });
 
     if (!post) throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
-    if (post.workspace.ownerId !== session.user.id)
-      throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.CONTENT_EDIT);
 
     const body = await request.json().catch(() => ({}));
     const messages = Array.isArray(body.messages) ? body.messages : [];

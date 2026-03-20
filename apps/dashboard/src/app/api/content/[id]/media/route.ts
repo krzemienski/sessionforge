@@ -8,6 +8,8 @@ import { withApiHandler } from "@/lib/api-handler";
 import { parseBody } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { generateDiagrams } from "@/lib/media/diagram-generator";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -24,14 +26,11 @@ const deleteMediaSchema = z.object({
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-async function verifyPostOwnership(
+async function getPostWithAuth(
   postId: string,
-  userId: string
-): Promise<{
-  post: NonNullable<
-    Awaited<ReturnType<typeof db.query.posts.findFirst>>
-  >;
-}> {
+  session: Parameters<typeof getAuthorizedWorkspaceById>[0],
+  permission: Parameters<typeof getAuthorizedWorkspaceById>[2]
+) {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
     with: { workspace: true },
@@ -41,9 +40,7 @@ async function verifyPostOwnership(
     throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
   }
 
-  if (post.workspace.ownerId !== userId) {
-    throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-  }
+  await getAuthorizedWorkspaceById(session, post.workspaceId, permission);
 
   return { post };
 }
@@ -59,7 +56,7 @@ export async function GET(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const { post } = await verifyPostOwnership(id, session.user.id);
+    const { post } = await getPostWithAuth(id, session, PERMISSIONS.CONTENT_READ);
 
     const assets = await db.query.contentAssets.findMany({
       where: and(
@@ -83,7 +80,7 @@ export async function POST(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const { post } = await verifyPostOwnership(id, session.user.id);
+    const { post } = await getPostWithAuth(id, session, PERMISSIONS.CONTENT_EDIT);
 
     const rawBody = await request.json().catch(() => ({}));
     const parsed = parseBody(generateMediaSchema, rawBody);
@@ -146,7 +143,7 @@ export async function DELETE(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const { post } = await verifyPostOwnership(id, session.user.id);
+    const { post } = await getPostWithAuth(id, session, PERMISSIONS.CONTENT_DELETE);
 
     const rawBody = await request.json().catch(() => ({}));
     const { assetId } = parseBody(deleteMediaSchema, rawBody);

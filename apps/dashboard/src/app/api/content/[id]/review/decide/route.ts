@@ -4,16 +4,19 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
   posts,
-  postReviewers,
   approvalDecisions,
   workspaceActivity,
 } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   getWorkflowSettings,
   isAssignedReviewer,
   isApprovedForPublish,
 } from "@/lib/approval/workflow-engine";
+import { withApiHandler } from "@/lib/api-handler";
+import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,56 +35,56 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return withApiHandler(async () => {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { id } = await params;
+    const { id } = await params;
 
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, id),
-    with: { workspace: true },
-  });
+    const post = await db.query.posts.findFirst({
+      where: eq(posts.id, id),
+      with: { workspace: true },
+    });
 
-  if (!post) {
-    return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  }
+    if (!post) {
+      throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
+    }
 
-  // Verify workflow is enabled
-  const workflowSettings = await getWorkflowSettings(post.workspaceId);
-  if (!workflowSettings.enabled) {
-    return NextResponse.json(
-      { error: "Approval workflow is not enabled for this workspace" },
-      { status: 400 }
-    );
-  }
+    // Verify workspace access (content:read is sufficient for reviewers)
+    await getAuthorizedWorkspaceById(session, post.workspaceId, PERMISSIONS.CONTENT_READ);
 
-  // Verify the user is an assigned reviewer
-  const isReviewer = await isAssignedReviewer(id, session.user.id);
-  if (!isReviewer) {
-    return NextResponse.json(
-      { error: "Only assigned reviewers can submit decisions" },
-      { status: 403 }
-    );
-  }
+    // Verify workflow is enabled
+    const workflowSettings = await getWorkflowSettings(post.workspaceId);
+    if (!workflowSettings.enabled) {
+      throw new AppError(
+        "Approval workflow is not enabled for this workspace",
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
 
-  // Parse and validate request body
-  const body = await request.json();
-  const { decision, comment } = body as {
-    decision?: string;
-    comment?: string;
-  };
+    // Verify the user is an assigned reviewer
+    const isReviewer = await isAssignedReviewer(id, session.user.id);
+    if (!isReviewer) {
+      throw new AppError(
+        "Only assigned reviewers can submit decisions",
+        ERROR_CODES.FORBIDDEN
+      );
+    }
 
-  if (!decision || !VALID_DECISIONS.includes(decision as Decision)) {
-    return NextResponse.json(
-      {
-        error: `Invalid decision. Must be one of: ${VALID_DECISIONS.join(", ")}`,
-      },
-      { status: 400 }
-    );
-  }
+    // Parse and validate request body
+    const body = await request.json();
+    const { decision, comment } = body as {
+      decision?: string;
+      comment?: string;
+    };
 
-  try {
+    if (!decision || !VALID_DECISIONS.includes(decision as Decision)) {
+      throw new AppError(
+        `Invalid decision. Must be one of: ${VALID_DECISIONS.join(", ")}`,
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
+
     // Insert the approval decision
     const [newDecision] = await db
       .insert(approvalDecisions)
@@ -144,15 +147,5 @@ export async function POST(
       decision: newDecision,
       postStatusUpdated,
     });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to submit decision",
-      },
-      { status: 500 }
-    );
-  }
+  })(request);
 }

@@ -6,6 +6,8 @@ import { workspaces, workspaceActivity } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { processUploadedFile, processZipFile } from "@/lib/sessions/upload-processor";
 import { validateApiKey } from "@/lib/auth/api-key";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -36,18 +38,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's workspace
-    const workspace = await db
-      .select()
-      .from(workspaces)
-      .where(eq(workspaces.ownerId, session.user.id))
-      .limit(1);
+    // Get workspace slug from query params or form data
+    const workspaceSlug = req.nextUrl.searchParams.get("workspace");
 
-    if (!workspace.length) {
-      return NextResponse.json({ error: "No workspace found" }, { status: 404 });
+    if (!workspaceSlug) {
+      return NextResponse.json(
+        { error: "workspace query param required" },
+        { status: 400 }
+      );
     }
 
-    workspaceId = workspace[0].id;
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.SESSIONS_SCAN
+    );
+
+    workspaceId = workspace.id;
     userId = session.user.id;
   }
 

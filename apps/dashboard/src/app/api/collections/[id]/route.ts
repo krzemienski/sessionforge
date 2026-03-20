@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { collections } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +35,11 @@ export async function GET(
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  if (collection.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(
+    session,
+    collection.workspaceId,
+    PERMISSIONS.CONTENT_READ
+  );
 
   return NextResponse.json(collection);
 }
@@ -49,7 +53,6 @@ export async function PUT(
 
   const { id } = await params;
 
-  // Verify ownership
   const existing = await db.query.collections.findFirst({
     where: eq(collections.id, id),
     with: { workspace: true },
@@ -59,9 +62,11 @@ export async function PUT(
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(
+    session,
+    existing.workspaceId,
+    PERMISSIONS.CONTENT_EDIT
+  );
 
   const body = await request.json();
   const { title, description, slug, coverImage, isPublic } = body;
@@ -82,7 +87,6 @@ export async function PUT(
 
     return NextResponse.json(updated);
   } catch (error) {
-    // Handle unique constraint violation
     if (error instanceof Error && error.message.includes("unique constraint")) {
       return NextResponse.json(
         { error: "A collection with this slug already exists in this workspace" },
@@ -114,9 +118,11 @@ export async function DELETE(
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
   }
 
-  if (existing.workspace.ownerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  await getAuthorizedWorkspaceById(
+    session,
+    existing.workspaceId,
+    PERMISSIONS.CONTENT_DELETE
+  );
 
   await db.delete(collections).where(eq(collections.id, id));
 

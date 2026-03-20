@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { posts, series, seriesPosts, workspaces } from "@sessionforge/db";
+import { posts, series } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import {
   buildBackupBundle,
@@ -11,6 +11,8 @@ import {
 } from "@/lib/backup/backup-bundle";
 import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,13 +28,11 @@ export async function POST(req: Request) {
       throw new AppError("workspaceSlug is required", ERROR_CODES.BAD_REQUEST);
     }
 
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.slug, workspaceSlug),
-    });
-
-    if (!workspace || workspace.ownerId !== session.user.id) {
-      throw new AppError("Workspace not found", ERROR_CODES.NOT_FOUND);
-    }
+    const { workspace } = await getAuthorizedWorkspace(
+      session,
+      workspaceSlug,
+      PERMISSIONS.CONTENT_READ
+    );
 
     const workspaceMeta: WorkspaceMetadata = {
       id: workspace.id,

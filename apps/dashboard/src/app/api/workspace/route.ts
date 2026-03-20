@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces } from "@sessionforge/db";
+import { workspaces, workspaceMembers } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, workspaceCreateSchema } from "@/lib/validation";
@@ -15,10 +15,25 @@ export async function GET(req: Request) {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const rows = await db
+    // Return workspaces where user is owner OR a member
+    const ownedRows = await db
       .select()
       .from(workspaces)
       .where(eq(workspaces.ownerId, session.user.id));
+
+    const memberRows = await db
+      .select({ workspace: workspaces })
+      .from(workspaceMembers)
+      .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
+      .where(eq(workspaceMembers.userId, session.user.id));
+
+    // Deduplicate by workspace id (owner may also be a member)
+    const seen = new Set(ownedRows.map((w) => w.id));
+    const memberWorkspaces = memberRows
+      .map((r) => r.workspace)
+      .filter((w) => !seen.has(w.id));
+
+    const rows = [...ownedRows, ...memberWorkspaces];
 
     return NextResponse.json({ data: rows });
   })(req);

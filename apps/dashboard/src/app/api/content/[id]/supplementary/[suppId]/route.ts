@@ -10,6 +10,8 @@ import { parseBody } from "@/lib/validation";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { z } from "zod";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
+import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
+import { PERMISSIONS } from "@/lib/permissions";
 
 delete process.env.CLAUDECODE;
 
@@ -51,10 +53,11 @@ const PROMPTS: Record<SupplementaryType, string> = {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-async function verifySupplementaryOwnership(
+async function verifySupplementaryAccess(
   postId: string,
   suppId: string,
-  userId: string
+  session: Parameters<typeof getAuthorizedWorkspaceById>[0],
+  permission: Parameters<typeof getAuthorizedWorkspaceById>[2]
 ) {
   const post = await db.query.posts.findFirst({
     where: eq(posts.id, postId),
@@ -65,9 +68,7 @@ async function verifySupplementaryOwnership(
     throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
   }
 
-  if (post.workspace.ownerId !== userId) {
-    throw new AppError("Forbidden", ERROR_CODES.FORBIDDEN);
-  }
+  await getAuthorizedWorkspaceById(session, post.workspaceId, permission);
 
   const item = await db.query.supplementaryContent.findFirst({
     where: and(
@@ -94,7 +95,7 @@ export async function PUT(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    await verifySupplementaryOwnership(id, suppId, session.user.id);
+    await verifySupplementaryAccess(id, suppId, session, PERMISSIONS.CONTENT_EDIT);
 
     const rawBody = await request.json().catch(() => ({}));
     const { content } = parseBody(updateSchema, rawBody);
@@ -127,10 +128,11 @@ export async function POST(
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-    const { post, item } = await verifySupplementaryOwnership(
+    const { post, item } = await verifySupplementaryAccess(
       id,
       suppId,
-      session.user.id
+      session,
+      PERMISSIONS.CONTENT_EDIT
     );
 
     const postMarkdown = post.markdown ?? "";
