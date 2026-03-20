@@ -79,10 +79,11 @@ export function PortfolioSettingsForm({ workspace }: PortfolioSettingsFormProps)
 
   const save = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/portfolio/settings?workspace=${workspace}`, {
+      const res = await fetch(`/api/portfolio/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          workspaceSlug: workspace,
           isEnabled,
           bio: bio || null,
           theme,
@@ -194,7 +195,7 @@ export function PortfolioSettingsForm({ workspace }: PortfolioSettingsFormProps)
           <p className="text-xs text-sf-text-muted mt-1 ml-7">
             Your portfolio will be accessible at{" "}
             <code className="font-code text-sf-accent">
-              sessionforge.dev/{workspace}
+              sessionforge.dev/p/{workspace}
             </code>
           </p>
         </div>

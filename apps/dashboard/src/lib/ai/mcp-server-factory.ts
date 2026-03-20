@@ -21,6 +21,7 @@ import { handleMarkdownEditorTool } from "./tools/markdown-editor";
 import { handleSkillLoaderTool } from "./tools/skill-loader";
 import { handleEvidenceTool } from "./tools/evidence-tools";
 import { handleIngestionTool } from "./tools/ingestion-tools";
+import { handleResearchTool } from "./tools/research-tools";
 
 import type { AgentType } from "./orchestration/tool-registry";
 
@@ -44,6 +45,7 @@ const TOOL_GROUP_HANDLERS: Record<string, ToolHandler> = {
   markdown: handleMarkdownEditorTool,
   evidence: handleEvidenceTool,
   ingestion: handleIngestionTool,
+  research: handleResearchTool,
 };
 
 const SKILL_HANDLER: SkillToolHandler = handleSkillLoaderTool;
@@ -78,6 +80,9 @@ const TOOL_NAME_TO_GROUP: Record<string, string> = {
   get_external_source: "ingestion",
   get_repo_analysis: "ingestion",
   get_content_brief: "ingestion",
+  // research tools (workspace research notebook)
+  get_research_notebook: "research",
+  get_research_item: "research",
 };
 
 // ── Agent type → tool groups (mirrors AGENT_TOOL_SETS from tool-registry) ──
@@ -85,13 +90,13 @@ const TOOL_NAME_TO_GROUP: Record<string, string> = {
 const AGENT_TOOL_GROUPS: Record<AgentType, string[]> = {
   "insight-extractor": ["session", "insight"],
   "corpus-analyzer": ["session", "insight"],
-  "blog-writer": ["session", "insight", "post", "skill"],
+  "blog-writer": ["session", "insight", "post", "skill", "research"],
   "social-writer": ["session", "insight", "post"],
   "changelog-writer": ["session", "post"],
   "editor-chat": ["post", "markdown"],
   "repurpose-writer": ["post"],
   "newsletter-writer": ["session", "insight", "post"],
-  "evidence-writer": ["session", "insight", "post", "evidence", "ingestion"],
+  "evidence-writer": ["session", "insight", "post", "evidence", "ingestion", "research"],
   "supplementary-writer": ["post"],
   "content-strategist": ["insight", "analytics", "recommendation"],
 };
@@ -263,6 +268,20 @@ const TOOL_SCHEMAS: Record<string, { description: string; schema: z.AnyZodObject
   get_content_brief: {
     description: "Get the structured content brief extracted from the user's text input.",
     schema: z.object({}),
+  },
+  // ── Research tools (workspace research notebook) ──
+  get_research_notebook: {
+    description: "List all research items for a post's research notebook, optionally filtered by tag.",
+    schema: z.object({
+      postId: z.string().describe("The post ID to fetch research items for"),
+      tag: z.string().optional().describe("Optional tag to filter research items by"),
+    }),
+  },
+  get_research_item: {
+    description: "Get full details of a single research item by ID.",
+    schema: z.object({
+      itemId: z.string().describe("The research item ID to fetch"),
+    }),
   },
 };
 

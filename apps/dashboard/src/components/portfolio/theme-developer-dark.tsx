@@ -36,7 +36,7 @@ export function ThemeDeveloperDark({
             {/* RSS Link */}
             {showRss && (
               <a
-                href={`/${workspaceSlug}/rss`}
+                href={`/api/public/portfolio/${workspaceSlug}/rss`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-green-400 hover:underline font-mono"
