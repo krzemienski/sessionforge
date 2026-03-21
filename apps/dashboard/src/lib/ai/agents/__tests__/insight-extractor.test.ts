@@ -71,6 +71,9 @@ mock.module("drizzle-orm/sql", () => ({
 
 // Mock the DB schema package — insights is just used as a table reference
 // passed to the mocked db chain which discards all arguments.
+// NOTE: All table names exported by @sessionforge/db must be present here to
+// prevent mock-bleed failures in other test files that also import the package
+// during the same bun test run.
 mock.module("@sessionforge/db", () => ({
   insights: {
     id: "id",
@@ -81,8 +84,15 @@ mock.module("@sessionforge/db", () => ({
     sessionId: "sessionId",
     createdAt: "createdAt",
   },
-  // Also export agentRuns in case agent-runner.ts loads before mock intercepts it
+  // Stub exports required by sibling test files to avoid module-bleed errors
   agentRuns: {},
+  claudeSessions: {},
+  workspaces: {},
+  posts: {},
+  postRevisions: {},
+  writingSkills: {},
+  writingStyleProfiles: {},
+  insightCategoryEnum: { enumValues: [] },
 }));
 
 mock.module("../../prompts/insight-extraction", () => ({

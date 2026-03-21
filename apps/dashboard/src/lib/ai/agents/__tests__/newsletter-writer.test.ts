@@ -43,6 +43,10 @@ const mockGetTemplateBySlug = mock((_slug: string) => null as null | {
   exampleContent: string | null;
 });
 
+const mockInjectStyleProfile = mock(
+  async (prompt: string, _workspaceId: string) => prompt
+);
+
 // --- Register module mocks BEFORE any dynamic import of the module under test ---
 
 mock.module("../../mcp-server-factory", () => ({
@@ -51,6 +55,10 @@ mock.module("../../mcp-server-factory", () => ({
 
 mock.module("../../agent-runner", () => ({
   runAgentStreaming: mockRunAgentStreaming,
+}));
+
+mock.module("@/lib/style/profile-injector", () => ({
+  injectStyleProfile: mockInjectStyleProfile,
 }));
 
 mock.module("@/lib/templates", () => ({
@@ -91,10 +99,12 @@ describe("streamNewsletterWriter", () => {
     mockGetTemplateById.mockClear();
     mockGetTemplateBySlug.mockClear();
     mockIncrementTemplateUsage.mockClear();
+    mockInjectStyleProfile.mockClear();
 
     // Reset defaults
     mockGetTemplateById.mockImplementation(async () => null);
     mockGetTemplateBySlug.mockImplementation(() => null);
+    mockInjectStyleProfile.mockImplementation(async (prompt: string) => prompt);
     mockRunAgentStreaming.mockImplementation(
       () =>
         new Response("data: mock\n\n", {
