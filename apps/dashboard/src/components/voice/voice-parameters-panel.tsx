@@ -78,9 +78,9 @@ export function VoiceParametersPanel({ workspace }: VoiceParametersPanelProps) {
 
   useEffect(() => {
     if (profile.data) {
-      setFormality(profile.data.formality ?? 5);
-      setHumor(profile.data.humor ?? 5);
-      setTechnicalDepth(profile.data.technicalDepth ?? 5);
+      setFormality(profile.data.formalityOverride ?? profile.data.toneAttributes?.formality ?? 5);
+      setHumor(profile.data.humorOverride ?? profile.data.toneAttributes?.humor ?? 5);
+      setTechnicalDepth(profile.data.technicalDepthOverride ?? profile.data.toneAttributes?.technicalDepth ?? 5);
     }
   }, [profile.data]);
 
@@ -89,7 +89,7 @@ export function VoiceParametersPanel({ workspace }: VoiceParametersPanelProps) {
       const res = await fetch(`/api/workspace/${workspace}/style-profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formality, humor, technicalDepth }),
+        body: JSON.stringify({ formalityOverride: formality, humorOverride: humor, technicalDepthOverride: technicalDepth }),
       });
       if (!res.ok) throw new Error("Failed to save voice parameters");
       return res.json();
