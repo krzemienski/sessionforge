@@ -1,7 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
-import { Search, X } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { Search, X, Bookmark, BookmarkPlus, Trash2 } from "lucide-react";
+
+const PRESET_STORAGE_KEY = "sf-filter-presets";
+const MAX_PRESETS = 5;
 
 export interface FilterState {
   search: string;
@@ -11,6 +14,12 @@ export interface FilterState {
   status: string;
   dateFrom: string;
   dateTo: string;
+}
+
+interface FilterPreset {
+  id: string;
+  name: string;
+  filters: FilterState;
 }
 
 interface Post {
@@ -76,6 +85,73 @@ export function FilterPanel({
   series,
   collections,
 }: FilterPanelProps) {
+  const [presets, setPresets] = useState<FilterPreset[]>([]);
+  const [showPresetInput, setShowPresetInput] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [presetLimitError, setPresetLimitError] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PRESET_STORAGE_KEY);
+      if (stored) {
+        setPresets(JSON.parse(stored));
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
+  function savePresetsToStorage(updated: FilterPreset[]) {
+    setPresets(updated);
+    try {
+      localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  function handleSavePreset() {
+    if (presets.length >= MAX_PRESETS) {
+      setPresetLimitError(true);
+      return;
+    }
+    const name = presetName.trim();
+    if (!name) return;
+    const newPreset: FilterPreset = {
+      id: `${Date.now()}`,
+      name,
+      filters: { ...filters },
+    };
+    savePresetsToStorage([...presets, newPreset]);
+    setPresetName("");
+    setShowPresetInput(false);
+    setPresetLimitError(false);
+  }
+
+  function handleLoadPreset(preset: FilterPreset) {
+    (Object.keys(preset.filters) as Array<keyof FilterState>).forEach((key) => {
+      onFilterChange(key, preset.filters[key]);
+    });
+  }
+
+  function handleDeletePreset(id: string) {
+    const updated = presets.filter((p) => p.id !== id);
+    savePresetsToStorage(updated);
+    if (updated.length < MAX_PRESETS) {
+      setPresetLimitError(false);
+    }
+  }
+
+  function handleOpenPresetInput() {
+    if (presets.length >= MAX_PRESETS) {
+      setPresetLimitError(true);
+      return;
+    }
+    setPresetLimitError(false);
+    setShowPresetInput(true);
+    setPresetName("");
+  }
+
   // Compute counts from the full (unfiltered) posts array
   const contentTypeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -263,6 +339,81 @@ export function FilterPanel({
           Clear all filters
         </button>
       )}
+
+      {/* Filter Presets */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {presets.map((preset) => (
+            <div
+              key={preset.id}
+              className="flex items-center gap-1 bg-sf-bg-secondary border border-sf-border rounded-sf px-2 py-1 text-sm"
+            >
+              <button
+                onClick={() => handleLoadPreset(preset)}
+                className="flex items-center gap-1 text-sf-text-primary hover:text-sf-accent"
+              >
+                <Bookmark size={12} />
+                {preset.name}
+              </button>
+              <button
+                onClick={() => handleDeletePreset(preset.id)}
+                className="text-sf-text-muted hover:text-red-400 ml-1"
+                aria-label={`Delete preset ${preset.name}`}
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+
+          {!showPresetInput && (
+            <button
+              onClick={handleOpenPresetInput}
+              className="flex items-center gap-1 text-sm text-sf-text-muted hover:text-sf-accent border border-dashed border-sf-border rounded-sf px-2 py-1"
+            >
+              <BookmarkPlus size={14} />
+              Save as preset
+            </button>
+          )}
+        </div>
+
+        {/* Inline name input */}
+        {showPresetInput && (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Preset name..."
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSavePreset();
+                if (e.key === "Escape") setShowPresetInput(false);
+              }}
+              autoFocus
+              className="px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-sf-text-primary text-sm placeholder:text-sf-text-muted focus:outline-none focus:border-sf-accent"
+            />
+            <button
+              onClick={handleSavePreset}
+              disabled={!presetName.trim()}
+              className="px-3 py-1.5 bg-sf-accent text-white text-sm rounded-sf hover:opacity-90 disabled:opacity-40"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setShowPresetInput(false)}
+              className="px-3 py-1.5 text-sm text-sf-text-muted hover:text-sf-text-primary"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Limit feedback */}
+        {presetLimitError && (
+          <p className="text-sm text-red-400">
+            Maximum of {MAX_PRESETS} presets reached. Delete one to save a new preset.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
