@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useRevisions } from "@/hooks/use-revisions";
 import { usePost } from "@/hooks/use-content";
+import { RevisionCompareBar } from "@/components/editor/revision-compare-bar";
 import { cn } from "@/lib/utils";
 
 interface RevisionEntry {
@@ -218,6 +219,13 @@ export default function RevisionsPage() {
             <History size={14} />
             <span>{revisionList.length} revision{revisionList.length !== 1 ? "s" : ""}</span>
           </div>
+        </div>
+      </div>
+
+      {/* Compare bar — sticky controls with inline diff */}
+      <div className="border-b border-sf-border bg-sf-bg-primary">
+        <div className="max-w-3xl mx-auto px-4 py-4">
+          <RevisionCompareBar postId={postId} />
         </div>
       </div>
 
