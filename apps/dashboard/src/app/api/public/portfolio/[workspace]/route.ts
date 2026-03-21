@@ -112,6 +112,7 @@ export async function GET(
     keywords: p.keywords,
     seriesId: postSeriesMap[p.id] ?? null,
     collectionIds: postCollectionsMap[p.id] ?? [],
+    status: p.status,
   }));
 
   // Map pinned posts for response
@@ -126,6 +127,7 @@ export async function GET(
     keywords: p.keywords,
     seriesId: postSeriesMap[p.id] ?? null,
     collectionIds: postCollectionsMap[p.id] ?? [],
+    status: p.status,
   }));
 
   // Map series for response
