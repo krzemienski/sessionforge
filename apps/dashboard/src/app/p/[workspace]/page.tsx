@@ -160,6 +160,7 @@ export default async function PublicPortfolioPage({
             pinnedPosts={pinnedPosts}
             series={series}
             collections={collections}
+            workspaceSlug={workspaceData.slug}
           />
         </Suspense>
       </div>

@@ -192,6 +192,7 @@ export function PostGrid({
         posts={[...pinnedPosts, ...posts]}
         series={series}
         collections={collections}
+        workspaceSlug={workspaceSlug}
       />
 
       {/* Select All Bar */}

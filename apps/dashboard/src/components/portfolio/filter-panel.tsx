@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Search, X, Bookmark, BookmarkPlus, Trash2 } from "lucide-react";
-
-const PRESET_STORAGE_KEY = "sf-filter-presets";
-const MAX_PRESETS = 5;
+import { useFilterPresets, MAX_PRESETS } from "@/hooks/use-filter-presets";
 
 export interface FilterState {
   search: string;
@@ -14,12 +12,6 @@ export interface FilterState {
   status: string;
   dateFrom: string;
   dateTo: string;
-}
-
-interface FilterPreset {
-  id: string;
-  name: string;
-  filters: FilterState;
 }
 
 interface Post {
@@ -84,66 +76,45 @@ export function FilterPanel({
   posts,
   series,
   collections,
+  workspaceSlug,
 }: FilterPanelProps) {
-  const [presets, setPresets] = useState<FilterPreset[]>([]);
+  const { presets, savePreset, deletePreset, isAtLimit } = useFilterPresets(
+    workspaceSlug ?? "global"
+  );
   const [showPresetInput, setShowPresetInput] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetLimitError, setPresetLimitError] = useState(false);
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(PRESET_STORAGE_KEY);
-      if (stored) {
-        setPresets(JSON.parse(stored));
-      }
-    } catch {
-      // ignore parse errors
-    }
-  }, []);
-
-  function savePresetsToStorage(updated: FilterPreset[]) {
-    setPresets(updated);
-    try {
-      localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
-  }
-
   function handleSavePreset() {
-    if (presets.length >= MAX_PRESETS) {
+    if (isAtLimit) {
       setPresetLimitError(true);
       return;
     }
     const name = presetName.trim();
     if (!name) return;
-    const newPreset: FilterPreset = {
-      id: `${Date.now()}`,
-      name,
-      filters: { ...filters },
-    };
-    savePresetsToStorage([...presets, newPreset]);
+    const result = savePreset(name, { ...filters });
+    if (result === null) {
+      setPresetLimitError(true);
+      return;
+    }
     setPresetName("");
     setShowPresetInput(false);
     setPresetLimitError(false);
   }
 
-  function handleLoadPreset(preset: FilterPreset) {
+  function handleLoadPreset(preset: { filters: FilterState }) {
     (Object.keys(preset.filters) as Array<keyof FilterState>).forEach((key) => {
       onFilterChange(key, preset.filters[key]);
     });
   }
 
   function handleDeletePreset(id: string) {
-    const updated = presets.filter((p) => p.id !== id);
-    savePresetsToStorage(updated);
-    if (updated.length < MAX_PRESETS) {
-      setPresetLimitError(false);
-    }
+    deletePreset(id);
+    setPresetLimitError(false);
   }
 
   function handleOpenPresetInput() {
-    if (presets.length >= MAX_PRESETS) {
+    if (isAtLimit) {
       setPresetLimitError(true);
       return;
     }

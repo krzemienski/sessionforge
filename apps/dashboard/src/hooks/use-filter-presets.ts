@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FilterState } from "@/components/portfolio/filter-panel";
 
-const MAX_PRESETS = 10;
+export const MAX_PRESETS = 10;
 
 export interface FilterPreset {
   id: string;
