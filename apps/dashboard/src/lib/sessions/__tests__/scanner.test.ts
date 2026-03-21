@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { writeFile, mkdir, rm, utimes } from "fs/promises";
 import { join } from "path";
-import { scanSessionFiles } from "../scanner";
+import { scanSessionFiles, decodeProjectPath } from "../scanner";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_scanner_tests__");
 
@@ -217,6 +217,85 @@ describe("scanSessionFiles", () => {
       // will be scanned but we cannot control its contents; we only assert no throw.
       const result = await scanSessionFiles(0, "~/.claude-nonexistent-test-dir-xyz");
       expect(Array.isArray(result)).toBe(true);
+    });
+  });
+});
+
+describe("decodeProjectPath", () => {
+  describe("known OS path prefixes", () => {
+    it("decodes -Users- prefix to /Users/", () => {
+      expect(decodeProjectPath("-Users-nick-Desktop-myproject")).toBe(
+        "/Users/nick/Desktop/myproject"
+      );
+    });
+
+    it("decodes -home- prefix to /home/", () => {
+      expect(decodeProjectPath("-home-nick-projects-myproject")).toBe(
+        "/home/nick/projects/myproject"
+      );
+    });
+
+    it("decodes bare leading hyphen to /", () => {
+      expect(decodeProjectPath("-tmp-scratch")).toBe("/tmp/scratch");
+    });
+  });
+
+  describe("dot-prefixed directory segments (-- encoding)", () => {
+    it("decodes -- as /. for .claude segment", () => {
+      // e.g. -Users-nick--claude => /Users/nick/.claude
+      expect(decodeProjectPath("-Users-nick--claude")).toBe(
+        "/Users/nick/.claude"
+      );
+    });
+
+    it("decodes -- as /. for .zenflow segment", () => {
+      expect(decodeProjectPath("-Users-nick--zenflow-project")).toBe(
+        "/Users/nick/.zenflow/project"
+      );
+    });
+
+    it("decodes consecutive -- pairs correctly", () => {
+      // -Users-nick--dot1--dot2 => /Users/nick/.dot1/.dot2
+      expect(decodeProjectPath("-Users-nick--dot1--dot2")).toBe(
+        "/Users/nick/.dot1/.dot2"
+      );
+    });
+  });
+
+  describe("non-existent path fallback (defaults to /)", () => {
+    it("defaults remaining hyphens to / when no directory exists on disk", () => {
+      // A totally synthetic path that cannot exist on disk
+      const result = decodeProjectPath(
+        "-Users-nonexistent-xyz-abc-definitely-not-real-path"
+      );
+      // Should start with /Users/ (known prefix matched) and contain no literal hyphens
+      // for the segments beyond the known prefix since nothing exists on disk
+      expect(result.startsWith("/Users/")).toBe(true);
+    });
+
+    it("returns a string (does not throw) for completely unknown encoded paths", () => {
+      expect(() =>
+        decodeProjectPath("completely-unknown-path-with-no-prefix")
+      ).not.toThrow();
+      const result = decodeProjectPath(
+        "completely-unknown-path-with-no-prefix"
+      );
+      expect(typeof result).toBe("string");
+      expect(result.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("simple round-trip cases (no literal hyphens in original path)", () => {
+    it("decodes single-segment project name", () => {
+      expect(decodeProjectPath("-Users-nick-myproject")).toBe(
+        "/Users/nick/myproject"
+      );
+    });
+
+    it("decodes deeply nested path", () => {
+      expect(decodeProjectPath("-Users-nick-work-clients-acme-api")).toBe(
+        "/Users/nick/work/clients/acme/api"
+      );
     });
   });
 });

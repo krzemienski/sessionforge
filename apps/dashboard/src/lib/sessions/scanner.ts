@@ -38,7 +38,7 @@ export interface SessionFileMeta {
  * @param encoded - The encoded directory name as found under `~/.claude/projects/`.
  * @returns The decoded absolute filesystem path.
  */
-function decodeProjectPath(encoded: string): string {
+export function decodeProjectPath(encoded: string): string {
   // Step 1: Handle -- as /. (dot-prefixed dirs like .claude, .zenflow)
   let working = encoded.replace(/--/g, '/.');
 
