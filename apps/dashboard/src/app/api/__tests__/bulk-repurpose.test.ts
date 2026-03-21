@@ -72,6 +72,7 @@ mock.module("@sessionforge/db", () => ({
     parentPostId: "p_parentPostId",
     createdAt: "p_createdAt",
   },
+  writingStyleProfiles: { workspaceId: "wsp_workspaceId" },
 }));
 
 mock.module("drizzle-orm/sql", () => ({
@@ -164,12 +165,17 @@ mock.module("next/server", () => {
   return { NextResponse };
 });
 
-// Prompt module mocks (just need to exist with any string content)
-mock.module("@/lib/ai/prompts/social/twitter-thread", () => ({
-  TWITTER_THREAD_PROMPT: "MOCK_TWITTER_PROMPT with 5-10 tweets ≤280 chars, hook, CTA",
+// Profile injector mock (returns base prompt unchanged — no voice guide in tests)
+mock.module("@/lib/style/profile-injector", () => ({
+  injectStyleProfile: (prompt: string, _workspaceId: string) => Promise.resolve(prompt),
 }));
-mock.module("@/lib/ai/prompts/social/linkedin-post", () => ({
-  LINKEDIN_PROMPT: "MOCK_LINKEDIN_PROMPT 1000-1500 characters professional narrative hook hashtags",
+
+// Prompt module mocks (just need to exist with any string content)
+mock.module("@/lib/ai/prompts/repurpose/twitter-from-post", () => ({
+  TWITTER_FROM_POST_PROMPT: "MOCK_TWITTER_FROM_POST_PROMPT with 5-10 tweets ≤280 chars, hook, CTA",
+}));
+mock.module("@/lib/ai/prompts/repurpose/linkedin-from-post", () => ({
+  LINKEDIN_FROM_POST_PROMPT: "MOCK_LINKEDIN_FROM_POST_PROMPT 1000-1500 characters professional narrative hook hashtags",
 }));
 mock.module("@/lib/ai/prompts/repurpose/changelog-from-post", () => ({
   CHANGELOG_FROM_POST_PROMPT: "MOCK_CHANGELOG_PROMPT",

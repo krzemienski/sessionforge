@@ -8,8 +8,9 @@ import { AppError, ERROR_CODES } from "@/lib/errors";
 import { checkQuota, recordUsage } from "@/lib/billing/usage";
 import { runAgent } from "@/lib/ai/agent-runner";
 import { createAgentMcpServer } from "@/lib/ai/mcp-server-factory";
-import { TWITTER_THREAD_PROMPT } from "@/lib/ai/prompts/social/twitter-thread";
-import { LINKEDIN_PROMPT } from "@/lib/ai/prompts/social/linkedin-post";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
+import { TWITTER_FROM_POST_PROMPT } from "@/lib/ai/prompts/repurpose/twitter-from-post";
+import { LINKEDIN_FROM_POST_PROMPT } from "@/lib/ai/prompts/repurpose/linkedin-from-post";
 import { CHANGELOG_FROM_POST_PROMPT } from "@/lib/ai/prompts/repurpose/changelog-from-post";
 import { TLDR_PROMPT } from "@/lib/ai/prompts/repurpose/tldr";
 import { NEWSLETTER_SECTION_FROM_POST_PROMPT } from "@/lib/ai/prompts/repurpose/newsletter-section-from-post";
@@ -31,8 +32,8 @@ const VALID_TARGET_FORMATS = [
 type TargetFormat = (typeof VALID_TARGET_FORMATS)[number];
 
 const PROMPTS: Record<TargetFormat, string> = {
-  twitter_thread: TWITTER_THREAD_PROMPT,
-  linkedin_post: LINKEDIN_PROMPT,
+  twitter_thread: TWITTER_FROM_POST_PROMPT,
+  linkedin_post: LINKEDIN_FROM_POST_PROMPT,
   changelog: CHANGELOG_FROM_POST_PROMPT,
   tldr: TLDR_PROMPT,
   newsletter: NEWSLETTER_SECTION_FROM_POST_PROMPT,
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
       // Process each format for this post
       for (const targetFormat of targetFormats as TargetFormat[]) {
         try {
-          const systemPrompt = PROMPTS[targetFormat];
+          const systemPrompt = await injectStyleProfile(PROMPTS[targetFormat], workspace.id);
           const formatLabel = FORMAT_LABELS[targetFormat];
           const contentType = CONTENT_TYPES[targetFormat];
 
