@@ -358,7 +358,98 @@ export function PostGrid({
       {filteredPinnedPosts.length === 0 && filteredPosts.length === 0 && (
         <div className="text-center py-12 text-sf-text-muted">
           {hasActiveFilters ? (
-            <p>No posts match your filters. Try adjusting your search.</p>
+            <div className="space-y-4">
+              <p className="text-base text-sf-text-secondary">
+                No posts match your current filters.
+              </p>
+              <p className="text-sm">
+                {posts.length + pinnedPosts.length} total post
+                {posts.length + pinnedPosts.length !== 1 ? "s" : ""} available
+                — try broadening your search.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 mt-3">
+                {filters.search !== "" && (
+                  <button
+                    onClick={() => setParam("search", "")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>Search: &ldquo;{filters.search}&rdquo;</span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.series !== "all" && (
+                  <button
+                    onClick={() => setParam("series", "all")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>
+                      Series:{" "}
+                      {series.find((s) => s.id === filters.series)?.title ??
+                        filters.series}
+                    </span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.collection !== "all" && (
+                  <button
+                    onClick={() => setParam("collection", "all")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>
+                      Collection:{" "}
+                      {collections.find((c) => c.id === filters.collection)
+                        ?.title ?? filters.collection}
+                    </span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.contentType !== "all" && (
+                  <button
+                    onClick={() => setParam("contentType", "all")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>
+                      Type:{" "}
+                      {filters.contentType.replace(/_/g, " ")}
+                    </span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.status !== "all" && (
+                  <button
+                    onClick={() => setParam("status", "all")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>Status: {filters.status}</span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.dateFrom !== "" && (
+                  <button
+                    onClick={() => setParam("dateFrom", "")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>From: {filters.dateFrom}</span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.dateTo !== "" && (
+                  <button
+                    onClick={() => setParam("dateTo", "")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>To: {filters.dateTo}</span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={resetParams}
+                className="mt-2 text-xs text-sf-accent hover:underline"
+              >
+                Clear all filters
+              </button>
+            </div>
           ) : (
             <p>No content published yet.</p>
           )}
