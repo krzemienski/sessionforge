@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useContent, useContentStreak, useExportContent } from "@/hooks/use-content";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, LayoutGrid, List, Download, Zap } from "lucide-react";
+import { CalendarDays, LayoutGrid, List, Download, Zap, Repeat2 } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { CalendarView } from "@/components/content/calendar-view";
 import { PipelineView } from "@/components/content/pipeline-view";
@@ -14,6 +14,7 @@ import { ManageGroupDialog } from "@/components/content/manage-group-dialog";
 import { useSearchParams } from "next/navigation";
 import { ExportPanel } from "@/components/content/export-panel";
 import { ContentListView } from "@/components/content/content-list-view";
+import { BulkRepurposeDialog } from "@/components/content/bulk-repurpose-dialog";
 
 type ViewTab = "calendar" | "pipeline" | "list";
 
@@ -104,6 +105,9 @@ export default function ContentPage() {
     setActiveTab(hasTriggers ? "calendar" : "list");
   }, [triggers.isLoading, triggers.data, activeTab]);
 
+  // Bulk repurpose state
+  const [showBulkRepurpose, setShowBulkRepurpose] = useState(false);
+
   // Export state
   const [showExport, setShowExport] = useState(false);
   const [exportType, setExportType] = useState("");
@@ -136,12 +140,20 @@ export default function ContentPage() {
             </div>
           )}
         </div>
-        <button
-          onClick={() => setShowExport(!showExport)}
-          className="flex items-center justify-center gap-2 bg-sf-bg-secondary border border-sf-border text-sf-text-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors w-full sm:w-auto min-h-[44px]"
-        >
-          <Download size={16} /> Export
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setShowBulkRepurpose(true)}
+            className="flex items-center justify-center gap-2 bg-sf-accent text-white px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-accent/90 transition-colors flex-1 sm:flex-none min-h-[44px]"
+          >
+            <Repeat2 size={16} /> Bulk Repurpose
+          </button>
+          <button
+            onClick={() => setShowExport(!showExport)}
+            className="flex items-center justify-center gap-2 bg-sf-bg-secondary border border-sf-border text-sf-text-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors flex-1 sm:flex-none min-h-[44px]"
+          >
+            <Download size={16} /> Export
+          </button>
+        </div>
       </div>
 
       {/* Pipeline status line */}
@@ -231,6 +243,13 @@ export default function ContentPage() {
       {activeTab === null && (
         <div className="text-center py-12 text-sm text-sf-text-muted">Loading...</div>
       )}
+
+      {/* Bulk Repurpose dialog */}
+      <BulkRepurposeDialog
+        workspace={workspace}
+        isOpen={showBulkRepurpose}
+        onClose={() => setShowBulkRepurpose(false)}
+      />
 
       {/* Manage Series/Collections dialogs */}
       <ManageGroupDialog
