@@ -12,6 +12,8 @@ import { TWITTER_THREAD_PROMPT } from "@/lib/ai/prompts/social/twitter-thread";
 import { LINKEDIN_PROMPT } from "@/lib/ai/prompts/social/linkedin-post";
 import { CHANGELOG_FROM_POST_PROMPT } from "@/lib/ai/prompts/repurpose/changelog-from-post";
 import { TLDR_PROMPT } from "@/lib/ai/prompts/repurpose/tldr";
+import { NEWSLETTER_SECTION_FROM_POST_PROMPT } from "@/lib/ai/prompts/repurpose/newsletter-section-from-post";
+import { DOC_PAGE_FROM_POST_PROMPT } from "@/lib/ai/prompts/repurpose/doc-page-from-post";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,8 @@ const VALID_TARGET_FORMATS = [
   "linkedin_post",
   "changelog",
   "tldr",
+  "newsletter",
+  "doc_page",
 ] as const;
 
 type TargetFormat = (typeof VALID_TARGET_FORMATS)[number];
@@ -29,6 +33,8 @@ const PROMPTS: Record<TargetFormat, string> = {
   linkedin_post: LINKEDIN_PROMPT,
   changelog: CHANGELOG_FROM_POST_PROMPT,
   tldr: TLDR_PROMPT,
+  newsletter: NEWSLETTER_SECTION_FROM_POST_PROMPT,
+  doc_page: DOC_PAGE_FROM_POST_PROMPT,
 };
 
 const CONTENT_TYPES: Record<
@@ -39,6 +45,8 @@ const CONTENT_TYPES: Record<
   linkedin_post: "linkedin_post",
   changelog: "changelog",
   tldr: "custom",
+  newsletter: "custom",
+  doc_page: "custom",
 };
 
 const FORMAT_LABELS: Record<TargetFormat, string> = {
@@ -46,6 +54,8 @@ const FORMAT_LABELS: Record<TargetFormat, string> = {
   linkedin_post: "LinkedIn post",
   changelog: "changelog entry",
   tldr: "TL;DR summary",
+  newsletter: "newsletter section",
+  doc_page: "documentation page",
 };
 
 interface BatchRepurposeResult {
@@ -85,7 +95,7 @@ export async function POST(
     for (const format of targetFormats) {
       if (!VALID_TARGET_FORMATS.includes(format as TargetFormat)) {
         throw new AppError(
-          `Invalid format: ${format}. Must be one of: twitter_thread, linkedin_post, changelog, tldr`,
+          `Invalid format: ${format}. Must be one of: twitter_thread, linkedin_post, changelog, tldr, newsletter, doc_page`,
           ERROR_CODES.VALIDATION_ERROR
         );
       }
