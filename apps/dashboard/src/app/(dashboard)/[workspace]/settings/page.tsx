@@ -12,11 +12,13 @@ import { BackupRestoreTab } from "@/components/settings/backup-restore-tab";
 import { MembersTab } from "@/components/settings/members-tab";
 import { ApprovalSettingsTab } from "@/components/settings/approval-settings-tab";
 import { PortfolioSettingsForm } from "@/components/settings/portfolio-settings-form";
+import { VoiceProfileTab } from "@/components/settings/voice-profile-tab";
 
 const TABS = [
   { id: "general", label: "General" },
   { id: "members", label: "Members" },
   { id: "style", label: "Style" },
+  { id: "voice-profile", label: "Voice Profile" },
   { id: "api-keys", label: "API Keys" },
   { id: "integrations", label: "Integrations" },
   { id: "webhooks", label: "Webhooks" },
@@ -73,6 +75,7 @@ export default function SettingsPage() {
       {activeTab === "general" && <GeneralTab workspace={workspace} />}
       {activeTab === "members" && <MembersTab workspace={workspace} />}
       {activeTab === "style" && <StyleTab workspace={workspace} />}
+      {activeTab === "voice-profile" && <VoiceProfileTab workspace={workspace} />}
       {activeTab === "api-keys" && <ApiKeysTab workspace={workspace} />}
       {activeTab === "integrations" && <IntegrationsTab workspace={workspace} />}
       {activeTab === "webhooks" && <WebhooksTab workspace={workspace} />}
