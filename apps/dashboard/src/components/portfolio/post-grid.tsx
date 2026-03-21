@@ -13,6 +13,9 @@ interface Post {
   metaDescription: string | null;
   wordCount: number | null;
   keywords: any;
+  seriesId: string | null;
+  collectionIds: string[];
+  status: string;
 }
 
 interface Series {
@@ -65,6 +68,9 @@ export function PostGrid({
   const [selectedSeries, setSelectedSeries] = useState<string>("all");
   const [selectedCollection, setSelectedCollection] = useState<string>("all");
   const [selectedContentType, setSelectedContentType] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   // Get unique content types
   const contentTypes = useMemo(() => {
@@ -96,11 +102,47 @@ export function PostGrid({
       );
     }
 
-    // TODO: Filter by series/collection when post relationships are available
-    // For now, series and collection filters are shown but don't filter yet
+    // Filter by series
+    if (selectedSeries !== "all") {
+      filtered = filtered.filter(
+        (post) => post.seriesId === selectedSeries
+      );
+    }
+
+    // Filter by collection
+    if (selectedCollection !== "all") {
+      filtered = filtered.filter(
+        (post) => post.collectionIds.includes(selectedCollection)
+      );
+    }
+
+    // Filter by status
+    if (selectedStatus !== "all") {
+      filtered = filtered.filter(
+        (post) => post.status === selectedStatus
+      );
+    }
+
+    // Filter by date range
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      filtered = filtered.filter((post) => {
+        const postDate = post.publishedAt ?? post.createdAt;
+        return new Date(postDate) >= from;
+      });
+    }
+
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((post) => {
+        const postDate = post.publishedAt ?? post.createdAt;
+        return new Date(postDate) <= to;
+      });
+    }
 
     return filtered;
-  }, [posts, searchQuery, selectedContentType]);
+  }, [posts, searchQuery, selectedContentType, selectedSeries, selectedCollection, selectedStatus, dateFrom, dateTo]);
 
   // Filter pinned posts with same logic
   const filteredPinnedPosts = useMemo(() => {
@@ -121,14 +163,52 @@ export function PostGrid({
       );
     }
 
+    if (selectedSeries !== "all") {
+      filtered = filtered.filter(
+        (post) => post.seriesId === selectedSeries
+      );
+    }
+
+    if (selectedCollection !== "all") {
+      filtered = filtered.filter(
+        (post) => post.collectionIds.includes(selectedCollection)
+      );
+    }
+
+    if (selectedStatus !== "all") {
+      filtered = filtered.filter(
+        (post) => post.status === selectedStatus
+      );
+    }
+
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      filtered = filtered.filter((post) => {
+        const postDate = post.publishedAt ?? post.createdAt;
+        return new Date(postDate) >= from;
+      });
+    }
+
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      filtered = filtered.filter((post) => {
+        const postDate = post.publishedAt ?? post.createdAt;
+        return new Date(postDate) <= to;
+      });
+    }
+
     return filtered;
-  }, [pinnedPosts, searchQuery, selectedContentType]);
+  }, [pinnedPosts, searchQuery, selectedContentType, selectedSeries, selectedCollection, selectedStatus, dateFrom, dateTo]);
 
   const hasActiveFilters =
     searchQuery ||
     selectedSeries !== "all" ||
     selectedCollection !== "all" ||
-    selectedContentType !== "all";
+    selectedContentType !== "all" ||
+    selectedStatus !== "all" ||
+    dateFrom ||
+    dateTo;
 
   return (
     <div>
@@ -200,6 +280,39 @@ export function PostGrid({
           )}
         </div>
 
+        {/* Status and Date Range Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Status Filter */}
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-sf-text-primary text-sm focus:outline-none focus:border-sf-accent"
+          >
+            <option value="all">All Statuses</option>
+            <option value="published">Published</option>
+            <option value="draft">Draft</option>
+            <option value="archived">Archived</option>
+          </select>
+
+          {/* Date From */}
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            placeholder="From date"
+            className="px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-sf-text-primary text-sm focus:outline-none focus:border-sf-accent"
+          />
+
+          {/* Date To */}
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            placeholder="To date"
+            className="px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-sf-text-primary text-sm focus:outline-none focus:border-sf-accent"
+          />
+        </div>
+
         {/* Clear Filters */}
         {hasActiveFilters && (
           <button
@@ -208,6 +321,9 @@ export function PostGrid({
               setSelectedSeries("all");
               setSelectedCollection("all");
               setSelectedContentType("all");
+              setSelectedStatus("all");
+              setDateFrom("");
+              setDateTo("");
             }}
             className="text-sm text-sf-accent hover:underline"
           >
