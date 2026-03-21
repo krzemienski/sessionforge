@@ -10,7 +10,6 @@ import {
   Clock,
   RotateCcw,
   History,
-  Loader2,
 } from "lucide-react";
 import { useRevisions } from "@/hooks/use-revisions";
 import { usePost } from "@/hooks/use-content";

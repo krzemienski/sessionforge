@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Fragment } from "react";
 import { diffLines } from "diff";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -262,10 +262,9 @@ export function SideBySideDiffViewer({
                 : undefined;
 
             return (
-              <>
+              <Fragment key={idx}>
                 {/* Left column (removed) */}
                 <div
-                  key={`${idx}-left`}
                   className={cn(
                     "px-3 py-0.5 leading-5 min-h-[1.25rem]",
                     row.left
@@ -287,7 +286,6 @@ export function SideBySideDiffViewer({
 
                 {/* Right column (added) */}
                 <div
-                  key={`${idx}-right`}
                   className={cn(
                     "px-3 py-0.5 leading-5 min-h-[1.25rem]",
                     row.right
@@ -306,7 +304,7 @@ export function SideBySideDiffViewer({
                     <div className="h-full">&nbsp;</div>
                   )}
                 </div>
-              </>
+              </Fragment>
             );
           }
 
@@ -321,9 +319,8 @@ export function SideBySideDiffViewer({
                 : undefined;
 
             return (
-              <>
+              <Fragment key={idx}>
                 <div
-                  key={`${idx}-left`}
                   className="px-3 py-0.5 leading-5 bg-sf-bg-secondary text-sf-text-secondary"
                 >
                   <div className="flex items-start gap-2">
@@ -334,7 +331,6 @@ export function SideBySideDiffViewer({
                   </div>
                 </div>
                 <div
-                  key={`${idx}-right`}
                   className="px-3 py-0.5 leading-5 bg-sf-bg-secondary text-sf-text-secondary"
                 >
                   <div className="flex items-start gap-2">
@@ -344,7 +340,7 @@ export function SideBySideDiffViewer({
                     {renderLineContent(rightHtml, row.content)}
                   </div>
                 </div>
-              </>
+              </Fragment>
             );
           }
 
@@ -354,9 +350,8 @@ export function SideBySideDiffViewer({
             const rightBaseIdx = offsets?.rightStart ?? null;
 
             return (
-              <>
+              <Fragment key={idx}>
                 <button
-                  key={`${idx}-collapse-btn`}
                   onClick={() => toggleCollapse(row.id)}
                   className="col-span-2 flex items-center gap-2 px-3 py-1.5 bg-sf-bg-tertiary hover:bg-sf-bg-hover text-sf-text-muted transition-colors border-y border-sf-border/50"
                 >
@@ -384,9 +379,8 @@ export function SideBySideDiffViewer({
                         : undefined;
 
                     return (
-                      <>
+                      <Fragment key={`${idx}-${lineIdx}`}>
                         <div
-                          key={`${idx}-${lineIdx}-left`}
                           className="px-3 py-0.5 leading-5 bg-sf-bg-secondary text-sf-text-secondary"
                         >
                           <div className="flex items-start gap-2">
@@ -397,7 +391,6 @@ export function SideBySideDiffViewer({
                           </div>
                         </div>
                         <div
-                          key={`${idx}-${lineIdx}-right`}
                           className="px-3 py-0.5 leading-5 bg-sf-bg-secondary text-sf-text-secondary"
                         >
                           <div className="flex items-start gap-2">
@@ -407,10 +400,10 @@ export function SideBySideDiffViewer({
                             {renderLineContent(rightHtml, line)}
                           </div>
                         </div>
-                      </>
+                      </Fragment>
                     );
                   })}
-              </>
+              </Fragment>
             );
           }
 

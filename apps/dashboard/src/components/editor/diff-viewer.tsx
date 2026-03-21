@@ -138,9 +138,7 @@ async function buildHighlightMap(segments: Segment[]): Promise<Map<number, strin
   try {
     // highlight.js may resolve as the HLJSApi directly (ambient module)
     // or as a module with a .default export — handle both
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const hljsRaw: any = await import("highlight.js");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const hljs: any = hljsRaw.default ?? hljsRaw;
     const allLines = flattenSegmentLines(segments);
     const fenceMap = detectCodeFences(allLines);
