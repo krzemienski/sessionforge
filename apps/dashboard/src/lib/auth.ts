@@ -4,8 +4,21 @@ import { nextCookies } from "better-auth/next-js";
 import { db } from "./db";
 import * as schema from "@sessionforge/db";
 
+if (
+  process.env.NODE_ENV === "production" &&
+  !process.env.BETTER_AUTH_URL
+) {
+  console.warn(
+    "[auth] WARNING: BETTER_AUTH_URL is not set in production. " +
+      "Falling back to NEXT_PUBLIC_APP_URL. Set BETTER_AUTH_URL to the canonical server-side URL."
+  );
+}
+
 export const auth = betterAuth({
-  baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  baseURL:
+    process.env.BETTER_AUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000",
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
