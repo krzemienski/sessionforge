@@ -5,6 +5,7 @@
  */
 
 import { NEWSLETTER_PROMPT } from "../prompts/newsletter";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 import { createAgentMcpServer } from "../mcp-server-factory";
 import { runAgentStreaming } from "../agent-runner";
 import { getTemplateBySlug } from "@/lib/templates";
@@ -34,7 +35,7 @@ export async function streamNewsletterWriter(input: NewsletterWriterInput): Prom
     ? `Generate a newsletter email digest for the last ${input.lookbackDays} day${input.lookbackDays === 1 ? "" : "s"}. First use list_sessions_by_timeframe to find sessions in the window, then use get_top_insights to surface the most interesting technical moments, then create a newsletter post with create_post using contentType "newsletter".\n\nAdditional instructions: ${input.customInstructions}`
     : `Generate a newsletter email digest for the last ${input.lookbackDays} day${input.lookbackDays === 1 ? "" : "s"}. First use list_sessions_by_timeframe to find sessions in the window, then use get_top_insights to surface the most interesting technical moments, then create a newsletter post with create_post using contentType "newsletter".`;
 
-  let systemPrompt = NEWSLETTER_PROMPT;
+  let systemPrompt = await injectStyleProfile(NEWSLETTER_PROMPT, input.workspaceId);
   // Fetch and apply template if provided
   // Try database template first (by ID), then fall back to built-in (by slug)
   if (input.templateId) {
