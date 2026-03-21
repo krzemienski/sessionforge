@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { usePost, useUpdatePost, useSeoData } from "@/hooks/use-content";
 import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useGhostIntegration, useGhostPublication } from "@/hooks/use-ghost";
@@ -679,14 +680,24 @@ export default function ContentEditorPage() {
 
           {/* Right-side panel */}
           <div className="ml-auto relative w-full max-w-2xl bg-sf-bg-primary border-l border-sf-border shadow-2xl flex flex-col">
-            {/* Close button */}
-            <button
-              onClick={() => setShowHistory(false)}
-              className="absolute top-4 right-4 z-10 p-2 hover:bg-sf-bg-hover rounded-sf transition-colors"
-              aria-label="Close history"
-            >
-              <X size={20} />
-            </button>
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-sf-border">
+              <Link
+                href={`/${workspace}/content/${postId}/revisions`}
+                className="flex items-center gap-1.5 text-sm text-sf-text-secondary hover:text-sf-text-primary transition-colors"
+                onClick={() => setShowHistory(false)}
+              >
+                <ExternalLink size={14} />
+                View full history
+              </Link>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="p-2 hover:bg-sf-bg-hover rounded-sf transition-colors"
+                aria-label="Close history"
+              >
+                <X size={20} />
+              </button>
+            </div>
             <RevisionHistoryPanel postId={postId} />
           </div>
         </div>
