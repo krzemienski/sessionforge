@@ -30,17 +30,21 @@ function formatProfileAsText(profile: WritingStyleProfile): string | null {
 
   const lines: string[] = [];
 
-  // ── Tone attributes ────────────────────────────────────────────────────────
+  // ── Tone attributes (with user overrides taking precedence) ───────────────
   if (profile.toneAttributes) {
     const attrs = profile.toneAttributes;
-    if (attrs.formality != null) {
-      lines.push(`Tone: ${scoreToLabel(attrs.formality, "informal and conversational", "balanced (neither stiff nor overly casual)", "formal and precise")}.`);
+    const formalityScore = profile.formalityOverride ?? attrs.formality;
+    const technicalScore = profile.technicalDepthOverride ?? attrs.technicalDepth;
+    const humorScore = profile.humorOverride ?? attrs.humor;
+
+    if (formalityScore != null) {
+      lines.push(`Tone: ${scoreToLabel(formalityScore, "informal and conversational", "balanced (neither stiff nor overly casual)", "formal and precise")}.`);
     }
-    if (attrs.technicalDepth != null) {
-      lines.push(`Technical depth: ${scoreToLabel(attrs.technicalDepth, "high-level and accessible", "moderately technical", "deeply technical with implementation details")}.`);
+    if (technicalScore != null) {
+      lines.push(`Technical depth: ${scoreToLabel(technicalScore, "high-level and accessible", "moderately technical", "deeply technical with implementation details")}.`);
     }
-    if (attrs.humor != null) {
-      lines.push(`Humor: ${scoreToLabel(attrs.humor, "serious and straightforward", "occasionally light-hearted", "frequently witty and humorous")}.`);
+    if (humorScore != null) {
+      lines.push(`Humor: ${scoreToLabel(humorScore, "serious and straightforward", "occasionally light-hearted", "frequently witty and humorous")}.`);
     }
   }
 
@@ -59,10 +63,38 @@ function formatProfileAsText(profile: WritingStyleProfile): string | null {
     lines.push(`Sentence structure: ${profile.sentenceStructure}.`);
   }
 
+  // ── Vocabulary fingerprint ─────────────────────────────────────────────────
+  if (profile.vocabularyFingerprint && profile.vocabularyFingerprint.length > 0) {
+    lines.push(
+      `Vocabulary fingerprint (characteristic words and phrases to favour):\n${profile.vocabularyFingerprint.map((w) => `- ${w}`).join("\n")}`
+    );
+  }
+
+  // ── Anti-AI patterns ──────────────────────────────────────────────────────
+  if (profile.antiAiPatterns && profile.antiAiPatterns.length > 0) {
+    lines.push(
+      `Anti-AI patterns (phrases and constructs to actively avoid):\n${profile.antiAiPatterns.map((p) => `- ${p}`).join("\n")}`
+    );
+  }
+
+  // ── Authentic voice strategies ────────────────────────────────────────────
+  lines.push(
+    [
+      "Authentic voice strategies:",
+      "- Natural variation: vary sentence length, rhythm, and structure rather than producing uniform output.",
+      "- Concrete specificity: prefer precise details and real examples over vague generalities or filler phrases.",
+    ].join("\n")
+  );
+
   // ── Example excerpts ──────────────────────────────────────────────────────
   if (profile.exampleExcerpts && profile.exampleExcerpts.length > 0) {
     const samples = profile.exampleExcerpts.slice(0, 3);
     lines.push(`Style examples (reference only):\n${samples.map((e, i) => `${i + 1}. ${e}`).join("\n")}`);
+  }
+
+  // ── Custom instructions ───────────────────────────────────────────────────
+  if (profile.customInstructions) {
+    lines.push(`Additional instructions: ${profile.customInstructions}`);
   }
 
   return lines.join("\n\n");
