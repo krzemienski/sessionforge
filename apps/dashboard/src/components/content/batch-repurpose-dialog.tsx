@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Wand2, Check, AlertCircle } from "lucide-react";
+import Link from "next/link";
+import { X, Wand2, Check, AlertCircle, ExternalLink } from "lucide-react";
 import { showToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +14,7 @@ interface BatchRepurposeDialogProps {
   onClose: () => void;
 }
 
-type TargetFormat = "twitter_thread" | "linkedin_post" | "changelog" | "tldr" | "blog_post";
+type TargetFormat = "twitter_thread" | "linkedin_post" | "changelog" | "tldr" | "blog_post" | "newsletter" | "doc_page";
 
 const FORMAT_LABELS: Record<TargetFormat, string> = {
   twitter_thread: "Twitter Thread",
@@ -21,6 +22,8 @@ const FORMAT_LABELS: Record<TargetFormat, string> = {
   changelog: "Changelog Entry",
   tldr: "TL;DR Summary",
   blog_post: "Blog Post",
+  newsletter: "Newsletter Section",
+  doc_page: "Documentation Page",
 };
 
 const FORMAT_DESCRIPTIONS: Record<TargetFormat, string> = {
@@ -29,6 +32,8 @@ const FORMAT_DESCRIPTIONS: Record<TargetFormat, string> = {
   changelog: "Create a concise changelog entry",
   tldr: "Generate a quick TL;DR summary",
   blog_post: "Expand into a detailed blog post",
+  newsletter: "Adapt into a newsletter section for subscribers",
+  doc_page: "Transform into a structured documentation page",
 };
 
 /**
@@ -40,9 +45,9 @@ function getAvailableFormats(contentType: string): TargetFormat[] {
     return ["blog_post"];
   }
 
-  // Blog posts can be repurposed to social formats
+  // Blog posts can be repurposed to social formats and long-form variants
   if (contentType === "blog_post") {
-    return ["twitter_thread", "linkedin_post", "changelog", "tldr"];
+    return ["twitter_thread", "linkedin_post", "changelog", "tldr", "newsletter", "doc_page"];
   }
 
   // Changelog can be repurposed to social
@@ -67,6 +72,7 @@ export function BatchRepurposeDialog({
   const [errorCount, setErrorCount] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
+  const [generatedPostIds, setGeneratedPostIds] = useState<string[]>([]);
 
   const availableFormats = getAvailableFormats(contentType);
 
@@ -79,6 +85,7 @@ export function BatchRepurposeDialog({
       setErrorCount(0);
       setErrorMessage(null);
       setIsComplete(false);
+      setGeneratedPostIds([]);
     }
   }, [isOpen]);
 
@@ -236,10 +243,23 @@ export function BatchRepurposeDialog({
                 </p>
               )}
             </div>
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-between pt-2">
+              {successCount > 0 && (
+                <Link
+                  href={`/${workspace}/content`}
+                  onClick={onClose}
+                  className="flex items-center gap-1.5 text-sm font-medium text-sf-accent hover:text-sf-accent-dim transition-colors"
+                >
+                  <ExternalLink size={14} />
+                  View Generated Content
+                </Link>
+              )}
               <button
                 onClick={onClose}
-                className="bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                className={cn(
+                  "bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors",
+                  successCount === 0 && "ml-auto"
+                )}
               >
                 Done
               </button>
