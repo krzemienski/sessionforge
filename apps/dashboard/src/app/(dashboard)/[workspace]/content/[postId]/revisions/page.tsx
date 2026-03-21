@@ -1,6 +1,7 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useRef, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -188,8 +189,20 @@ function RevisionRow({ revision, workspace, postId }: RevisionRowProps) {
 export default function RevisionsPage() {
   const { workspace, postId } = useParams<{ workspace: string; postId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const post = usePost(postId);
   const revisions = useRevisions(postId);
+  const compareRef = useRef<HTMLDivElement>(null);
+
+  const initialFromId = searchParams.get("from");
+  const initialToId = searchParams.get("to");
+  const hasDeepLink = !!initialFromId && !!initialToId;
+
+  useEffect(() => {
+    if (hasDeepLink && compareRef.current) {
+      compareRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [hasDeepLink]);
 
   const revisionList: RevisionEntry[] = revisions.data?.revisions ?? [];
 
@@ -223,9 +236,13 @@ export default function RevisionsPage() {
       </div>
 
       {/* Compare bar — sticky controls with inline diff */}
-      <div className="border-b border-sf-border bg-sf-bg-primary">
+      <div ref={compareRef} className="border-b border-sf-border bg-sf-bg-primary">
         <div className="max-w-3xl mx-auto px-4 py-4">
-          <RevisionCompareBar postId={postId} />
+          <RevisionCompareBar
+            postId={postId}
+            initialFromId={initialFromId}
+            initialToId={initialToId}
+          />
         </div>
       </div>
 

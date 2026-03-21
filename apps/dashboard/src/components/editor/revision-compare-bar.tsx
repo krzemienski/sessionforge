@@ -40,6 +40,8 @@ interface RevisionEntry {
 interface RevisionCompareBarProps {
   postId: string;
   className?: string;
+  initialFromId?: string | null;
+  initialToId?: string | null;
 }
 
 function getEditTypeIcon(editType: string) {
@@ -64,9 +66,9 @@ function formatOptionLabel(rev: RevisionEntry): string {
   return `${version}${editSuffix}${time}`;
 }
 
-export function RevisionCompareBar({ postId, className }: RevisionCompareBarProps) {
-  const [fromId, setFromId] = useState<string | null>(null);
-  const [toId, setToId] = useState<string | null>(null);
+export function RevisionCompareBar({ postId, className, initialFromId, initialToId }: RevisionCompareBarProps) {
+  const [fromId, setFromId] = useState<string | null>(initialFromId ?? null);
+  const [toId, setToId] = useState<string | null>(initialToId ?? null);
   const [diffMode, setDiffMode] = useState<"unified" | "split">("unified");
 
   const revisions = useRevisions(postId);
