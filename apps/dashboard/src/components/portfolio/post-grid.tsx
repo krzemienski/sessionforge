@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
 import { Pin, BookOpen, FolderOpen } from "lucide-react";
 import { useFilterParams } from "@/hooks/use-filter-params";
 import { FilterPanel } from "@/components/portfolio/filter-panel";
+import { BulkOperationsBar } from "@/components/portfolio/bulk-operations-bar";
 
 interface Post {
   id: string;
@@ -43,6 +44,7 @@ interface PostGridProps {
   pinnedPosts: Post[];
   series: Series[];
   collections: Collection[];
+  workspaceSlug?: string;
 }
 
 const FILTER_DEFAULTS = {
@@ -127,8 +129,10 @@ export function PostGrid({
   pinnedPosts,
   series,
   collections,
+  workspaceSlug,
 }: PostGridProps) {
   const [filters, setParam, resetParams] = useFilterParams(FILTER_DEFAULTS);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredPosts = useMemo(
     () => applyFilters(posts, filters),
@@ -139,6 +143,35 @@ export function PostGrid({
     () => applyFilters(pinnedPosts, filters),
     [pinnedPosts, filters]
   );
+
+  function togglePost(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const visibleIds = [
+      ...filteredPinnedPosts.map((p) => p.id),
+      ...filteredPosts.map((p) => p.id),
+    ];
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(visibleIds));
+    }
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
 
   const hasActiveFilters =
     filters.search !== "" ||
@@ -160,6 +193,32 @@ export function PostGrid({
         series={series}
         collections={collections}
       />
+
+      {/* Select All Bar */}
+      {(filteredPinnedPosts.length > 0 || filteredPosts.length > 0) && workspaceSlug && (
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={toggleSelectAll}
+            className="flex items-center gap-2 text-sm text-sf-text-secondary hover:text-sf-text-primary transition-colors"
+          >
+            <input
+              type="checkbox"
+              readOnly
+              checked={
+                (filteredPinnedPosts.length + filteredPosts.length) > 0 &&
+                [...filteredPinnedPosts, ...filteredPosts].every((p) => selectedIds.has(p.id))
+              }
+              className="h-4 w-4 rounded border-sf-border accent-sf-accent cursor-pointer"
+            />
+            <span>Select all</span>
+          </button>
+          {selectedIds.size > 0 && (
+            <span className="text-xs text-sf-text-muted">
+              {selectedIds.size} selected
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Featured Series */}
       {series.length > 0 && series.filter((s) => s.coverImage).length > 0 && (
@@ -254,14 +313,28 @@ export function PostGrid({
             {filteredPinnedPosts.map((post) => (
               <article
                 key={post.id}
-                className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6 hover:border-sf-accent/50 transition-colors relative"
+                className={`bg-sf-bg-secondary border rounded-sf p-6 hover:border-sf-accent/50 transition-colors relative ${
+                  selectedIds.has(post.id) ? "border-sf-accent" : "border-sf-border"
+                }`}
               >
-                <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1 bg-sf-accent/10 border border-sf-accent/20 rounded-sf text-xs font-medium text-sf-accent">
+                {workspaceSlug && (
+                  <div className="absolute top-4 left-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(post.id)}
+                      onChange={() => togglePost(post.id)}
+                      className="h-4 w-4 rounded border-sf-border accent-sf-accent cursor-pointer"
+                      aria-label={`Select "${post.title}"`}
+                    />
+                  </div>
+                )}
+
+                <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1 bg-sf-accent/10 border border-sf-accent/20 rounded-sf text-xs font-medium text-sf-accent`}>
                   <Pin size={12} />
                   <span>Pinned</span>
                 </div>
 
-                <h3 className="text-lg font-semibold mb-2 text-sf-text-primary pr-20">
+                <h3 className={`text-lg font-semibold mb-2 text-sf-text-primary pr-20 ${workspaceSlug ? "pl-7" : ""}`}>
                   {post.title}
                 </h3>
 
@@ -310,9 +383,23 @@ export function PostGrid({
             {filteredPosts.map((post) => (
               <article
                 key={post.id}
-                className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6 hover:border-sf-accent/50 transition-colors"
+                className={`bg-sf-bg-secondary border rounded-sf p-6 hover:border-sf-accent/50 transition-colors relative ${
+                  selectedIds.has(post.id) ? "border-sf-accent" : "border-sf-border"
+                }`}
               >
-                <h3 className="text-lg font-semibold mb-2 text-sf-text-primary">
+                {workspaceSlug && (
+                  <div className="absolute top-4 left-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(post.id)}
+                      onChange={() => togglePost(post.id)}
+                      className="h-4 w-4 rounded border-sf-border accent-sf-accent cursor-pointer"
+                      aria-label={`Select "${post.title}"`}
+                    />
+                  </div>
+                )}
+
+                <h3 className={`text-lg font-semibold mb-2 text-sf-text-primary ${workspaceSlug ? "pl-7" : ""}`}>
                   {post.title}
                 </h3>
 
@@ -454,6 +541,19 @@ export function PostGrid({
             <p>No content published yet.</p>
           )}
         </div>
+      )}
+
+      {/* Bulk Operations Bar */}
+      {workspaceSlug && (
+        <BulkOperationsBar
+          selectedCount={selectedIds.size}
+          selectedPostIds={Array.from(selectedIds)}
+          selectedPosts={[...filteredPinnedPosts, ...filteredPosts].filter((p) =>
+            selectedIds.has(p.id)
+          )}
+          workspaceSlug={workspaceSlug}
+          onClearSelection={clearSelection}
+        />
       )}
     </div>
   );
