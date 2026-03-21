@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-export type TargetFormat = "twitter_thread" | "linkedin_post" | "changelog" | "tldr" | "blog_post";
+export type TargetFormat = "twitter_thread" | "linkedin_post" | "changelog" | "tldr" | "blog_post" | "newsletter" | "doc_page";
 
 export type AgentRunStatus = "idle" | "running" | "retrying" | "completed" | "failed";
 

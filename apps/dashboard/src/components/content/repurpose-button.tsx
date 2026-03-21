@@ -19,6 +19,8 @@ const FORMAT_LABELS: Record<TargetFormat, string> = {
   changelog: "Changelog Entry",
   tldr: "TL;DR Summary",
   blog_post: "Blog Post",
+  newsletter: "Newsletter Section",
+  doc_page: "Documentation Page",
 };
 
 function getAvailableFormats(contentType: string): TargetFormat[] {
@@ -27,9 +29,9 @@ function getAvailableFormats(contentType: string): TargetFormat[] {
     return ["blog_post"];
   }
 
-  // Blog posts can be repurposed to social formats
+  // Blog posts can be repurposed to all formats
   if (contentType === "blog_post") {
-    return ["twitter_thread", "linkedin_post", "changelog", "tldr"];
+    return ["twitter_thread", "linkedin_post", "changelog", "tldr", "newsletter", "doc_page"];
   }
 
   // Changelog can be repurposed to social
