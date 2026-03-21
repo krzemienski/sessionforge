@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { BioSection } from "@/components/portfolio/bio-section";
 import { PostGrid } from "@/components/portfolio/post-grid";
@@ -31,6 +32,9 @@ interface PortfolioData {
     metaDescription: string | null;
     wordCount: number | null;
     keywords: any;
+    seriesId: string | null;
+    collectionIds: string[];
+    status: string;
   }>;
   posts: Array<{
     id: string;
@@ -41,6 +45,9 @@ interface PortfolioData {
     metaDescription: string | null;
     wordCount: number | null;
     keywords: any;
+    seriesId: string | null;
+    collectionIds: string[];
+    status: string;
   }>;
   series: Array<{
     id: string;
@@ -146,13 +153,15 @@ export default async function PublicPortfolioPage({
           )}
         </div>
 
-        {/* Post Grid with Filtering */}
-        <PostGrid
-          posts={posts}
-          pinnedPosts={pinnedPosts}
-          series={series}
-          collections={collections}
-        />
+        {/* Post Grid with Filtering — wrapped in Suspense for useSearchParams */}
+        <Suspense fallback={<div className="py-12 text-center text-sf-text-muted">Loading...</div>}>
+          <PostGrid
+            posts={posts}
+            pinnedPosts={pinnedPosts}
+            series={series}
+            collections={collections}
+          />
+        </Suspense>
       </div>
     </ThemeComponent>
   );
