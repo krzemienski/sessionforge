@@ -91,7 +91,7 @@ export function WorkspaceShell({
         userName={userName}
         onOpenSearch={() => setIsSearchOpen(true)}
       />
-      <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6 focus:outline-none">
+      <main id="main-content" tabIndex={-1} aria-label="Main content" className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6 focus:outline-none">
         <div className="flex justify-end mb-2">
           <SystemHealthIndicator />
         </div>
