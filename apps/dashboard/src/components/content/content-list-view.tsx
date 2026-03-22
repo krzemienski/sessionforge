@@ -75,7 +75,7 @@ export function ContentListView({
           <button
             onClick={onManageSeries}
             className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors"
-            title="Manage Series"
+            aria-label="Manage series"
           >
             <Settings2 size={14} />
           </button>
@@ -95,7 +95,7 @@ export function ContentListView({
           <button
             onClick={onManageCollections}
             className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors"
-            title="Manage Collections"
+            aria-label="Manage collections"
           >
             <Settings2 size={14} />
           </button>
