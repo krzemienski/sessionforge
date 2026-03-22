@@ -615,6 +615,238 @@ describe("wrapInScriptTag", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Schema type priority ordering
+// ---------------------------------------------------------------------------
+
+describe("Schema type priority ordering", () => {
+  it("prioritises FAQPage over HowTo when both patterns present", () => {
+    // Content with FAQ headings AND numbered steps
+    const mixed = `# What is deployment?
+Deployment is the process of releasing software.
+
+# How do I deploy?
+You deploy by following these steps.
+
+# What tools do I need?
+You need Docker and Kubernetes.
+
+1. Clone the repo
+2. Install deps
+3. Build the project
+4. Deploy to prod
+`;
+    expect(detectSchemaType(mixed)).toBe("FAQPage");
+  });
+
+  it("prioritises FAQPage over SoftwareApplication when both patterns present", () => {
+    const mixed = FAQ_CONTENT + "\n\nDownload the software v1.0.0 installer tool.";
+    expect(detectSchemaType(mixed)).toBe("FAQPage");
+  });
+
+  it("prioritises HowTo over SoftwareApplication when both patterns present", () => {
+    // Content with numbered steps AND software keywords
+    const mixed = `# Installing MyApp v2.0.0
+
+Follow these steps to install the software on Windows.
+
+1. Download the installer from the website
+2. Run the setup executable
+3. Accept the license agreement
+4. Choose installation directory
+`;
+    expect(detectSchemaType(mixed)).toBe("HowTo");
+  });
+
+  it("prioritises HowTo over Article for step-based content", () => {
+    expect(detectSchemaType(HOWTO_CONTENT)).toBe("HowTo");
+    expect(detectSchemaType(HOWTO_CONTENT)).not.toBe("Article");
+  });
+
+  it("prioritises SoftwareApplication over Article for software content", () => {
+    expect(detectSchemaType(SOFTWARE_CONTENT)).toBe("SoftwareApplication");
+    expect(detectSchemaType(SOFTWARE_CONTENT)).not.toBe("Article");
+  });
+
+  it("falls back to Article when no special patterns are detected", () => {
+    const prose = "# My Thoughts\n\nThis is a general blog post about life and ideas. Nothing technical here.";
+    expect(detectSchemaType(prose)).toBe("Article");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TechArticle edge cases
+// ---------------------------------------------------------------------------
+
+describe("TechArticle edge cases", () => {
+  it("isTechContent returns true for content with multiple code blocks", () => {
+    const multiBlock = `# Guide
+
+\`\`\`js
+const x = 1;
+\`\`\`
+
+\`\`\`python
+x = 1
+\`\`\`
+`;
+    expect(isTechContent(multiBlock)).toBe(true);
+  });
+
+  it("isTechContent returns false for inline code only (no fenced blocks)", () => {
+    const inlineOnly = "# Guide\n\nUse `npm install` to get started. Then run `npm start`.";
+    expect(isTechContent(inlineOnly)).toBe(false);
+  });
+
+  it("detectProficiencyLevel returns Expert for content with advanced patterns", () => {
+    const advancedContent = `# Kubernetes Security
+
+Deploy microservices with authentication using OAuth and JWT.
+Configure your CI/CD pipeline for automated deployment.
+
+\`\`\`yaml
+apiVersion: v1
+kind: Service
+\`\`\`
+`;
+    expect(detectProficiencyLevel(advancedContent)).toBe("Expert");
+  });
+
+  it("generates TechArticle schema with all enriched fields", () => {
+    const result = generateStructuredData(makeInput({ content: TECH_CONTENT_ADVANCED }));
+    const schema = result.schema as ArticleSchema;
+    expect(schema["@type"]).toBe("TechArticle");
+    expect(schema.proficiencyLevel).toBeDefined();
+    expect(schema.dependencies).toBeDefined();
+    expect(schema.wordCount).toBeGreaterThan(0);
+  });
+
+  it("TechArticle detection does not override FAQPage priority", () => {
+    const faqWithCode = FAQ_CONTENT + "\n```js\nconst x = 1;\n```\n";
+    expect(detectSchemaType(faqWithCode)).toBe("FAQPage");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SoftwareApplication edge cases
+// ---------------------------------------------------------------------------
+
+describe("SoftwareApplication edge cases", () => {
+  it("detects UtilitiesApplication category for utility content", () => {
+    const utilContent = `# FileSync v1.0.0
+
+A utility tool for syncing files across devices. Download the software for Windows.
+
+## System Requirements
+- Windows 10 or later
+`;
+    const result = generateStructuredData(makeInput({ content: utilContent }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.applicationCategory).toBe("UtilitiesApplication");
+  });
+
+  it("detects Android and iOS operating systems", () => {
+    const mobileContent = `# MobileApp v1.0.0
+
+Download this application for Android and iOS devices. The software is free.
+
+## System Requirements
+- Android 12 or later
+- iOS 16 or later
+`;
+    const result = generateStructuredData(makeInput({ content: mobileContent }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.operatingSystem).toContain("Android");
+    expect(schema.operatingSystem).toContain("iOS");
+  });
+
+  it("includes description from excerpt when not explicitly provided", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT, description: undefined }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.description).toBeDefined();
+    expect(schema.description.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HowTo totalTime edge cases
+// ---------------------------------------------------------------------------
+
+describe("HowTo totalTime edge cases", () => {
+  it("estimates time for a short guide with minimal steps", () => {
+    const shortGuide = `# Quick Fix
+
+1. Stop the server
+2. Clear the cache
+3. Restart the server
+`;
+    const result = generateStructuredData(makeInput({ content: shortGuide }));
+    const schema = result.schema as HowToSchema;
+    // 3 steps × 2 min = 6 min
+    expect(schema.totalTime).toBe("PT6M");
+  });
+
+  it("accumulates extra time for multiple complex steps", () => {
+    const longText = "word ".repeat(60).trim();
+    const complexContent = `# Complex Guide\n\n1. ${longText}\n2. ${longText}\n3. Short step`;
+    const result = generateStructuredData(makeInput({ content: complexContent }));
+    const schema = result.schema as HowToSchema;
+    // 3 steps × 2 min = 6 + 2 complex × 3 = 12 min
+    expect(schema.totalTime).toBe("PT12M");
+  });
+
+  it("includes both code and complex step bonuses when applicable", () => {
+    const longText = "word ".repeat(60).trim();
+    const content = `# Setup Guide\n\n1. ${longText}\n2. Short step\n3. Another step\n\n\`\`\`bash\nnpm install\n\`\`\``;
+    const result = generateStructuredData(makeInput({ content: content }));
+    const schema = result.schema as HowToSchema;
+    // 3 steps × 2 min = 6 + 1 complex × 3 = 9 + 5 code = 14 min
+    expect(schema.totalTime).toBe("PT14M");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Article fallback
+// ---------------------------------------------------------------------------
+
+describe("Article fallback for non-technical content", () => {
+  it("generates plain Article for narrative prose", () => {
+    const prose = "# My Journey\n\nI started learning to code last year. It has been an incredible experience with many challenges.";
+    const result = generateStructuredData(makeInput({ content: prose }));
+    expect(result.type).toBe("Article");
+    const schema = result.schema as ArticleSchema;
+    expect(schema["@type"]).toBe("Article");
+    expect(schema.proficiencyLevel).toBeUndefined();
+    expect(schema.dependencies).toBeUndefined();
+  });
+
+  it("generates plain Article for content with fewer than 3 numbered items", () => {
+    const shortList = "# Tips\n\n1. Wake up early\n2. Exercise daily\n\nThese are my top tips.";
+    const result = generateStructuredData(makeInput({ content: shortList }));
+    expect(result.type).toBe("Article");
+  });
+
+  it("generates plain Article for content with fewer than 3 question headings", () => {
+    const fewQuestions = "# What is coding?\nCoding is fun.\n\n# Summary\nThat is all.";
+    const result = generateStructuredData(makeInput({ content: fewQuestions }));
+    expect(result.type).toBe("Article");
+  });
+
+  it("auto-generates description excerpt when not provided", () => {
+    const result = generateStructuredData(makeInput({ description: undefined }));
+    const schema = result.schema as ArticleSchema;
+    expect(schema.description).toBeDefined();
+    expect(schema.description.length).toBeGreaterThan(0);
+  });
+
+  it("includes wordCount for Article schemas", () => {
+    const result = generateStructuredData(makeInput());
+    const schema = result.schema as ArticleSchema;
+    expect(schema.wordCount).toBeDefined();
+    expect(schema.wordCount).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Schema.org compliance spot-checks
 // ---------------------------------------------------------------------------
 
