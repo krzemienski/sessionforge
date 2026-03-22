@@ -16,7 +16,7 @@
   /* Text */
   --color-sf-text-primary: #EDEDED;
   --color-sf-text-secondary: #888888;
-  --color-sf-text-muted: #555555;
+  --color-sf-text-muted: #848484;
 
   /* Accent */
   --color-sf-accent: #00FF88;
@@ -24,7 +24,7 @@
   --color-sf-accent-bg: oklch(0.72 0.17 155 / 0.08);
 
   /* Semantic */
-  --color-sf-danger: #FF4444;
+  --color-sf-danger: #FF6B6B;
   --color-sf-warning: #FFAA00;
   --color-sf-info: #4488FF;
   --color-sf-success: #00FF88;
@@ -88,7 +88,7 @@
   /* Text */
   --color-sf-text-primary: #EDEDED;
   --color-sf-text-secondary: #888888;
-  --color-sf-text-muted: #555555;
+  --color-sf-text-muted: #848484;
 }
 
 html,
