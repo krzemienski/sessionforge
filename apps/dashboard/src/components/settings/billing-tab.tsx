@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   CreditCard,
@@ -15,8 +16,13 @@ import {
   ArrowDownRight,
   RefreshCw,
   Receipt,
+  AlertTriangle,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import { PLANS, type PlanTier } from "@/lib/billing/plans";
+import { showToast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 
 interface BillingTabProps {
   workspace: string;
@@ -87,6 +93,28 @@ const EVENT_CONFIG: Record<BillingEventType, { icon: typeof CreditCard; color: s
   usage: { icon: Receipt, color: "text-sf-text-secondary" },
 };
 
+interface CancelPreviewData {
+  effectiveDate: string;
+  featuresLost: string[];
+  dataImpact: string;
+  refundAmountUsd: number | null;
+}
+
+interface DowngradePreviewData {
+  targetTier: PlanTier;
+  effectiveDate: string;
+  priceDifference: number;
+  featuresLost: string[];
+  dataImpact: string;
+}
+
+const TIER_ORDER: PlanTier[] = ["free", "solo", "pro", "team"];
+
+function getLowerTiers(current: PlanTier): PlanTier[] {
+  const idx = TIER_ORDER.indexOf(current);
+  return TIER_ORDER.slice(0, idx);
+}
+
 const TIER_BADGE_COLORS: Record<PlanTier, string> = {
   free: "bg-sf-bg-tertiary text-sf-text-secondary",
   solo: "bg-blue-500/15 text-blue-400",
@@ -104,6 +132,15 @@ function formatDate(dateStr: string | null): string {
 }
 
 export function BillingTab({ workspace }: BillingTabProps) {
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
+  const [cancelPreview, setCancelPreview] = useState<CancelPreviewData | null>(null);
+  const [downgradePreview, setDowngradePreview] = useState<DowngradePreviewData | null>(null);
+  const [selectedDowngradeTier, setSelectedDowngradeTier] = useState<PlanTier | null>(null);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [isDowngrading, setIsDowngrading] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
   const subscription = useQuery<SubscriptionData>({
     queryKey: ["billing", "subscription"],
     queryFn: async () => {
@@ -139,6 +176,121 @@ export function BillingTab({ workspace }: BillingTabProps) {
       if (data.url) window.location.href = data.url;
     } catch {
       // Portal creation failed silently
+    }
+  };
+
+  const handleOpenCancelDialog = async () => {
+    setShowCancelDialog(true);
+    setIsLoadingPreview(true);
+    setCancelPreview(null);
+    try {
+      const res = await fetch("/api/billing/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preview: true }),
+      });
+      if (!res.ok) throw new Error("Failed to load cancellation preview");
+      const data = await res.json();
+      setCancelPreview(data);
+    } catch {
+      setCancelPreview({
+        effectiveDate: subscription.data?.currentPeriodEnd ?? new Date().toISOString(),
+        featuresLost: ["All paid features will be removed"],
+        dataImpact: "Your data will be retained but access may be limited.",
+        refundAmountUsd: null,
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleConfirmCancel = async () => {
+    setIsCanceling(true);
+    try {
+      const res = await fetch("/api/billing/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preview: false }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Cancellation failed");
+      }
+      showToast("Subscription canceled successfully", "success");
+      setShowCancelDialog(false);
+      subscription.refetch();
+      history.refetch();
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to cancel subscription",
+        "error"
+      );
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
+  const handleOpenDowngradeDialog = async () => {
+    setShowDowngradeDialog(true);
+    setDowngradePreview(null);
+    setSelectedDowngradeTier(null);
+  };
+
+  const handleSelectDowngradeTier = async (targetTier: PlanTier) => {
+    setSelectedDowngradeTier(targetTier);
+    setIsLoadingPreview(true);
+    setDowngradePreview(null);
+    try {
+      const res = await fetch("/api/billing/downgrade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetTier, preview: true }),
+      });
+      if (!res.ok) throw new Error("Failed to load downgrade preview");
+      const data = await res.json();
+      setDowngradePreview(data);
+    } catch {
+      const targetPlan = PLANS[targetTier];
+      const currentPlan = PLANS[tier];
+      const currentFeatures = currentPlan.features.filter((f) => f.included).map((f) => f.label);
+      const targetFeatures = targetPlan.features.filter((f) => f.included).map((f) => f.label);
+      setDowngradePreview({
+        targetTier,
+        effectiveDate: subscription.data?.currentPeriodEnd ?? new Date().toISOString(),
+        priceDifference: currentPlan.pricing.monthly - targetPlan.pricing.monthly,
+        featuresLost: currentFeatures.filter((f) => !targetFeatures.includes(f)),
+        dataImpact: "Some features may become unavailable after downgrading.",
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleConfirmDowngrade = async () => {
+    if (!selectedDowngradeTier) return;
+    setIsDowngrading(true);
+    try {
+      const res = await fetch("/api/billing/downgrade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetTier: selectedDowngradeTier, preview: false }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Downgrade failed");
+      }
+      showToast(`Downgraded to ${PLANS[selectedDowngradeTier].name} plan`, "success");
+      setShowDowngradeDialog(false);
+      subscription.refetch();
+      usage.refetch();
+      history.refetch();
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to downgrade",
+        "error"
+      );
+    } finally {
+      setIsDowngrading(false);
     }
   };
 
@@ -406,6 +558,340 @@ export function BillingTab({ workspace }: BillingTabProps) {
           )}
         </div>
       </div>
+
+      {/* Cancellation & Downgrade */}
+      {tier !== "free" && (
+        <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold font-display mb-1">
+              Subscription Changes
+            </h2>
+            <p className="text-xs text-sf-text-muted">
+              Downgrade or cancel your subscription. Changes take effect at the end of your billing period.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {getLowerTiers(tier).length > 0 && (
+              <button
+                onClick={handleOpenDowngradeDialog}
+                className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary px-4 py-2 rounded-sf font-medium text-sm hover:border-sf-border-focus hover:text-sf-text-primary transition-colors"
+              >
+                <ChevronDown size={16} />
+                Downgrade Plan
+              </button>
+            )}
+            <button
+              onClick={handleOpenCancelDialog}
+              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-error/30 text-sf-error px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-error/10 transition-colors"
+            >
+              <XCircle size={16} />
+              Cancel Subscription
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Dialog */}
+      {showCancelDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={isCanceling ? undefined : () => setShowCancelDialog(false)}
+          />
+          <div className="relative z-10 w-full max-w-md bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold font-display text-sf-text-primary">
+                Cancel Subscription
+              </h2>
+              <button
+                onClick={() => setShowCancelDialog(false)}
+                disabled={isCanceling}
+                className={cn(
+                  "text-sf-text-secondary hover:text-sf-text-primary transition-colors",
+                  isCanceling && "opacity-50 cursor-not-allowed"
+                )}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {isLoadingPreview ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 size={20} className="animate-spin text-sf-text-muted" />
+              </div>
+            ) : cancelPreview ? (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 p-3 bg-sf-error/10 border border-sf-error/20 rounded-sf">
+                  <AlertTriangle size={18} className="text-sf-error flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-sf-text-primary">
+                    <p className="font-medium">Are you sure you want to cancel?</p>
+                    <p className="text-sf-text-secondary mt-1">
+                      This action will cancel your {plan.name} subscription.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                    <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
+                      Effective Date
+                    </p>
+                    <p className="text-sm text-sf-text-primary">
+                      {formatDate(cancelPreview.effectiveDate)}
+                    </p>
+                  </div>
+
+                  {cancelPreview.featuresLost.length > 0 && (
+                    <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-2">
+                        Features You&apos;ll Lose
+                      </p>
+                      <ul className="space-y-1">
+                        {cancelPreview.featuresLost.map((feature) => (
+                          <li key={feature} className="flex items-center gap-2 text-sm text-sf-text-primary">
+                            <XCircle size={12} className="text-sf-error flex-shrink-0" />
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                    <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
+                      Data Impact
+                    </p>
+                    <p className="text-sm text-sf-text-primary">
+                      {cancelPreview.dataImpact}
+                    </p>
+                  </div>
+
+                  {cancelPreview.refundAmountUsd !== null && cancelPreview.refundAmountUsd > 0 && (
+                    <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
+                        Estimated Refund
+                      </p>
+                      <p className="text-sm font-medium text-sf-success">
+                        ${cancelPreview.refundAmountUsd.toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2 justify-end pt-2">
+                  <button
+                    onClick={() => setShowCancelDialog(false)}
+                    disabled={isCanceling}
+                    className="px-4 py-2 text-sm font-medium text-sf-text-secondary hover:text-sf-text-primary transition-colors"
+                  >
+                    Keep Subscription
+                  </button>
+                  <button
+                    onClick={handleConfirmCancel}
+                    disabled={isCanceling}
+                    className="flex items-center gap-2 bg-sf-error text-white px-4 py-2 rounded-sf text-sm font-medium hover:bg-sf-error/90 disabled:opacity-50 transition-colors"
+                  >
+                    {isCanceling ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <XCircle size={14} />
+                    )}
+                    Confirm Cancellation
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Downgrade Dialog */}
+      {showDowngradeDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={isDowngrading ? undefined : () => setShowDowngradeDialog(false)}
+          />
+          <div className="relative z-10 w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-semibold font-display text-sf-text-primary">
+                Downgrade Plan
+              </h2>
+              <button
+                onClick={() => setShowDowngradeDialog(false)}
+                disabled={isDowngrading}
+                className={cn(
+                  "text-sf-text-secondary hover:text-sf-text-primary transition-colors",
+                  isDowngrading && "opacity-50 cursor-not-allowed"
+                )}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4">
+              {/* Tier Selection */}
+              {!selectedDowngradeTier ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-sf-text-secondary mb-3">
+                    Select a plan to downgrade to:
+                  </p>
+                  {getLowerTiers(tier).map((lowerTier) => {
+                    const targetPlan = PLANS[lowerTier];
+                    return (
+                      <button
+                        key={lowerTier}
+                        onClick={() => handleSelectDowngradeTier(lowerTier)}
+                        className="w-full flex items-center justify-between p-4 bg-sf-bg-tertiary border border-sf-border rounded-sf hover:border-sf-border-focus transition-colors text-left"
+                      >
+                        <div>
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${TIER_BADGE_COLORS[lowerTier]} mb-1`}>
+                            {targetPlan.name}
+                          </span>
+                          <p className="text-xs text-sf-text-muted mt-1">
+                            {targetPlan.description}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-4">
+                          <p className="text-lg font-semibold text-sf-text-primary">
+                            {targetPlan.pricing.monthly === 0 ? "Free" : `$${targetPlan.pricing.monthly}`}
+                          </p>
+                          {targetPlan.pricing.monthly > 0 && (
+                            <p className="text-xs text-sf-text-muted">/month</p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : isLoadingPreview ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 size={20} className="animate-spin text-sf-text-muted" />
+                </div>
+              ) : downgradePreview ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-3 bg-sf-warning/10 border border-sf-warning/20 rounded-sf">
+                    <AlertTriangle size={18} className="text-sf-warning flex-shrink-0" />
+                    <p className="text-sm text-sf-text-primary">
+                      You&apos;re downgrading from <strong>{plan.name}</strong> to{" "}
+                      <strong>{PLANS[downgradePreview.targetTier].name}</strong>.
+                    </p>
+                  </div>
+
+                  {/* Plan Comparison */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
+                        Current
+                      </p>
+                      <p className="text-sm font-semibold text-sf-text-primary">{plan.name}</p>
+                      <p className="text-xs text-sf-text-muted">
+                        ${plan.pricing.monthly}/mo
+                      </p>
+                    </div>
+                    <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
+                        New Plan
+                      </p>
+                      <p className="text-sm font-semibold text-sf-text-primary">
+                        {PLANS[downgradePreview.targetTier].name}
+                      </p>
+                      <p className="text-xs text-sf-text-muted">
+                        {PLANS[downgradePreview.targetTier].pricing.monthly === 0
+                          ? "Free"
+                          : `$${PLANS[downgradePreview.targetTier].pricing.monthly}/mo`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                    <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
+                      Effective Date
+                    </p>
+                    <p className="text-sm text-sf-text-primary">
+                      {formatDate(downgradePreview.effectiveDate)}
+                    </p>
+                  </div>
+
+                  {downgradePreview.featuresLost.length > 0 && (
+                    <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-2">
+                        Features You&apos;ll Lose
+                      </p>
+                      <ul className="space-y-1">
+                        {downgradePreview.featuresLost.map((feature) => (
+                          <li key={feature} className="flex items-center gap-2 text-sm text-sf-text-primary">
+                            <XCircle size={12} className="text-sf-error flex-shrink-0" />
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
+                    <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
+                      Data Impact
+                    </p>
+                    <p className="text-sm text-sf-text-primary">
+                      {downgradePreview.dataImpact}
+                    </p>
+                  </div>
+
+                  {downgradePreview.priceDifference > 0 && (
+                    <div className="p-3 bg-sf-success/10 border border-sf-success/20 rounded-sf">
+                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
+                        Monthly Savings
+                      </p>
+                      <p className="text-sm font-medium text-sf-success">
+                        ${downgradePreview.priceDifference.toFixed(2)}/mo
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex gap-2 justify-end pt-4 border-t border-sf-border mt-4">
+              {selectedDowngradeTier && !isLoadingPreview ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setSelectedDowngradeTier(null);
+                      setDowngradePreview(null);
+                    }}
+                    disabled={isDowngrading}
+                    className="px-4 py-2 text-sm font-medium text-sf-text-secondary hover:text-sf-text-primary transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleConfirmDowngrade}
+                    disabled={isDowngrading}
+                    className="flex items-center gap-2 bg-sf-warning text-sf-bg-primary px-4 py-2 rounded-sf text-sm font-medium hover:bg-sf-warning/90 disabled:opacity-50 transition-colors"
+                  >
+                    {isDowngrading ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <ChevronDown size={14} />
+                    )}
+                    Confirm Downgrade
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowDowngradeDialog(false)}
+                  className="px-4 py-2 text-sm font-medium text-sf-text-secondary hover:text-sf-text-primary transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
