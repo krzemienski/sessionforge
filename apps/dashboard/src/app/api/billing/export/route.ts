@@ -82,6 +82,7 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url);
   const format = url.searchParams.get("format")?.toLowerCase() ?? "json";
+  const type = url.searchParams.get("type")?.toLowerCase() ?? "full";
 
   if (format !== "json" && format !== "csv") {
     return NextResponse.json(
@@ -182,6 +183,21 @@ export async function GET(req: NextRequest) {
         "Usage events are retained for 90 days. Account data is retained for 30 days after account deletion. All data is permanently deleted after the retention period.",
     },
   };
+
+  // ── Filter for policy-only export if requested ─────────────────────────
+  if (type === "policy") {
+    const policyReport = {
+      exportedAt: report.exportedAt,
+      currentPlan: {
+        tier: report.currentPlan.tier,
+        name: report.currentPlan.name,
+        limits: report.currentPlan.limits,
+      },
+      workspaces: report.workspaces,
+      dataRetention: report.dataRetention,
+    };
+    return NextResponse.json(policyReport);
+  }
 
   // ── Return JSON ──────────────────────────────────────────────────────────
   if (format === "json") {

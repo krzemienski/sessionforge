@@ -176,6 +176,5 @@ export async function GET(req: NextRequest) {
     events: trimmed,
     total: trimmed.length,
     planTier: subscription.planTier,
-    stripeCustomerId: subscription.stripeCustomerId,
   });
 }

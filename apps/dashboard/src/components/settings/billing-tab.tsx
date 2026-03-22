@@ -84,7 +84,6 @@ interface BillingHistoryData {
   events: BillingEvent[];
   total: number;
   planTier: PlanTier;
-  stripeCustomerId: string | null;
 }
 
 const EVENT_CONFIG: Record<BillingEventType, { icon: typeof CreditCard; color: string }> = {
@@ -98,18 +97,21 @@ const EVENT_CONFIG: Record<BillingEventType, { icon: typeof CreditCard; color: s
 };
 
 interface CancelPreviewData {
+  currentPlan: { tier: string; name: string };
   effectiveDate: string;
   featuresLost: string[];
-  dataImpact: string;
-  refundAmountUsd: number | null;
+  dataRetention: { description: string; retentionDays: number };
+  usageExceeding: Array<{ metric: string; current: number; freeLimit: number | null }>;
 }
 
 interface DowngradePreviewData {
-  targetTier: PlanTier;
+  currentPlan: { tier: string; name: string };
+  targetPlan: { tier: PlanTier; name: string };
   effectiveDate: string;
-  priceDifference: number;
   featuresLost: string[];
-  dataImpact: string;
+  featuresKept: string[];
+  usageImpact: Array<{ metric: string; current: number; newLimit: string; overLimit: boolean }>;
+  pricingChange: { current: { monthly: number; annual: number }; target: { monthly: number; annual: number }; savingsMonthly: number; savingsAnnual: number };
 }
 
 const TIER_ORDER: PlanTier[] = ["free", "solo", "pro", "team"];
@@ -181,7 +183,7 @@ export function BillingTab({ workspace }: BillingTabProps) {
       const data = await res.json();
       if (data.url) window.location.href = data.url;
     } catch {
-      // Portal creation failed silently
+      showToast("Failed to open payment portal. Please try again.", "error");
     }
   };
 
@@ -234,20 +236,17 @@ export function BillingTab({ workspace }: BillingTabProps) {
     setIsLoadingPreview(true);
     setCancelPreview(null);
     try {
-      const res = await fetch("/api/billing/cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preview: true }),
-      });
+      const res = await fetch("/api/billing/cancel-preview");
       if (!res.ok) throw new Error("Failed to load cancellation preview");
       const data = await res.json();
       setCancelPreview(data);
     } catch {
       setCancelPreview({
+        currentPlan: { tier, name: plan.name },
         effectiveDate: subscription.data?.currentPeriodEnd ?? new Date().toISOString(),
         featuresLost: ["All paid features will be removed"],
-        dataImpact: "Your data will be retained but access may be limited.",
-        refundAmountUsd: null,
+        dataRetention: { description: "Your data will be retained for 30 days after cancellation.", retentionDays: 30 },
+        usageExceeding: [],
       });
     } finally {
       setIsLoadingPreview(false);
@@ -257,11 +256,7 @@ export function BillingTab({ workspace }: BillingTabProps) {
   const handleConfirmCancel = async () => {
     setIsCanceling(true);
     try {
-      const res = await fetch("/api/billing/cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preview: false }),
-      });
+      const res = await fetch("/api/billing/cancel", { method: "POST" });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Cancellation failed");
@@ -291,11 +286,7 @@ export function BillingTab({ workspace }: BillingTabProps) {
     setIsLoadingPreview(true);
     setDowngradePreview(null);
     try {
-      const res = await fetch("/api/billing/downgrade", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetTier, preview: true }),
-      });
+      const res = await fetch(`/api/billing/downgrade-preview?to=${targetTier}`);
       if (!res.ok) throw new Error("Failed to load downgrade preview");
       const data = await res.json();
       setDowngradePreview(data);
@@ -305,11 +296,18 @@ export function BillingTab({ workspace }: BillingTabProps) {
       const currentFeatures = currentPlan.features.filter((f) => f.included).map((f) => f.label);
       const targetFeatures = targetPlan.features.filter((f) => f.included).map((f) => f.label);
       setDowngradePreview({
-        targetTier,
+        currentPlan: { tier, name: plan.name },
+        targetPlan: { tier: targetTier, name: PLANS[targetTier].name },
         effectiveDate: subscription.data?.currentPeriodEnd ?? new Date().toISOString(),
-        priceDifference: currentPlan.pricing.monthly - targetPlan.pricing.monthly,
         featuresLost: currentFeatures.filter((f) => !targetFeatures.includes(f)),
-        dataImpact: "Some features may become unavailable after downgrading.",
+        featuresKept: targetFeatures,
+        usageImpact: [],
+        pricingChange: {
+          current: { monthly: plan.pricing.monthly, annual: plan.pricing.annual },
+          target: { monthly: PLANS[targetTier].pricing.monthly, annual: PLANS[targetTier].pricing.annual },
+          savingsMonthly: plan.pricing.monthly - PLANS[targetTier].pricing.monthly,
+          savingsAnnual: plan.pricing.annual - PLANS[targetTier].pricing.annual,
+        },
       });
     } finally {
       setIsLoadingPreview(false);
@@ -323,7 +321,7 @@ export function BillingTab({ workspace }: BillingTabProps) {
       const res = await fetch("/api/billing/downgrade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetTier: selectedDowngradeTier, preview: false }),
+        body: JSON.stringify({ targetTier: selectedDowngradeTier }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -788,21 +786,26 @@ export function BillingTab({ workspace }: BillingTabProps) {
 
                   <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
                     <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
-                      Data Impact
+                      Data Retention
                     </p>
                     <p className="text-sm text-sf-text-primary">
-                      {cancelPreview.dataImpact}
+                      {cancelPreview.dataRetention.description}
                     </p>
                   </div>
 
-                  {cancelPreview.refundAmountUsd !== null && cancelPreview.refundAmountUsd > 0 && (
-                    <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
-                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
-                        Estimated Refund
+                  {cancelPreview.usageExceeding.length > 0 && (
+                    <div className="p-3 bg-sf-warning/10 border border-sf-warning/20 rounded-sf">
+                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-2">
+                        Usage Exceeding Free Limits
                       </p>
-                      <p className="text-sm font-medium text-sf-success">
-                        ${cancelPreview.refundAmountUsd.toFixed(2)}
-                      </p>
+                      <ul className="space-y-1">
+                        {cancelPreview.usageExceeding.map((item) => (
+                          <li key={item.metric} className="flex items-center gap-2 text-sm text-sf-text-primary">
+                            <AlertTriangle size={12} className="text-sf-warning flex-shrink-0" />
+                            {item.metric}: {item.current} used (free limit: {item.freeLimit ?? "N/A"})
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>
@@ -904,7 +907,7 @@ export function BillingTab({ workspace }: BillingTabProps) {
                     <AlertTriangle size={18} className="text-sf-warning flex-shrink-0" />
                     <p className="text-sm text-sf-text-primary">
                       You&apos;re downgrading from <strong>{plan.name}</strong> to{" "}
-                      <strong>{PLANS[downgradePreview.targetTier].name}</strong>.
+                      <strong>{downgradePreview.targetPlan.name}</strong>.
                     </p>
                   </div>
 
@@ -924,12 +927,12 @@ export function BillingTab({ workspace }: BillingTabProps) {
                         New Plan
                       </p>
                       <p className="text-sm font-semibold text-sf-text-primary">
-                        {PLANS[downgradePreview.targetTier].name}
+                        {downgradePreview.targetPlan.name}
                       </p>
                       <p className="text-xs text-sf-text-muted">
-                        {PLANS[downgradePreview.targetTier].pricing.monthly === 0
+                        {downgradePreview.pricingChange.target.monthly === 0
                           ? "Free"
-                          : `$${PLANS[downgradePreview.targetTier].pricing.monthly}/mo`}
+                          : `$${downgradePreview.pricingChange.target.monthly}/mo`}
                       </p>
                     </div>
                   </div>
@@ -959,22 +962,31 @@ export function BillingTab({ workspace }: BillingTabProps) {
                     </div>
                   )}
 
-                  <div className="p-3 bg-sf-bg-tertiary border border-sf-border rounded-sf">
-                    <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
-                      Data Impact
-                    </p>
-                    <p className="text-sm text-sf-text-primary">
-                      {downgradePreview.dataImpact}
-                    </p>
-                  </div>
+                  {downgradePreview.usageImpact.filter((i) => i.overLimit).length > 0 && (
+                    <div className="p-3 bg-sf-warning/10 border border-sf-warning/20 rounded-sf">
+                      <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-2">
+                        Usage Over New Limits
+                      </p>
+                      <ul className="space-y-1">
+                        {downgradePreview.usageImpact
+                          .filter((i) => i.overLimit)
+                          .map((item) => (
+                            <li key={item.metric} className="flex items-center gap-2 text-sm text-sf-text-primary">
+                              <AlertTriangle size={12} className="text-sf-warning flex-shrink-0" />
+                              {item.metric}: {item.current} used (new limit: {item.newLimit})
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  )}
 
-                  {downgradePreview.priceDifference > 0 && (
+                  {downgradePreview.pricingChange.savingsMonthly > 0 && (
                     <div className="p-3 bg-sf-success/10 border border-sf-success/20 rounded-sf">
                       <p className="text-xs font-medium text-sf-text-secondary uppercase tracking-wide mb-1">
                         Monthly Savings
                       </p>
                       <p className="text-sm font-medium text-sf-success">
-                        ${downgradePreview.priceDifference.toFixed(2)}/mo
+                        ${downgradePreview.pricingChange.savingsMonthly.toFixed(2)}/mo
                       </p>
                     </div>
                   )}

@@ -123,17 +123,6 @@ export async function GET(req: NextRequest) {
         freeLimit: freeLimits.contentGenerationsPerMonth,
       });
     }
-
-    if (
-      freeLimits.workspaces !== null
-    ) {
-      // Workspace count would need a separate query; include the limit info
-      usageExceeding.push({
-        metric: "Workspaces",
-        current: 0, // Would require workspace count query
-        freeLimit: freeLimits.workspaces,
-      });
-    }
   }
 
   return NextResponse.json({
