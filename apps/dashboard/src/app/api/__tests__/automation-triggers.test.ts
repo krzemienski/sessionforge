@@ -85,9 +85,13 @@ mock.module("next/headers", () => ({
   headers: () => Promise.resolve(new Headers()),
 }));
 
-// Lightweight stand-ins for drizzle table schema objects.
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
 mock.module("@sessionforge/db", () => ({
+  ...SHARED_SCHEMA_MOCK,
   contentTriggers: {
+    ...SHARED_SCHEMA_MOCK.contentTriggers,
     id: "ct_id",
     workspaceId: "ct_workspaceId",
     name: "ct_name",
@@ -98,11 +102,6 @@ mock.module("@sessionforge/db", () => ({
     debounceMinutes: "ct_debounceMinutes",
     qstashScheduleId: "ct_qstashScheduleId",
     watchStatus: "ct_watchStatus",
-  },
-  workspaces: {
-    id: "ws_id",
-    slug: "ws_slug",
-    ownerId: "ws_ownerId",
   },
 }));
 

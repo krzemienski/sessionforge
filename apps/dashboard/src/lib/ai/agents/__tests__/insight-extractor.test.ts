@@ -69,9 +69,11 @@ mock.module("drizzle-orm/sql", () => ({
   and: (...args: unknown[]) => args,
 }));
 
-// Mock the DB schema package — insights is just used as a table reference
-// passed to the mocked db chain which discards all arguments.
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
 mock.module("@sessionforge/db", () => ({
+  ...SHARED_SCHEMA_MOCK,
   insights: {
     id: "id",
     title: "title",
@@ -81,8 +83,6 @@ mock.module("@sessionforge/db", () => ({
     sessionId: "sessionId",
     createdAt: "createdAt",
   },
-  // Also export agentRuns in case agent-runner.ts loads before mock intercepts it
-  agentRuns: {},
 }));
 
 mock.module("../../prompts/insight-extraction", () => ({

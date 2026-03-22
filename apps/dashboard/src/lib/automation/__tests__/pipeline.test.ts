@@ -85,7 +85,11 @@ mock.module("drizzle-orm/sql", () => ({
   isNull: (col: unknown) => ({ col, op: "isNull" }),
 }));
 
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
 mock.module("@sessionforge/db", () => ({
+  ...SHARED_SCHEMA_MOCK,
   automationRuns: { id: "automationRuns.id", status: "status", sessionsScanned: "sessionsScanned", insightsExtracted: "insightsExtracted", postId: "postId", completedAt: "completedAt", durationMs: "durationMs", errorMessage: "errorMessage" },
   claudeSessions: { id: "claudeSessions.id", sessionId: "sessionId", workspaceId: "workspaceId", startedAt: "startedAt" },
   contentTriggers: { id: "contentTriggers.id", lastRunAt: "lastRunAt", lastRunStatus: "lastRunStatus" },

@@ -54,9 +54,12 @@ mock.module("next/headers", () => ({
   headers: () => Promise.resolve(new Headers()),
 }));
 
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
 mock.module("@sessionforge/db", () => ({
+  ...SHARED_SCHEMA_MOCK,
   devtoIntegrations: { workspaceId: "dti_workspaceId" },
-  workspaces: { slug: "ws_slug", ownerId: "ws_ownerId" },
 }));
 
 mock.module("drizzle-orm/sql", () => ({

@@ -63,31 +63,20 @@ mock.module("next/headers", () => ({
   headers: () => Promise.resolve(new Headers()),
 }));
 
-// Lightweight stand-ins for drizzle table schema objects.
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+// when bun:test's process-wide mock.module() picks another file's factory first.
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
 mock.module("@sessionforge/db", () => ({
+  ...SHARED_SCHEMA_MOCK,
   posts: {
-    id: "p_id",
-    workspaceId: "p_workspaceId",
+    ...SHARED_SCHEMA_MOCK.posts,
     contentType: {
       enumValues: ["linkedin_post", "twitter_thread", "newsletter"],
     },
     status: {
       enumValues: ["draft", "published", "archived"],
     },
-    createdAt: "p_createdAt",
-    updatedAt: "p_updatedAt",
-    title: "p_title",
-    markdown: "p_markdown",
-    platformFooterEnabled: "p_platformFooterEnabled",
-    toneUsed: "p_toneUsed",
-  },
-  workspaces: {
-    id: "ws_id",
-    slug: "ws_slug",
-    ownerId: "ws_ownerId",
-  },
-  toneProfileEnum: {
-    enumValues: ["professional", "casual", "technical", "conversational"],
   },
 }));
 

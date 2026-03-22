@@ -76,10 +76,13 @@ mock.module("drizzle-orm/sql", () => ({
   and: (...args: unknown[]) => args,
 }));
 
-// Mock @sessionforge/db schema — claudeSessions used only as table/column refs
-// that are passed to the mocked db chain (which ignores them entirely).
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
 mock.module("@sessionforge/db", () => ({
+  ...SHARED_SCHEMA_MOCK,
   claudeSessions: {
+    ...SHARED_SCHEMA_MOCK.claudeSessions,
     id: "id",
     sessionId: "sessionId",
     workspaceId: "workspaceId",

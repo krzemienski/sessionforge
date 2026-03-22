@@ -28,17 +28,59 @@ const mockInjectStyleProfile = mock(
 );
 
 // --- Register module mocks BEFORE dynamic import ---
+// Mock both alias AND relative paths to ensure bun intercepts regardless of resolution.
+// Include all exports from each module so cross-file mock interference is avoided.
 
+// Alias paths (for imports from other modules resolving via @/)
+mock.module("@/lib/ai/mcp-server-factory", () => ({
+  createAgentMcpServer: mockCreateAgentMcpServer,
+}));
+
+mock.module("@/lib/ai/agent-runner", () => ({
+  runAgentStreaming: mockRunAgentStreaming,
+  runAgent: mock(async () => ({ success: true })),
+}));
+
+mock.module("@/lib/style/profile-injector", () => ({
+  injectStyleProfile: mockInjectStyleProfile,
+  getStyleProfileContext: mock(async () => null),
+}));
+
+// Relative paths (for imports from repurpose-writer.ts using "../")
 mock.module("../../mcp-server-factory", () => ({
   createAgentMcpServer: mockCreateAgentMcpServer,
 }));
 
 mock.module("../../agent-runner", () => ({
   runAgentStreaming: mockRunAgentStreaming,
+  runAgent: mock(async () => ({ success: true })),
 }));
 
-mock.module("@/lib/style/profile-injector", () => ({
-  injectStyleProfile: mockInjectStyleProfile,
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+// when bun:test's process-wide mock.module() picks another file's factory first.
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
+mock.module("@sessionforge/db", () => ({
+  ...SHARED_SCHEMA_MOCK,
+}));
+
+mock.module("drizzle-orm/sql", () => ({
+  eq: (...args: unknown[]) => ({ op: "eq", args }),
+  desc: (col: unknown) => ({ op: "desc", col }),
+  and: (...args: unknown[]) => ({ op: "and", args }),
+  gte: (...args: unknown[]) => ({ op: "gte", args }),
+  lte: (...args: unknown[]) => ({ op: "lte", args }),
+  ilike: (...args: unknown[]) => ({ op: "ilike", args }),
+}));
+
+mock.module("@/lib/db", () => ({
+  db: {
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
+    query: {
+      workspaces: { findFirst: async () => undefined },
+      posts: { findFirst: async () => undefined },
+    },
+  },
 }));
 
 // --- Dynamic import of the module under test ---

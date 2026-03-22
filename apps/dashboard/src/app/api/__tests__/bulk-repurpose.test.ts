@@ -64,9 +64,14 @@ mock.module("next/headers", () => ({
   headers: () => Promise.resolve(new Headers()),
 }));
 
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+// when bun:test's process-wide mock.module() picks another file's factory first.
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
 mock.module("@sessionforge/db", () => ({
-  workspaces: { id: "ws_id", slug: "ws_slug", ownerId: "ws_ownerId" },
+  ...SHARED_SCHEMA_MOCK,
   posts: {
+    ...SHARED_SCHEMA_MOCK.posts,
     id: "p_id",
     workspaceId: "p_workspaceId",
     parentPostId: "p_parentPostId",
@@ -78,44 +83,53 @@ mock.module("@sessionforge/db", () => ({
 mock.module("drizzle-orm/sql", () => ({
   eq: (...args: unknown[]) => ({ op: "eq", args }),
   desc: (col: unknown) => ({ op: "desc", col }),
+  and: (...args: unknown[]) => ({ op: "and", args }),
+  gte: (...args: unknown[]) => ({ op: "gte", args }),
+  lte: (...args: unknown[]) => ({ op: "lte", args }),
+  ilike: (...args: unknown[]) => ({ op: "ilike", args }),
 }));
 
-const mockDb = {
-  query: {
-    workspaces: {
-      findFirst: (_opts?: unknown) => Promise.resolve(mockWorkspaceResult),
+// Store query functions on globalThis so the mock.module factory references them
+// at CALL TIME. This allows cross-file mock sharing with profile-injector.test.ts.
+(globalThis as any).__DB_QUERY_WS_FIND = (_opts?: unknown) => Promise.resolve(mockWorkspaceResult);
+(globalThis as any).__DB_QUERY_POSTS_FIND = (opts?: unknown) => {
+  const where = (opts as any)?.where;
+  const lhs = where?.args?.[0];
+  const rhs = where?.args?.[1];
+  if (lhs === "p_id") {
+    return Promise.resolve(rhs ? mockPostsById[rhs] : undefined);
+  }
+  return Promise.resolve({
+    id: mockCreatedPostId,
+    title: "Generated Post",
+    workspaceId: "ws-bulk-1",
+    parentPostId: rhs ?? "parent-id",
+    createdAt: new Date(),
+  });
+};
+
+mock.module("@/lib/db", () => ({
+  db: {
+    select: (...args: unknown[]) => {
+      const fn = (globalThis as any).__PI_DB_SELECT_FN;
+      return fn ? fn(...args) : { from: () => ({ where: () => ({ limit: async () => [] }) }) };
     },
-    posts: {
-      findFirst: (opts?: unknown) => {
-        // The route calls findFirst twice:
-        //   1. eq(posts.id, postId)          → where.args[0] === "p_id"   → source post lookup
-        //   2. eq(posts.parentPostId, postId) → where.args[0] === "p_parentPostId" → child lookup
-        //
-        // The eq mock returns { op: "eq", args: [lhs, rhs] }
-        // posts.id === "p_id", posts.parentPostId === "p_parentPostId"
-        const where = (opts as any)?.where;
-        const lhs = where?.args?.[0]; // column placeholder
-        const rhs = where?.args?.[1]; // value (the post ID)
-
-        if (lhs === "p_id") {
-          // Source post lookup — return from seeded set or undefined
-          return Promise.resolve(rhs ? mockPostsById[rhs] : undefined);
-        }
-
-        // Child post lookup (eq(posts.parentPostId, postId)) — return generated child
-        return Promise.resolve({
-          id: mockCreatedPostId,
-          title: "Generated Post",
-          workspaceId: "ws-bulk-1",
-          parentPostId: rhs ?? "parent-id",
-          createdAt: new Date(),
-        });
+    query: {
+      workspaces: {
+        findFirst: (opts?: unknown) => {
+          const fn = (globalThis as any).__DB_QUERY_WS_FIND;
+          return fn ? fn(opts) : Promise.resolve(undefined);
+        },
+      },
+      posts: {
+        findFirst: (opts?: unknown) => {
+          const fn = (globalThis as any).__DB_QUERY_POSTS_FIND;
+          return fn ? fn(opts) : Promise.resolve(undefined);
+        },
       },
     },
   },
-};
-
-mock.module("@/lib/db", () => ({ db: mockDb }));
+}));
 
 mock.module("@/lib/ai/agent-runner", () => ({
   runAgent: async (opts: {
@@ -134,6 +148,12 @@ mock.module("@/lib/ai/agent-runner", () => ({
     });
     return { success: true };
   },
+  // Include runAgentStreaming so this mock doesn't break other test files
+  // that import runAgentStreaming from the same module.
+  runAgentStreaming: (_opts: unknown) =>
+    new Response("data: mock\n\n", {
+      headers: { "Content-Type": "text/event-stream" },
+    }),
 }));
 
 mock.module("@/lib/ai/mcp-server-factory", () => ({
@@ -165,29 +185,44 @@ mock.module("next/server", () => {
   return { NextResponse };
 });
 
-// Profile injector mock (returns base prompt unchanged — no voice guide in tests)
+// Profile injector mock — include ALL exports so this doesn't break profile-injector.test.ts
+// which tests getStyleProfileContext() and formatProfileAsText() when bun:test leaks mocks cross-file.
+// Store real implementations on globalThis so profile-injector.test.ts can override them.
+(globalThis as any).__PI_INJECT_STYLE_PROFILE = (prompt: string, _workspaceId: string) => Promise.resolve(prompt);
+(globalThis as any).__PI_GET_STYLE_PROFILE_CTX = async (_workspaceId: string) => null;
+(globalThis as any).__PI_FORMAT_PROFILE_AS_TEXT = (_profile: unknown) => null;
+(globalThis as any).__PI_SCORE_TO_LABEL = (_score: number | null | undefined, _low: string, mid: string, _high: string) => mid;
+
 mock.module("@/lib/style/profile-injector", () => ({
-  injectStyleProfile: (prompt: string, _workspaceId: string) => Promise.resolve(prompt),
+  injectStyleProfile: (prompt: string, workspaceId: string) =>
+    (globalThis as any).__PI_INJECT_STYLE_PROFILE(prompt, workspaceId),
+  getStyleProfileContext: (workspaceId: string) =>
+    (globalThis as any).__PI_GET_STYLE_PROFILE_CTX(workspaceId),
+  formatProfileAsText: (profile: unknown) =>
+    (globalThis as any).__PI_FORMAT_PROFILE_AS_TEXT(profile),
+  scoreToLabel: (score: number | null | undefined, low: string, mid: string, high: string) =>
+    (globalThis as any).__PI_SCORE_TO_LABEL(score, low, mid, high),
 }));
 
-// Prompt module mocks (just need to exist with any string content)
+// Prompt module mocks — strings must include ALL content patterns verified by
+// repurpose-writer.test.ts to avoid failures when bun:test leaks mocks cross-file.
 mock.module("@/lib/ai/prompts/repurpose/twitter-from-post", () => ({
-  TWITTER_FROM_POST_PROMPT: "MOCK_TWITTER_FROM_POST_PROMPT with 5-10 tweets ≤280 chars, hook, CTA",
+  TWITTER_FROM_POST_PROMPT: "Generate a Twitter/X thread of 5-10 tweets. Each tweet ≤280 characters. Start with a hook tweet. Number tweets as 1/N, 2/N. End with a CTA tweet.",
 }));
 mock.module("@/lib/ai/prompts/repurpose/linkedin-from-post", () => ({
-  LINKEDIN_FROM_POST_PROMPT: "MOCK_LINKEDIN_FROM_POST_PROMPT 1000-1500 characters professional narrative hook hashtags",
+  LINKEDIN_FROM_POST_PROMPT: "Generate a LinkedIn post of 1000-1500 characters in professional narrative format. Open with a hook. Include 2-3 body paragraphs, a key takeaway, and hashtag suggestions.",
 }));
 mock.module("@/lib/ai/prompts/repurpose/changelog-from-post", () => ({
-  CHANGELOG_FROM_POST_PROMPT: "MOCK_CHANGELOG_PROMPT",
+  CHANGELOG_FROM_POST_PROMPT: "Generate a concise changelog entry.",
 }));
 mock.module("@/lib/ai/prompts/repurpose/tldr", () => ({
-  TLDR_PROMPT: "MOCK_TLDR_PROMPT",
+  TLDR_PROMPT: "Generate a TL;DR summary.",
 }));
 mock.module("@/lib/ai/prompts/repurpose/newsletter-section-from-post", () => ({
-  NEWSLETTER_SECTION_FROM_POST_PROMPT: "MOCK_NEWSLETTER_PROMPT Key Takeaways",
+  NEWSLETTER_SECTION_FROM_POST_PROMPT: "Generate a newsletter section of 200-400 words. Include a section header, intro, **Key Takeaways** bullet list, deeper dive paragraph, and CTA line.",
 }));
 mock.module("@/lib/ai/prompts/repurpose/doc-page-from-post", () => ({
-  DOC_PAGE_FROM_POST_PROMPT: "MOCK_DOC_PAGE_PROMPT Overview Prerequisites Usage Related",
+  DOC_PAGE_FROM_POST_PROMPT: "Generate a documentation page with: Overview, Prerequisites, Core Concept, Usage/Examples with ```code blocks```, Key Parameters, and Related links.",
 }));
 
 // ---------------------------------------------------------------------------
@@ -250,6 +285,24 @@ beforeEach(() => {
   mockCreatedPostId = "child-post-generated";
   runAgentCalls.length = 0;
   mockPostsById = {};
+
+  // Update globalThis db query functions so they use current mutable state
+  (globalThis as any).__DB_QUERY_WS_FIND = (_opts?: unknown) => Promise.resolve(mockWorkspaceResult);
+  (globalThis as any).__DB_QUERY_POSTS_FIND = (opts?: unknown) => {
+    const where = (opts as any)?.where;
+    const lhs = where?.args?.[0];
+    const rhs = where?.args?.[1];
+    if (lhs === "p_id") {
+      return Promise.resolve(rhs ? mockPostsById[rhs] : undefined);
+    }
+    return Promise.resolve({
+      id: mockCreatedPostId,
+      title: "Generated Post",
+      workspaceId: "ws-bulk-1",
+      parentPostId: rhs ?? "parent-id",
+      createdAt: new Date(),
+    });
+  };
 });
 
 // ---------------------------------------------------------------------------

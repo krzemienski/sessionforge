@@ -43,20 +43,19 @@ mock.module("next/headers", () => ({
   headers: () => Promise.resolve(new Headers()),
 }));
 
-// Provide lightweight stand-ins for drizzle table schema objects.
-// The mock db ignores the column references, so any non-null values suffice.
+// Comprehensive shared @sessionforge/db mock — ensures cross-file compatibility
+import { SHARED_SCHEMA_MOCK } from "@/__test-utils__/shared-schema-mock";
+
 mock.module("@sessionforge/db", () => ({
+  ...SHARED_SCHEMA_MOCK,
   claudeSessions: {
+    ...SHARED_SCHEMA_MOCK.claudeSessions,
     workspaceId: "cs_workspaceId",
     startedAt: "cs_startedAt",
     messageCount: "cs_messageCount",
     costUsd: "cs_costUsd",
     durationSeconds: "cs_durationSeconds",
     projectName: "cs_projectName",
-  },
-  workspaces: {
-    id: "ws_id",
-    ownerId: "ws_ownerId",
   },
 }));
 

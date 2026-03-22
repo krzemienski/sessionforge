@@ -7,7 +7,7 @@ type WritingStyleProfile = typeof writingStyleProfiles.$inferSelect;
 /**
  * Maps a 0–1 score to a descriptive label at three breakpoints.
  */
-function scoreToLabel(
+export function scoreToLabel(
   score: number | null | undefined,
   low: string,
   mid: string,
@@ -25,7 +25,7 @@ function scoreToLabel(
  *
  * Returns null if the profile is not in a completed state.
  */
-function formatProfileAsText(profile: WritingStyleProfile): string | null {
+export function formatProfileAsText(profile: WritingStyleProfile): string | null {
   if (profile.generationStatus !== "completed") return null;
 
   const lines: string[] = [];
