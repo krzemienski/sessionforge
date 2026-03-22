@@ -386,12 +386,14 @@ export default function ContentEditorPage() {
       </div>
 
       {/* Title Input */}
+      <h1 className="sr-only">Edit Post</h1>
       <input
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         className="bg-transparent text-xl md:text-2xl font-bold font-display text-sf-text-primary border-none outline-none mb-3 md:mb-4 placeholder:text-sf-text-muted min-h-[44px] md:min-h-0 px-1"
         placeholder="Post title..."
+        aria-label="Post title"
       />
 
       {/* Series navigation */}

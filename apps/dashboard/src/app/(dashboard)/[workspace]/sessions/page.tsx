@@ -372,7 +372,7 @@ export default function SessionsPage() {
       {showFilters && (
         <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 mb-6 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-sf-text-primary text-sm">Filters</h3>
+            <h2 className="font-semibold text-sf-text-primary text-sm">Filters</h2>
             <div className="flex items-center gap-2">
               {activeFilterCount > 0 && (
                 <button
