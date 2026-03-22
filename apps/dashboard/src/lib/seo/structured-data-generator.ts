@@ -127,14 +127,44 @@ export interface FAQPageSchema extends SchemaBase {
 }
 
 // ---------------------------------------------------------------------------
+// SoftwareApplication schema
+// ---------------------------------------------------------------------------
+
+/** schema.org Offer object for software pricing. */
+export interface SchemaOffer {
+  "@type": "Offer";
+  price: string;
+  priceCurrency: string;
+}
+
+/** schema.org SoftwareApplication JSON-LD structure. */
+export interface SoftwareApplicationSchema extends SchemaBase {
+  "@type": "SoftwareApplication";
+  name: string;
+  description: string;
+  author: SchemaPerson;
+  datePublished: string;
+  dateModified: string;
+  url?: string;
+  image?: SchemaImageObject | string;
+  applicationCategory?: string;
+  operatingSystem?: string;
+  offers?: SchemaOffer;
+}
+
+// ---------------------------------------------------------------------------
 // Union result type
 // ---------------------------------------------------------------------------
 
 /** Discriminated union of all supported JSON-LD schema types. */
-export type StructuredData = ArticleSchema | HowToSchema | FAQPageSchema;
+export type StructuredData =
+  | ArticleSchema
+  | HowToSchema
+  | FAQPageSchema
+  | SoftwareApplicationSchema;
 
 /** Indicates which schema type was selected for the content. */
-export type SchemaType = "Article" | "HowTo" | "FAQPage";
+export type SchemaType = "Article" | "HowTo" | "FAQPage" | "SoftwareApplication";
 
 /** Input metadata for structured data generation. */
 export interface StructuredDataInput {
@@ -474,6 +504,86 @@ export function extractDependencies(markdown: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// SoftwareApplication detection
+// ---------------------------------------------------------------------------
+
+/** Patterns that indicate software/application-related content. */
+const SOFTWARE_PATTERNS = [
+  /\b(?:install(?:ation|ing|ed)?|uninstall)\b/i,
+  /\bv?\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?\b/,
+  /\b(?:system\s+requirements?|minimum\s+requirements?|recommended\s+requirements?)\b/i,
+  /\b(?:download(?:ing|ed|s)?)\b/i,
+  /\b(?:software|application|app|tool|utility|program|executable)\b/i,
+  /\b(?:operating\s+system|(?:windows|macos|linux|android|ios)\s+(?:support|compatible|version))\b/i,
+  /\b(?:release\s+notes?|changelog|what'?s\s+new)\b/i,
+  /\b(?:license|licensing|free(?:ware)?|open[\s-]?source|proprietary)\b/i,
+];
+
+/** Minimum number of software pattern matches required for detection. */
+const SOFTWARE_PATTERN_THRESHOLD = 3;
+
+/**
+ * Determines whether the content is best represented as a SoftwareApplication.
+ * Requires multiple software-related indicators to be present.
+ *
+ * @param markdown - Raw markdown to inspect.
+ * @returns `true` if the content appears to describe a software application.
+ */
+function isSoftwareContent(markdown: string): boolean {
+  const hits = SOFTWARE_PATTERNS.filter((p) => p.test(markdown)).length;
+  return hits >= SOFTWARE_PATTERN_THRESHOLD;
+}
+
+/**
+ * Detects the application category from content by checking for common categories.
+ *
+ * @param markdown - Raw markdown content.
+ * @returns Detected application category, or "SoftwareApplication" as default.
+ */
+function detectApplicationCategory(markdown: string): string {
+  const categoryPatterns: [RegExp, string][] = [
+    [/\b(?:game|gaming|gameplay)\b/i, "GameApplication"],
+    [/\b(?:business|enterprise|crm|erp)\b/i, "BusinessApplication"],
+    [/\b(?:developer|development|ide|sdk|api|programming)\b/i, "DeveloperApplication"],
+    [/\b(?:design|graphic|photo|image\s+edit)\b/i, "DesignApplication"],
+    [/\b(?:education|learning|tutorial|course)\b/i, "EducationalApplication"],
+    [/\b(?:security|antivirus|firewall|encryption)\b/i, "SecurityApplication"],
+    [/\b(?:browser|web\s+browser)\b/i, "WebApplication"],
+    [/\b(?:multimedia|video|audio|music|media\s+player)\b/i, "MultimediaApplication"],
+    [/\b(?:utility|utilities|tool|tools)\b/i, "UtilitiesApplication"],
+  ];
+
+  for (const [pattern, category] of categoryPatterns) {
+    if (pattern.test(markdown)) return category;
+  }
+
+  return "SoftwareApplication";
+}
+
+/**
+ * Detects mentioned operating systems from content.
+ *
+ * @param markdown - Raw markdown content.
+ * @returns Comma-separated string of detected OS names, or undefined if none found.
+ */
+function detectOperatingSystem(markdown: string): string | undefined {
+  const osPatterns: [RegExp, string][] = [
+    [/\b(?:windows)\b/i, "Windows"],
+    [/\b(?:macos|mac\s+os|os\s*x)\b/i, "macOS"],
+    [/\b(?:linux|ubuntu|debian|fedora|centos)\b/i, "Linux"],
+    [/\b(?:android)\b/i, "Android"],
+    [/\b(?:ios|iphone|ipad)\b/i, "iOS"],
+  ];
+
+  const detected = new Set<string>();
+  for (const [pattern, name] of osPatterns) {
+    if (pattern.test(markdown)) detected.add(name);
+  }
+
+  return detected.size > 0 ? Array.from(detected).join(", ") : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // HowTo time estimation
 // ---------------------------------------------------------------------------
 
@@ -698,6 +808,47 @@ function generateFAQPageSchema(input: StructuredDataInput): FAQPageSchema {
   return schema;
 }
 
+/**
+ * Generates a SoftwareApplication JSON-LD schema from software-related content.
+ *
+ * @param input - Post metadata and content.
+ * @returns Complete SoftwareApplicationSchema.
+ */
+function generateSoftwareApplicationSchema(
+  input: StructuredDataInput
+): SoftwareApplicationSchema {
+  const dateModified = input.dateModified ?? input.datePublished;
+  const description = input.description ?? extractExcerpt(input.content);
+
+  const schema: SoftwareApplicationSchema = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: input.title,
+    description,
+    author: buildPerson(input.author),
+    datePublished: input.datePublished,
+    dateModified,
+  };
+
+  const category = detectApplicationCategory(input.content);
+  schema.applicationCategory = category;
+
+  const os = detectOperatingSystem(input.content);
+  if (os) schema.operatingSystem = os;
+
+  // Default to free offer; content mentioning pricing could be extended later
+  schema.offers = {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+  };
+
+  if (input.url) schema.url = input.url;
+  if (input.imageUrl) schema.image = buildImage(input.imageUrl);
+
+  return schema;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -708,7 +859,8 @@ function generateFAQPageSchema(input: StructuredDataInput): FAQPageSchema {
  * Detection priority:
  * 1. FAQPage — if the content has 3+ question-style headings.
  * 2. HowTo — if the content has step-style headings or 3+ numbered list items.
- * 3. Article — default for all other content.
+ * 3. SoftwareApplication — if the content has 3+ software-related indicators.
+ * 4. Article — default for all other content.
  *
  * @param content - Raw markdown content to analyse.
  * @returns The detected schema type.
@@ -716,6 +868,7 @@ function generateFAQPageSchema(input: StructuredDataInput): FAQPageSchema {
 export function detectSchemaType(content: string): SchemaType {
   if (isFAQContent(content)) return "FAQPage";
   if (isHowToContent(content)) return "HowTo";
+  if (isSoftwareContent(content)) return "SoftwareApplication";
   return "Article";
 }
 
@@ -743,6 +896,9 @@ export function generateStructuredData(
       break;
     case "HowTo":
       schema = generateHowToSchema(input);
+      break;
+    case "SoftwareApplication":
+      schema = generateSoftwareApplicationSchema(input);
       break;
     default:
       schema = generateArticleSchema(input);

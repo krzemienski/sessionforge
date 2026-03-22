@@ -14,6 +14,7 @@ import {
   type FAQPageSchema,
   type HowToSchema,
   type HowToStep,
+  type SoftwareApplicationSchema,
 } from "./structured-data-generator";
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,38 @@ Follow these steps to deploy.
    Run node server.js to launch the application.
 `;
 
+const SOFTWARE_CONTENT = `# SessionForge Desktop v3.1.0
+
+SessionForge Desktop is a developer tool for managing AI coding sessions.
+
+## System Requirements
+
+- Windows 10 or macOS 12 or later
+- Linux Ubuntu 20.04+
+- 8GB RAM minimum
+
+## Downloads
+
+Download the application from our website. The software supports automatic updates.
+
+## Release Notes
+
+- Improved performance
+- New plugin system
+`;
+
+const SOFTWARE_CONTENT_GAME = `# Epic Quest v1.0.0
+
+Download this exciting game for Windows and Android.
+
+## Minimum Requirements
+- Windows 10 or later
+- 16GB RAM
+
+## About
+Run the installer to set up the game on your system. This software is free to download.
+`;
+
 // ---------------------------------------------------------------------------
 // detectSchemaType
 // ---------------------------------------------------------------------------
@@ -84,8 +117,25 @@ describe("detectSchemaType", () => {
     expect(detectSchemaType(stepContent)).toBe("HowTo");
   });
 
-  it("returns FAQPage before HowTo when both patterns present", () => {
-    const mixed = FAQ_CONTENT + "\n\n1. Step one\n2. Step two\n3. Step three";
+  it("returns SoftwareApplication for software-related content", () => {
+    const softwareContent = `# MyApp v2.3.0
+
+Download MyApp for Windows and macOS. This software tool includes automatic updates.
+
+## System Requirements
+
+- Windows 10 or later
+- macOS 12 or later
+- 4GB RAM minimum
+
+## About
+
+This application is available as a free download from our website.`;
+    expect(detectSchemaType(softwareContent)).toBe("SoftwareApplication");
+  });
+
+  it("returns FAQPage before SoftwareApplication when both patterns present", () => {
+    const mixed = FAQ_CONTENT + "\n\nDownload the software v1.0.0 installer tool.";
     expect(detectSchemaType(mixed)).toBe("FAQPage");
   });
 });
@@ -461,6 +511,86 @@ describe("generateStructuredData — TechArticle", () => {
 });
 
 // ---------------------------------------------------------------------------
+// generateStructuredData — SoftwareApplication
+// ---------------------------------------------------------------------------
+
+describe("generateStructuredData — SoftwareApplication", () => {
+  it("returns type SoftwareApplication for software content", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    expect(result.type).toBe("SoftwareApplication");
+  });
+
+  it("produces a valid SoftwareApplication schema with required fields", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema["@context"]).toBe("https://schema.org");
+    expect(schema["@type"]).toBe("SoftwareApplication");
+    expect(schema.name).toBe("Test Post");
+    expect(schema.author["@type"]).toBe("Person");
+    expect(schema.author.name).toBe("Jane Doe");
+  });
+
+  it("includes applicationCategory field", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.applicationCategory).toBeDefined();
+    expect(schema.applicationCategory).toBe("DeveloperApplication");
+  });
+
+  it("detects GameApplication category", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT_GAME }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.applicationCategory).toBe("GameApplication");
+  });
+
+  it("detects operating systems from content", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.operatingSystem).toBeDefined();
+    expect(schema.operatingSystem).toContain("Windows");
+    expect(schema.operatingSystem).toContain("macOS");
+    expect(schema.operatingSystem).toContain("Linux");
+  });
+
+  it("includes offers field with default free pricing", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.offers).toBeDefined();
+    expect(schema.offers?.["@type"]).toBe("Offer");
+    expect(schema.offers?.price).toBe("0");
+    expect(schema.offers?.priceCurrency).toBe("USD");
+  });
+
+  it("includes url when provided", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.url).toBe("https://sessionforge.io/blog/test");
+  });
+
+  it("includes image when imageUrl provided", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.image).toBeDefined();
+  });
+
+  it("forces SoftwareApplication type when forceType is SoftwareApplication", () => {
+    const result = generateStructuredData(makeInput(), "SoftwareApplication");
+    expect(result.type).toBe("SoftwareApplication");
+  });
+
+  it("produces valid JSON-LD string", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    expect(() => JSON.parse(result.jsonLd)).not.toThrow();
+  });
+
+  it("defaults dateModified to datePublished when not provided", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
+    const schema = result.schema as SoftwareApplicationSchema;
+    expect(schema.dateModified).toBe("2026-03-01T00:00:00Z");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // wrapInScriptTag
 // ---------------------------------------------------------------------------
 
@@ -501,6 +631,11 @@ describe("Schema.org compliance", () => {
 
   it("FAQPage schema context is exactly https://schema.org", () => {
     const result = generateStructuredData(makeInput({ content: FAQ_CONTENT }));
+    expect(result.schema["@context"]).toBe("https://schema.org");
+  });
+
+  it("SoftwareApplication schema context is exactly https://schema.org", () => {
+    const result = generateStructuredData(makeInput({ content: SOFTWARE_CONTENT }));
     expect(result.schema["@context"]).toBe("https://schema.org");
   });
 
