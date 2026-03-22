@@ -449,6 +449,26 @@ code, pre {
   background-color: #67060c;
 }
 
+/* ── WCAG 2.4.7 Focus Visible ── */
+/* Global focus-visible styles for all interactive elements */
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role='button']:focus-visible,
+[role='tab']:focus-visible,
+[role='switch']:focus-visible {
+  outline: 2px solid var(--color-sf-accent);
+  outline-offset: 2px;
+}
+
+/* Utility class for custom focus rings in Tailwind */
+.sf-focus-ring:focus-visible {
+  outline: 2px solid var(--color-sf-accent);
+  outline-offset: 2px;
+}
+
 /* Mobile-friendly editor enhancements */
 .sf-editor-content {
   /* Smooth touch scrolling on iOS */
