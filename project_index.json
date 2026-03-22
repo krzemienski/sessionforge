@@ -1,0 +1,36 @@
+{
+  "project_type": "monorepo",
+  "services": {
+    "frontend": {
+      "path": "apps/dashboard",
+      "tech_stack": ["nextjs-15", "react-19", "typescript", "tailwindcss-4", "shadcn-ui", "lexical-editor", "tanstack-query-v5", "zustand"],
+      "port": 3000,
+      "dev_command": "bun run dev",
+      "test_command": "bun test",
+      "build_command": "bun run build"
+    },
+    "database": {
+      "path": "packages/db",
+      "tech_stack": ["drizzle-orm", "postgresql", "neon-serverless"],
+      "port": null,
+      "dev_command": null,
+      "test_command": null
+    }
+  },
+  "infrastructure": {
+    "docker": true,
+    "database": "postgresql (neon serverless)",
+    "ci_cd": "github-actions",
+    "deployment": "vercel",
+    "package_manager": "bun",
+    "monorepo_tool": "turborepo"
+  },
+  "conventions": {
+    "linter": "eslint",
+    "formatter": "prettier",
+    "testing": "bun:test (unit), playwright (e2e)",
+    "ai_sdk": "@anthropic-ai/claude-agent-sdk (CLI-inherited auth, no API keys)",
+    "component_library": "shadcn/ui with sf- prefix design tokens",
+    "state_management": "tanstack-query (server) + zustand (client)"
+  }
+}
