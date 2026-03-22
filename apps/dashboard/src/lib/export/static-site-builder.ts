@@ -11,6 +11,11 @@ import { slugifyTitle, getExportDirectory } from "./markdown-export";
 import type { ExportablePost } from "./markdown-export";
 import { generateSitemap } from "./sitemap-generator";
 import { generateRssFeed } from "./rss-generator";
+import {
+  generateStructuredData,
+  wrapInScriptTag,
+} from "../seo/structured-data-generator";
+import type { StructuredDataInput } from "../seo/structured-data-generator";
 
 export interface StaticSiteOptions {
   themeId: ThemeId;
@@ -132,7 +137,27 @@ async function renderPostPage(
     `<script>${js}</script>`
   );
 
-  const rendered = applyTemplateVariables(rawHtml, variables);
+  let rendered = applyTemplateVariables(rawHtml, variables);
+
+  // Inject JSON-LD structured data into <head> for SEO rich snippets
+  const canonicalUrl = baseUrl
+    ? `${baseUrl}/posts/${buildPostSlug(post)}/`
+    : undefined;
+  const structuredDataInput: StructuredDataInput = {
+    title: post.title,
+    content: post.markdown,
+    datePublished: postDateIso,
+    dateModified: post.updatedAt
+      ? formatDateIso(post.updatedAt)
+      : postDateIso,
+    url: canonicalUrl,
+    author: { name: config.authorName ?? "Unknown" },
+    publisher: { name: config.siteTitle ?? "SessionForge" },
+  };
+  const { jsonLd } = generateStructuredData(structuredDataInput);
+  const jsonLdTag = wrapInScriptTag(jsonLd);
+  rendered = rendered.replace("</head>", `  ${jsonLdTag}\n</head>`);
+
   return rendered;
 }
 
