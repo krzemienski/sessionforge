@@ -8,16 +8,25 @@ import { extractKeywords } from "@/lib/seo/keyword-extractor";
 import { scoreReadability } from "@/lib/seo/readability-scorer";
 import { generateStructuredData } from "@/lib/seo/structured-data-generator";
 import { analyzeGeo } from "@/lib/seo/geo-optimizer";
+import type { SeoMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+// Type cast helper: the seoMetadata column may not be in the inferred type.
+type PostRow = Awaited<
+  ReturnType<typeof db.query.posts.findFirst<{ with: { workspace: true; author: true; insight: true } }>>
+>;
+type PostWithSeo = NonNullable<PostRow> & { seoMetadata?: SeoMetadata | null };
 
 /**
  * POST /api/content/[id]/seo/analyze
  *
  * Runs a full SEO and GEO analysis on a post's markdown content.
  * Extracts keywords, calculates Flesch-Kincaid readability, generates
- * JSON-LD structured data, and evaluates GEO criteria. Persists the
- * results to the posts table and returns the complete analysis.
+ * JSON-LD structured data, and evaluates GEO criteria. Auto-populates
+ * OG/Twitter social meta fields from the post title and description when
+ * not already set. Persists the results to the posts table and returns
+ * the complete analysis.
  *
  * Body (optional): { regenerate?: boolean }
  */
@@ -32,20 +41,17 @@ export async function POST(
 
   const { id } = await params;
 
-  const post = await db.query.posts.findFirst({
+  const post = (await db.query.posts.findFirst({
     where: eq(posts.id, id),
-    columns: {
-      id: true,
-      title: true,
-      markdown: true,
-      workspaceId: true,
-      readabilityScore: true,
-      geoScore: true,
-    },
-  });
+    with: { workspace: true, author: true, insight: true },
+  })) as PostWithSeo | undefined;
 
   if (!post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
+  if (post.workspace.ownerId !== session.user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => ({}));
@@ -58,6 +64,14 @@ export async function POST(
 
   const markdown = post.markdown;
 
+  // Resolve real author and publisher names from workspace relations
+  const authorName = post.author?.name ?? session.user.name ?? "Author";
+  const publisherName = post.workspace.name ?? "SessionForge";
+
+  // Derive a description from the insight or metaDescription for social meta fallback
+  const postDescription =
+    post.insight?.description ?? post.metaDescription ?? "";
+
   // Run all analyses in parallel for performance
   const [keywords, readability, structuredDataResult, geoResult] = await Promise.all([
     Promise.resolve(extractKeywords(markdown, { maxKeywords: 20 })),
@@ -67,8 +81,8 @@ export async function POST(
         content: markdown,
         title: post.title,
         datePublished: new Date().toISOString(),
-        author: { name: "Author" },
-        publisher: { name: "SessionForge" },
+        author: { name: authorName },
+        publisher: { name: publisherName },
       })
     ),
     Promise.resolve(analyzeGeo(markdown)),
@@ -105,6 +119,21 @@ export async function POST(
     analyzedAt: new Date().toISOString(),
   };
 
+  // Auto-populate OG/Twitter social meta fields when not already set
+  const existingMeta: SeoMetadata = post.seoMetadata ?? {};
+  const socialMeta: Partial<SeoMetadata> = {
+    ogTitle: existingMeta.ogTitle ?? post.title,
+    ogDescription: existingMeta.ogDescription ?? (postDescription || null),
+    twitterTitle: existingMeta.twitterTitle ?? post.title,
+    twitterDescription: existingMeta.twitterDescription ?? (postDescription || null),
+    twitterCard: existingMeta.twitterCard ?? "summary_large_image",
+  };
+
+  const mergedSeoMetadata: SeoMetadata = {
+    ...existingMeta,
+    ...socialMeta,
+  };
+
   await db
     .update(posts)
     .set({
@@ -114,7 +143,8 @@ export async function POST(
       geoScore: geoResult.score,
       geoChecklist,
       seoAnalysis,
-    })
+      seoMetadata: mergedSeoMetadata,
+    } as any)
     .where(eq(posts.id, id));
 
   return NextResponse.json({
@@ -124,5 +154,6 @@ export async function POST(
     structuredData: structuredDataResult,
     geo: geoResult,
     seoAnalysis,
+    seoMetadata: mergedSeoMetadata,
   });
 }
