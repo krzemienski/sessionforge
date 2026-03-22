@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { posts, integrationSettings } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { publishToHashnode } from "@/lib/publishing/hashnode";
+import { wrapInScriptTag } from "@/lib/seo/structured-data-generator";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +96,9 @@ export async function POST(
       publicationId: integration.hashnodePublicationId,
       title: post.title,
       subtitle: body.subtitle,
-      contentMarkdown: post.markdown,
+      contentMarkdown: post.structuredData
+        ? `${post.markdown}\n\n${wrapInScriptTag(JSON.stringify(post.structuredData, null, 2))}`
+        : post.markdown,
       tags,
       coverImageUrl: body.coverImageUrl,
       seoTitle: body.seoTitle,
