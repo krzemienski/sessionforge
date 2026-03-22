@@ -57,7 +57,7 @@ export function MobileBottomNav({ workspace }: { workspace: string }) {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-sf-text-primary">More</span>
-              <button onClick={() => setShowMore(false)} className="p-1 text-sf-text-muted">
+              <button onClick={() => setShowMore(false)} aria-label="Close" className="p-1 text-sf-text-muted">
                 <X size={18} />
               </button>
             </div>

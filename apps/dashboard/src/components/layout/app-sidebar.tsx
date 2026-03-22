@@ -109,6 +109,7 @@ export function AppSidebar({
               await signOut();
               router.push("/login");
             }}
+            aria-label="Sign out"
             className="text-sf-text-muted hover:text-sf-danger transition-colors"
           >
             <LogOut size={16} />
