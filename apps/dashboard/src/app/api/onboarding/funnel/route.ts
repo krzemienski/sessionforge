@@ -12,11 +12,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { step, event, metadata } = body;
+    const { step, event = "unknown", metadata } = body;
 
-    if (!step || !event) {
+    if (!step) {
       return NextResponse.json(
-        { error: "step and event are required" },
+        { error: "step is required" },
         { status: 400 }
       );
     }

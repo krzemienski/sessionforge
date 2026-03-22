@@ -5,6 +5,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "SessionForge",
   description: "Transform Claude Code sessions into publication-ready content",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
