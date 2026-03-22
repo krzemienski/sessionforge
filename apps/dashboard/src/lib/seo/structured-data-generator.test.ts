@@ -6,6 +6,9 @@ import {
   detectSchemaType,
   generateStructuredData,
   wrapInScriptTag,
+  isTechContent,
+  detectProficiencyLevel,
+  extractDependencies,
   type ArticleSchema,
   type FAQPageSchema,
   type HowToSchema,
@@ -246,6 +249,130 @@ describe("generateStructuredData — FAQPage", () => {
   it("forces FAQPage type when forceType is FAQPage", () => {
     const result = generateStructuredData(makeInput(), "FAQPage");
     expect(result.type).toBe("FAQPage");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateStructuredData — TechArticle
+// ---------------------------------------------------------------------------
+
+const TECH_CONTENT_SIMPLE = `# Understanding TypeScript Types
+
+TypeScript adds type safety to JavaScript.
+
+\`\`\`typescript
+const greet = (name: string): string => {
+  return \`Hello, \${name}!\`;
+};
+\`\`\`
+
+This makes your code more maintainable.
+`;
+
+const TECH_CONTENT_ADVANCED = `# Advanced Async Patterns in Kubernetes
+
+This article covers concurrency, performance optimization, and deployment pipelines.
+
+\`\`\`typescript
+async function fetchData(): Promise<Data> {
+  const result = await api.get("/data");
+  return result;
+}
+\`\`\`
+
+\`\`\`yaml
+apiVersion: apps/v1
+kind: Deployment
+\`\`\`
+
+\`\`\`bash
+kubectl apply -f deployment.yaml
+\`\`\`
+
+Use benchmarks to verify your optimization.
+`;
+
+describe("TechArticle detection", () => {
+  it("isTechContent returns true for content with fenced code blocks", () => {
+    expect(isTechContent(TECH_CONTENT_SIMPLE)).toBe(true);
+  });
+
+  it("isTechContent returns false for content without code blocks", () => {
+    expect(isTechContent("# Hello\n\nThis is a blog post.")).toBe(false);
+  });
+
+  it("detectProficiencyLevel returns Beginner for simple technical content", () => {
+    expect(detectProficiencyLevel(TECH_CONTENT_SIMPLE)).toBe("Beginner");
+  });
+
+  it("detectProficiencyLevel returns Expert for content with 3+ code blocks", () => {
+    expect(detectProficiencyLevel(TECH_CONTENT_ADVANCED)).toBe("Expert");
+  });
+
+  it("extractDependencies returns language tags from code blocks", () => {
+    const deps = extractDependencies(TECH_CONTENT_SIMPLE);
+    expect(deps).toBe("typescript");
+  });
+
+  it("extractDependencies returns multiple unique languages", () => {
+    const deps = extractDependencies(TECH_CONTENT_ADVANCED);
+    expect(deps).toContain("typescript");
+    expect(deps).toContain("yaml");
+    expect(deps).toContain("bash");
+  });
+
+  it("extractDependencies returns undefined when no language tags present", () => {
+    const content = "# Test\n\n```\nsome code\n```\n";
+    expect(extractDependencies(content)).toBeUndefined();
+  });
+});
+
+describe("generateStructuredData — TechArticle", () => {
+  it("sets @type to TechArticle when content has code blocks", () => {
+    const result = generateStructuredData(makeInput({ content: TECH_CONTENT_SIMPLE }));
+    const schema = result.schema as ArticleSchema;
+    expect(schema["@type"]).toBe("TechArticle");
+  });
+
+  it("sets @type to Article when content has no code blocks", () => {
+    const result = generateStructuredData(makeInput());
+    const schema = result.schema as ArticleSchema;
+    expect(schema["@type"]).toBe("Article");
+  });
+
+  it("includes proficiencyLevel for TechArticle", () => {
+    const result = generateStructuredData(makeInput({ content: TECH_CONTENT_SIMPLE }));
+    const schema = result.schema as ArticleSchema;
+    expect(schema.proficiencyLevel).toBe("Beginner");
+  });
+
+  it("sets Expert proficiencyLevel for advanced content", () => {
+    const result = generateStructuredData(makeInput({ content: TECH_CONTENT_ADVANCED }));
+    const schema = result.schema as ArticleSchema;
+    expect(schema.proficiencyLevel).toBe("Expert");
+  });
+
+  it("includes dependencies from code block language tags", () => {
+    const result = generateStructuredData(makeInput({ content: TECH_CONTENT_SIMPLE }));
+    const schema = result.schema as ArticleSchema;
+    expect(schema.dependencies).toBe("typescript");
+  });
+
+  it("does not include proficiencyLevel for plain Article", () => {
+    const result = generateStructuredData(makeInput());
+    const schema = result.schema as ArticleSchema;
+    expect(schema.proficiencyLevel).toBeUndefined();
+  });
+
+  it("does not include dependencies for plain Article", () => {
+    const result = generateStructuredData(makeInput());
+    const schema = result.schema as ArticleSchema;
+    expect(schema.dependencies).toBeUndefined();
+  });
+
+  it("still detects schema type as Article for TechArticle content", () => {
+    const result = generateStructuredData(makeInput({ content: TECH_CONTENT_SIMPLE }));
+    expect(result.type).toBe("Article");
   });
 });
 

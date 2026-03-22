@@ -62,6 +62,10 @@ export interface ArticleSchema extends SchemaBase {
     "@type": "WebPage";
     "@id": string;
   };
+  /** TechArticle: proficiency level of the target audience. */
+  proficiencyLevel?: "Beginner" | "Expert";
+  /** TechArticle: technologies or libraries the article depends on. */
+  dependencies?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -385,6 +389,91 @@ function isHowToContent(markdown: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// TechArticle detection
+// ---------------------------------------------------------------------------
+
+/** Fenced code block pattern — triple backticks with optional language tag. */
+const FENCED_CODE_BLOCK_PATTERN = /^```[\s\S]*?^```/gm;
+
+/**
+ * Extracts fenced code blocks from markdown content.
+ *
+ * @param markdown - Raw markdown string.
+ * @returns Array of code block strings (including fences).
+ */
+function extractCodeBlocks(markdown: string): string[] {
+  return markdown.match(FENCED_CODE_BLOCK_PATTERN) || [];
+}
+
+/**
+ * Determines whether the content qualifies as a TechArticle.
+ * Content is considered technical when it contains at least one fenced code block.
+ *
+ * @param markdown - Raw markdown to inspect.
+ * @returns `true` if the content contains fenced code blocks.
+ */
+export function isTechContent(markdown: string): boolean {
+  return FENCED_CODE_BLOCK_PATTERN.test(markdown);
+}
+
+/**
+ * Advanced technical indicators that suggest expert-level content.
+ * Used for proficiency level detection.
+ */
+const ADVANCED_PATTERNS = [
+  /\b(?:async|await|concurrency|mutex|semaphore|deadlock)\b/i,
+  /\b(?:architecture|microservice|distributed|scalab)/i,
+  /\b(?:kubernetes|k8s|docker|containeriz)/i,
+  /\b(?:webpack|bundl|tree[\s-]?shak|code[\s-]?split)/i,
+  /\b(?:generic|polymorphi|abstract|interface|inheritance)\b/i,
+  /\b(?:regex|regexp|regular\s+expression)/i,
+  /\b(?:optimiz|performance|benchmark|profil)/i,
+  /\b(?:security|vulnerabilit|authentication|authorization|oauth|jwt)\b/i,
+  /\b(?:ci[\s/]cd|pipeline|deploy|infrastructure)/i,
+];
+
+/**
+ * Determines the proficiency level of technical content.
+ *
+ * Expert-level content is identified by:
+ * - 3+ code blocks, OR
+ * - Multiple advanced technical indicator patterns.
+ *
+ * @param markdown - Raw markdown content.
+ * @returns "Beginner" or "Expert" proficiency level.
+ */
+export function detectProficiencyLevel(
+  markdown: string
+): "Beginner" | "Expert" {
+  const codeBlocks = extractCodeBlocks(markdown);
+  if (codeBlocks.length >= 3) return "Expert";
+
+  const advancedHits = ADVANCED_PATTERNS.filter((p) => p.test(markdown)).length;
+  if (advancedHits >= 3) return "Expert";
+
+  return "Beginner";
+}
+
+/**
+ * Extracts technology dependencies from code block language tags.
+ * Parses the language identifier after the opening triple backticks.
+ *
+ * @param markdown - Raw markdown content.
+ * @returns Comma-separated string of unique language/technology names, or undefined if none found.
+ */
+export function extractDependencies(markdown: string): string | undefined {
+  const langPattern = /^```(\w[\w+#-]*)\s*$/gm;
+  const langs = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  while ((match = langPattern.exec(markdown)) !== null) {
+    langs.add(match[1].toLowerCase());
+  }
+
+  return langs.size > 0 ? Array.from(langs).join(", ") : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Schema builders
 // ---------------------------------------------------------------------------
 
@@ -451,10 +540,11 @@ function generateArticleSchema(input: StructuredDataInput): ArticleSchema {
   const dateModified = input.dateModified ?? input.datePublished;
   const description = input.description ?? extractExcerpt(input.content);
   const plainBody = stripMarkdown(input.content);
+  const isTech = isTechContent(input.content);
 
   const schema: ArticleSchema = {
     "@context": "https://schema.org",
-    "@type": "Article",
+    "@type": isTech ? "TechArticle" : "Article",
     headline: input.title,
     description,
     author: buildPerson(input.author),
@@ -463,6 +553,12 @@ function generateArticleSchema(input: StructuredDataInput): ArticleSchema {
     dateModified,
     wordCount: plainBody.split(/\s+/).filter(Boolean).length,
   };
+
+  if (isTech) {
+    schema.proficiencyLevel = detectProficiencyLevel(input.content);
+    const deps = extractDependencies(input.content);
+    if (deps) schema.dependencies = deps;
+  }
 
   if (input.url) {
     schema.url = input.url;
