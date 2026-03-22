@@ -9,9 +9,11 @@ import {
   isTechContent,
   detectProficiencyLevel,
   extractDependencies,
+  estimateHowToTime,
   type ArticleSchema,
   type FAQPageSchema,
   type HowToSchema,
+  type HowToStep,
 } from "./structured-data-generator";
 
 // ---------------------------------------------------------------------------
@@ -210,6 +212,88 @@ describe("generateStructuredData — HowTo", () => {
   it("forces HowTo type when forceType is HowTo", () => {
     const result = generateStructuredData(makeInput(), "HowTo");
     expect(result.type).toBe("HowTo");
+  });
+
+  it("includes totalTime in ISO 8601 duration format", () => {
+    const result = generateStructuredData(makeInput({ content: HOWTO_CONTENT }));
+    const schema = result.schema as HowToSchema;
+    expect(schema.totalTime).toBeDefined();
+    expect(schema.totalTime).toMatch(/^PT(\d+H)?(\d+M)?$/);
+  });
+
+  it("calculates totalTime based on step count (base 2 min per step)", () => {
+    const result = generateStructuredData(makeInput({ content: HOWTO_CONTENT }));
+    const schema = result.schema as HowToSchema;
+    // 4 steps × 2 min = 8 min base
+    expect(schema.totalTime).toBe("PT8M");
+  });
+
+  it("adds extra time for steps with high word counts", () => {
+    const verboseStep = "word ".repeat(60).trim();
+    const verboseContent = `# How to do things\n\n1. ${verboseStep}\n2. Short step\n3. Another short step`;
+    const result = generateStructuredData(makeInput({ content: verboseContent }));
+    const schema = result.schema as HowToSchema;
+    // 3 steps × 2 min = 6 min base + 3 min for 1 complex step = 9 min
+    expect(schema.totalTime).toBe("PT9M");
+  });
+
+  it("adds extra time when content contains code blocks", () => {
+    const codeContent = `# How to set up\n\n1. Install deps\n2. Configure settings\n3. Start server\n\n\`\`\`bash\nnpm install\n\`\`\``;
+    const result = generateStructuredData(makeInput({ content: codeContent }));
+    const schema = result.schema as HowToSchema;
+    // 3 steps × 2 min = 6 min + 5 min code = 11 min
+    expect(schema.totalTime).toBe("PT11M");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// estimateHowToTime
+// ---------------------------------------------------------------------------
+
+describe("estimateHowToTime", () => {
+  function makeStep(position: number, text = "Short step text"): HowToStep {
+    return { "@type": "HowToStep", name: `Step ${position}`, text, position };
+  }
+
+  it("returns ISO 8601 duration format", () => {
+    const result = estimateHowToTime([makeStep(1)], "");
+    expect(result).toMatch(/^PT(\d+H)?(\d+M)?$/);
+  });
+
+  it("calculates 2 minutes per step as base", () => {
+    const steps = [makeStep(1), makeStep(2), makeStep(3)];
+    expect(estimateHowToTime(steps, "")).toBe("PT6M");
+  });
+
+  it("adds 3 extra minutes for steps exceeding 50 words", () => {
+    const longText = "word ".repeat(60).trim();
+    const steps = [makeStep(1, longText), makeStep(2)];
+    // 2 steps × 2 min = 4 + 3 extra = 7
+    expect(estimateHowToTime(steps, "")).toBe("PT7M");
+  });
+
+  it("adds 5 extra minutes when content has code blocks", () => {
+    const steps = [makeStep(1)];
+    const content = "```js\nconsole.log('hi');\n```";
+    // 1 step × 2 min + 5 code = 7
+    expect(estimateHowToTime(steps, content)).toBe("PT7M");
+  });
+
+  it("formats hours and minutes for large estimates", () => {
+    // 30 steps × 2 min = 60 min + 5 code = 65 min = 1H5M
+    const steps = Array.from({ length: 30 }, (_, i) => makeStep(i + 1));
+    const content = "```py\nprint('hello')\n```";
+    expect(estimateHowToTime(steps, content)).toBe("PT1H5M");
+  });
+
+  it("formats exact hours without minutes", () => {
+    // 30 steps × 2 min = 60 min = 1H
+    const steps = Array.from({ length: 30 }, (_, i) => makeStep(i + 1));
+    expect(estimateHowToTime(steps, "")).toBe("PT1H");
+  });
+
+  it("returns at least PT1M for empty steps array", () => {
+    expect(estimateHowToTime([], "")).toBe("PT1M");
   });
 });
 

@@ -474,6 +474,65 @@ export function extractDependencies(markdown: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// HowTo time estimation
+// ---------------------------------------------------------------------------
+
+/** Base minutes per step for simple text-only steps. */
+const BASE_MINUTES_PER_STEP = 2;
+
+/** Additional minutes per step when the step text exceeds this word count. */
+const COMPLEX_STEP_WORD_THRESHOLD = 50;
+
+/** Additional minutes added for steps with high word counts. */
+const COMPLEX_STEP_EXTRA_MINUTES = 3;
+
+/** Additional minutes added when content contains code blocks. */
+const CODE_BLOCK_EXTRA_MINUTES = 5;
+
+/**
+ * Estimates the total time required to complete a HowTo guide.
+ *
+ * Calculation:
+ * - Each step contributes a base of 2 minutes.
+ * - Steps whose text exceeds 50 words add an extra 3 minutes each.
+ * - If the overall content contains fenced code blocks, 5 minutes is added.
+ *
+ * @param steps - Parsed HowTo steps.
+ * @param content - Original markdown content (used for code block detection).
+ * @returns ISO 8601 duration string (e.g. "PT15M" or "PT1H30M").
+ */
+export function estimateHowToTime(steps: HowToStep[], content: string): string {
+  let totalMinutes = 0;
+
+  for (const step of steps) {
+    totalMinutes += BASE_MINUTES_PER_STEP;
+
+    const wordCount = step.text.split(/\s+/).filter(Boolean).length;
+    if (wordCount > COMPLEX_STEP_WORD_THRESHOLD) {
+      totalMinutes += COMPLEX_STEP_EXTRA_MINUTES;
+    }
+  }
+
+  if (FENCED_CODE_BLOCK_PATTERN.test(content)) {
+    // Reset lastIndex since the pattern uses the global flag
+    FENCED_CODE_BLOCK_PATTERN.lastIndex = 0;
+    totalMinutes += CODE_BLOCK_EXTRA_MINUTES;
+  }
+  // Reset lastIndex to avoid side-effects on subsequent calls
+  FENCED_CODE_BLOCK_PATTERN.lastIndex = 0;
+
+  // Ensure a minimum of 1 minute
+  totalMinutes = Math.max(totalMinutes, 1);
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0 && minutes > 0) return `PT${hours}H${minutes}M`;
+  if (hours > 0) return `PT${hours}H`;
+  return `PT${minutes}M`;
+}
+
+// ---------------------------------------------------------------------------
 // Schema builders
 // ---------------------------------------------------------------------------
 
@@ -590,6 +649,10 @@ function generateHowToSchema(input: StructuredDataInput): HowToSchema {
   const description = input.description ?? extractExcerpt(input.content);
   const steps = parseHowToSteps(input.content);
 
+  const totalTime = steps.length > 0
+    ? estimateHowToTime(steps, input.content)
+    : undefined;
+
   const schema: HowToSchema = {
     "@context": "https://schema.org",
     "@type": "HowTo",
@@ -601,6 +664,7 @@ function generateHowToSchema(input: StructuredDataInput): HowToSchema {
     step: steps,
   };
 
+  if (totalTime) schema.totalTime = totalTime;
   if (input.url) schema.url = input.url;
   if (input.imageUrl) schema.image = buildImage(input.imageUrl);
 
