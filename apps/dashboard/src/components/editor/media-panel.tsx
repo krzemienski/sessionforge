@@ -93,6 +93,7 @@ function DiagramCard({ asset, onRemove, removing }: DiagramCardProps) {
           disabled={removing}
           className="p-1 text-sf-text-muted hover:text-red-400 transition-colors disabled:opacity-50"
           title="Remove diagram"
+          aria-label="Remove diagram"
         >
           {removing ? (
             <Loader2 size={14} className="animate-spin" />

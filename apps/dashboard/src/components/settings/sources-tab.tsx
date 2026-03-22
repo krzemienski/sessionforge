@@ -155,6 +155,7 @@ export function SourcesTab({ workspace }: SourcesTabProps) {
                       onClick={() => updateSource.mutate({ id: source.id, enabled: !source.enabled })}
                       className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors"
                       title={source.enabled ? "Disable" : "Enable"}
+                      aria-label={source.enabled ? "Disable source" : "Enable source"}
                     >
                       {source.enabled ? <ToggleRight size={18} className="text-sf-success" /> : <ToggleLeft size={18} />}
                     </button>
@@ -162,6 +163,7 @@ export function SourcesTab({ workspace }: SourcesTabProps) {
                       onClick={() => { if (confirm(`Delete "${source.label}"?`)) deleteSource.mutate(source.id); }}
                       disabled={deleteSource.isPending}
                       className="p-1.5 text-sf-text-muted hover:text-sf-error transition-colors"
+                      aria-label={`Delete source ${source.label}`}
                     >
                       <Trash2 size={14} />
                     </button>

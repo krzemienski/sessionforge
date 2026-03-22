@@ -117,7 +117,7 @@ export function ApiKeysTab({ workspace }: ApiKeysTabProps) {
                     {k.lastUsedAt && <span>Last used {new Date(k.lastUsedAt).toLocaleDateString()}</span>}
                   </div>
                 </div>
-                <button onClick={() => deleteKey.mutate(k.id)} disabled={deleteKey.isPending} className="p-2 text-sf-text-muted hover:text-sf-error transition-colors">
+                <button onClick={() => deleteKey.mutate(k.id)} disabled={deleteKey.isPending} className="p-2 text-sf-text-muted hover:text-sf-error transition-colors" aria-label={`Delete API key ${k.name}`}>
                   <Trash2 size={14} />
                 </button>
               </div>
