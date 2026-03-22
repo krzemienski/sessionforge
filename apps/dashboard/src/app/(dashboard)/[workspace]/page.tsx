@@ -118,9 +118,9 @@ export default function DashboardHome() {
             <div className="flex items-start gap-3 flex-1">
               <Sparkles size={20} className="text-sf-accent mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="text-sf-text-primary font-semibold mb-1">
+                <p className="text-sf-text-primary font-semibold mb-1">
                   Welcome to SessionForge!
-                </h3>
+                </p>
                 <p className="text-sf-text-secondary text-sm mb-3">
                   Get started by completing the setup wizard. We&apos;ll help you configure your workspace and start indexing sessions.
                 </p>
