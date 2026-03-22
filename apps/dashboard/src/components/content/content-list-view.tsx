@@ -114,8 +114,16 @@ export function ContentListView({
         {contentList.map((post: any) => (
           <div
             key={post.id}
+            role="button"
+            tabIndex={0}
             onClick={() => onNavigateToPost(post.id)}
-            className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onNavigateToPost(post.id);
+              }
+            }}
+            className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sf-bg-primary"
           >
             <div className="flex items-center gap-2 mb-2">
               <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status] || "")}>

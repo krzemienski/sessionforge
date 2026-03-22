@@ -122,7 +122,7 @@ export function RecommendationCard({
       <button
         type="button"
         onClick={() => setReasoningExpanded((prev) => !prev)}
-        className="flex items-center gap-1 text-xs text-sf-text-muted hover:text-sf-text-secondary transition-colors"
+        className="flex items-center gap-1 text-xs text-sf-text-muted hover:text-sf-text-secondary transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
       >
         {reasoningExpanded ? (
           <>
@@ -149,7 +149,7 @@ export function RecommendationCard({
           <button
             type="button"
             onClick={handleAccept}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded bg-sf-accent/10 border border-sf-accent/30 text-sf-accent hover:bg-sf-accent/20 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded bg-sf-accent/10 border border-sf-accent/30 text-sf-accent hover:bg-sf-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <Check size={12} />
             Accept
@@ -157,7 +157,7 @@ export function RecommendationCard({
           <button
             type="button"
             onClick={handleDismiss}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded bg-sf-bg-tertiary border border-sf-border text-sf-text-muted hover:text-sf-text-secondary hover:border-sf-text-muted transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded bg-sf-bg-tertiary border border-sf-border text-sf-text-muted hover:text-sf-text-secondary hover:border-sf-text-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <X size={12} />
             Dismiss
