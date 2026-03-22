@@ -64,15 +64,6 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
     return () => cancelAnimationFrame(raf);
   }, [enabled]);
 
-  // Restore focus when the trap deactivates
-  useEffect(() => {
-    if (enabled) return;
-
-    return () => {
-      // Cleanup: restore focus when unmounting while enabled
-    };
-  }, [enabled]);
-
   // Restore focus on unmount or when disabled
   useEffect(() => {
     return () => {

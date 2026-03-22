@@ -8,7 +8,7 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./",
-  testMatch: ["**/e2e/**/*.spec.{ts,tsx}", "**/tests/e2e/**/*.spec.{ts,tsx}"],
+  testMatch: ["**/e2e/**/*.spec.{ts,tsx}", "**/tests/e2e/**/*.spec.{ts,tsx}", "**/tests/a11y/**/*.spec.{ts,tsx}"],
 
   /* Maximum time one test can run */
   timeout: 30_000,

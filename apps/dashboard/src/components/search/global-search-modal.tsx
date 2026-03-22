@@ -176,6 +176,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
             ref={inputRef}
             type="text"
             placeholder="Search sessions, insights, content..."
+            aria-label="Search sessions, insights, and content"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="flex-1 bg-transparent text-sf-text-primary placeholder:text-sf-text-muted text-sm focus:outline-none font-body"

@@ -94,6 +94,7 @@ export function ContentListView({
           <select
             value={seriesFilter}
             onChange={(e) => setSeriesFilter(e.target.value)}
+            aria-label="Filter by series"
             className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <option value="">All Series</option>
@@ -114,6 +115,7 @@ export function ContentListView({
           <select
             value={collectionFilter}
             onChange={(e) => setCollectionFilter(e.target.value)}
+            aria-label="Filter by collection"
             className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <option value="">All Collections</option>
@@ -180,7 +182,7 @@ export function ContentListView({
                 <ExportDropdown markdown={post.markdown || ""} title={post.title || ""} />
               </div>
             </div>
-            <h3 className="font-semibold text-sf-text-primary mb-1">{post.title}</h3>
+            <h2 className="font-semibold text-sf-text-primary mb-1 text-base">{post.title}</h2>
             <p className="text-sm text-sf-text-secondary line-clamp-2">
               {post.markdown?.slice(0, 150)}...
             </p>

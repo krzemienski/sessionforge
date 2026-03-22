@@ -5,17 +5,21 @@
  * Level AA violations. Uses @axe-core/playwright's AxeBuilder integration
  * with Playwright for automated accessibility testing in CI.
  *
+ * Prerequisites:
+ *   - A running dev/preview server with an authenticated workspace
+ *   - Set TEST_WORKSPACE env var to the target workspace slug (default: "test-workspace")
+ *
  * Pages tested:
- *   1. Dashboard          /dashboard
- *   2. Content list        /content
- *   3. Content editor      /content/new
- *   4. Sessions            /sessions
- *   5. Insights            /insights
- *   6. Analytics           /analytics
- *   7. Settings            /settings
- *   8. Automation          /automation
- *   9. Writing coach       /writing-coach
- *  10. Calendar view       /calendar
+ *   1. Dashboard          /{workspace}
+ *   2. Content list        /{workspace}/content
+ *   3. Content editor      /{workspace}/content/new
+ *   4. Sessions            /{workspace}/sessions
+ *   5. Insights            /{workspace}/insights
+ *   6. Analytics           /{workspace}/analytics
+ *   7. Settings            /{workspace}/settings
+ *   8. Automation          /{workspace}/automation
+ *   9. Writing coach       /{workspace}/writing-coach
+ *  10. Calendar view       /{workspace}/content?view=calendar
  *
  * Each test navigates to the page, waits for the main content to settle, then
  * runs AxeBuilder with the "wcag2a" and "wcag2aa" tags. Any violation causes
@@ -24,6 +28,13 @@
 
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+/** Workspace slug used in all test URLs. Override via TEST_WORKSPACE env var. */
+const WORKSPACE = process.env.TEST_WORKSPACE ?? "test-workspace";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,42 +74,42 @@ async function auditPage(page: import("@playwright/test").Page, path: string) {
 
 test.describe("WCAG AA Accessibility Audit", () => {
   test("dashboard page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/dashboard");
+    await auditPage(page, `/${WORKSPACE}`);
   });
 
   test("content list page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/content");
+    await auditPage(page, `/${WORKSPACE}/content`);
   });
 
   test("content editor page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/content/new");
+    await auditPage(page, `/${WORKSPACE}/content/new`);
   });
 
   test("sessions page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/sessions");
+    await auditPage(page, `/${WORKSPACE}/sessions`);
   });
 
   test("insights page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/insights");
+    await auditPage(page, `/${WORKSPACE}/insights`);
   });
 
   test("analytics page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/analytics");
+    await auditPage(page, `/${WORKSPACE}/analytics`);
   });
 
   test("settings page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/settings");
+    await auditPage(page, `/${WORKSPACE}/settings`);
   });
 
   test("automation page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/automation");
+    await auditPage(page, `/${WORKSPACE}/automation`);
   });
 
   test("writing coach page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/writing-coach");
+    await auditPage(page, `/${WORKSPACE}/writing-coach`);
   });
 
   test("calendar view page has no WCAG AA violations", async ({ page }) => {
-    await auditPage(page, "/calendar");
+    await auditPage(page, `/${WORKSPACE}/content?view=calendar`);
   });
 });
