@@ -19,6 +19,10 @@ import {
   AlertTriangle,
   ChevronDown,
   X,
+  Download,
+  FileText,
+  Shield,
+  Database,
 } from "lucide-react";
 import { PLANS, type PlanTier } from "@/lib/billing/plans";
 import { showToast } from "@/components/ui/toast";
@@ -140,6 +144,8 @@ export function BillingTab({ workspace }: BillingTabProps) {
   const [isCanceling, setIsCanceling] = useState(false);
   const [isDowngrading, setIsDowngrading] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [isExportingBilling, setIsExportingBilling] = useState(false);
+  const [isExportingPolicy, setIsExportingPolicy] = useState(false);
 
   const subscription = useQuery<SubscriptionData>({
     queryKey: ["billing", "subscription"],
@@ -176,6 +182,50 @@ export function BillingTab({ workspace }: BillingTabProps) {
       if (data.url) window.location.href = data.url;
     } catch {
       // Portal creation failed silently
+    }
+  };
+
+  const handleExportBillingReport = async (format: "json" | "csv") => {
+    setIsExportingBilling(true);
+    try {
+      const res = await fetch(`/api/billing/export?format=${format}`);
+      if (!res.ok) throw new Error("Failed to export billing report");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `billing-report.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Billing report exported as ${format.toUpperCase()}`, "success");
+    } catch {
+      showToast("Failed to export billing report", "error");
+    } finally {
+      setIsExportingBilling(false);
+    }
+  };
+
+  const handleExportWorkspacePolicy = async () => {
+    setIsExportingPolicy(true);
+    try {
+      const res = await fetch(`/api/billing/export?format=json&type=policy`);
+      if (!res.ok) throw new Error("Failed to export workspace policy");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "workspace-policy.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Workspace policy exported", "success");
+    } catch {
+      showToast("Failed to export workspace policy", "error");
+    } finally {
+      setIsExportingPolicy(false);
     }
   };
 
@@ -556,6 +606,84 @@ export function BillingTab({ workspace }: BillingTabProps) {
               Upgrade Plan
             </a>
           )}
+        </div>
+      </div>
+
+      {/* Compliance & Data Export */}
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold font-display mb-1">
+            Compliance & Data Export
+          </h2>
+          <p className="text-xs text-sf-text-muted">
+            Export billing data and workspace policies for compliance and audit purposes.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => handleExportBillingReport("json")}
+            disabled={isExportingBilling}
+            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf font-medium text-sm hover:border-sf-border-focus transition-colors disabled:opacity-50"
+          >
+            {isExportingBilling ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Download size={16} />
+            )}
+            Export Billing Report (JSON)
+          </button>
+          <button
+            onClick={() => handleExportBillingReport("csv")}
+            disabled={isExportingBilling}
+            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf font-medium text-sm hover:border-sf-border-focus transition-colors disabled:opacity-50"
+          >
+            {isExportingBilling ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <FileText size={16} />
+            )}
+            Export Billing Report (CSV)
+          </button>
+          <button
+            onClick={handleExportWorkspacePolicy}
+            disabled={isExportingPolicy}
+            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-4 py-2 rounded-sf font-medium text-sm hover:border-sf-border-focus transition-colors disabled:opacity-50"
+          >
+            {isExportingPolicy ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Shield size={16} />
+            )}
+            Export Workspace Policy
+          </button>
+        </div>
+
+        <div className="p-4 bg-sf-bg-tertiary border border-sf-border rounded-sf space-y-3">
+          <div className="flex items-center gap-2 text-sf-text-secondary">
+            <Database size={14} />
+            <span className="text-xs font-medium uppercase tracking-wide">
+              Data Retention Policy
+            </span>
+          </div>
+          <div className="space-y-2">
+            {[
+              { label: "Billing history & invoices", retention: "7 years", description: "Retained for tax and legal compliance" },
+              { label: "Usage metrics", retention: "24 months", description: "Session scans, extractions, and generation counts" },
+              { label: "Payment method details", retention: "Until removed", description: "Managed securely via Stripe; not stored locally" },
+              { label: "Session data", retention: "Per workspace policy", description: "Retained according to your workspace configuration" },
+            ].map((item) => (
+              <div key={item.label} className="flex items-start justify-between gap-4 py-2 border-b border-sf-border last:border-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-sf-text-primary">{item.label}</p>
+                  <p className="text-xs text-sf-text-muted">{item.description}</p>
+                </div>
+                <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-sf-bg-secondary text-sf-text-secondary border border-sf-border">
+                  {item.retention}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
