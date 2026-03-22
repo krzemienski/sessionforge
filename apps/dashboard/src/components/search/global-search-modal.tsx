@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useGlobalSearch } from "@/hooks/use-global-search";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { cn } from "@/lib/utils";
 import { Search, ScrollText, Lightbulb, FileText, X, Loader2 } from "lucide-react";
 
@@ -98,6 +99,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({ onEscape: onClose });
   const router = useRouter();
 
   const { sessions, insights, content, isLoading } = useGlobalSearch(query, workspace);
@@ -133,10 +135,6 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
       if (allResults.length === 0) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -161,6 +159,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
 
   return (
     <div
+      ref={focusTrapRef}
       className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-sf-bg-primary/80 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();

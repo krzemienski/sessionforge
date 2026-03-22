@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Download, X, RefreshCw, Check, Globe, Palette } from "lucide-react";
 import { useExportCollection } from "@/hooks/use-collections";
 import { ThemeSelector, type ExportThemeId } from "./theme-selector";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 type ThemeId = ExportThemeId;
 
@@ -30,6 +31,8 @@ export function StaticSiteExportModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const { exportCollection, isExporting } = useExportCollection();
+
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({ enabled: isOpen, onEscape: onClose });
 
   // Reset state when modal opens
   useEffect(() => {
@@ -64,7 +67,7 @@ export function StaticSiteExportModal({
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
+      <div ref={focusTrapRef} role="dialog" aria-modal="true" aria-label="Export static site" className="relative z-10 w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold font-display text-sf-text-primary">

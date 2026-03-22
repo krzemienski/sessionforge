@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ExternalLink, X, Send, RefreshCw } from "lucide-react";
 import { usePublishToDevto, useUpdateDevtoPost } from "@/hooks/use-devto";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface DevtoPublishModalProps {
   postId: string;
@@ -32,6 +33,8 @@ export function DevtoPublishModal({
   const update = useUpdateDevtoPost();
 
   const isPending = publish.isPending || update.isPending;
+
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({ enabled: isOpen, onEscape: onClose });
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -90,7 +93,7 @@ export function DevtoPublishModal({
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-md bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
+      <div ref={focusTrapRef} role="dialog" aria-modal="true" aria-label={isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"} className="relative z-10 w-full max-w-md bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold font-display text-sf-text-primary">
