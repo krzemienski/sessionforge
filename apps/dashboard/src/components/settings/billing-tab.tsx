@@ -10,6 +10,11 @@ import {
   Zap,
   ExternalLink,
   Loader2,
+  Clock,
+  DollarSign,
+  ArrowDownRight,
+  RefreshCw,
+  Receipt,
 } from "lucide-react";
 import { PLANS, type PlanTier } from "@/lib/billing/plans";
 
@@ -47,6 +52,41 @@ interface UsageData {
   daysUntilReset: number;
 }
 
+type BillingEventType =
+  | "charge"
+  | "refund"
+  | "plan_change"
+  | "subscription_created"
+  | "subscription_canceled"
+  | "upcoming_renewal"
+  | "usage";
+
+interface BillingEvent {
+  id: string;
+  type: BillingEventType;
+  date: string;
+  description: string;
+  amountUsd: number | null;
+  metadata: Record<string, string | number | null>;
+}
+
+interface BillingHistoryData {
+  events: BillingEvent[];
+  total: number;
+  planTier: PlanTier;
+  stripeCustomerId: string | null;
+}
+
+const EVENT_CONFIG: Record<BillingEventType, { icon: typeof CreditCard; color: string }> = {
+  charge: { icon: DollarSign, color: "text-sf-success" },
+  refund: { icon: ArrowDownRight, color: "text-sf-warning" },
+  plan_change: { icon: RefreshCw, color: "text-sf-accent" },
+  subscription_created: { icon: CheckCircle, color: "text-sf-success" },
+  subscription_canceled: { icon: XCircle, color: "text-sf-error" },
+  upcoming_renewal: { icon: Calendar, color: "text-blue-400" },
+  usage: { icon: Receipt, color: "text-sf-text-secondary" },
+};
+
 const TIER_BADGE_COLORS: Record<PlanTier, string> = {
   free: "bg-sf-bg-tertiary text-sf-text-secondary",
   solo: "bg-blue-500/15 text-blue-400",
@@ -78,6 +118,15 @@ export function BillingTab({ workspace }: BillingTabProps) {
     queryFn: async () => {
       const res = await fetch("/api/usage");
       if (!res.ok) throw new Error("Failed to load usage");
+      return res.json();
+    },
+  });
+
+  const history = useQuery<BillingHistoryData>({
+    queryKey: ["billing", "history"],
+    queryFn: async () => {
+      const res = await fetch("/api/billing/history?limit=25");
+      if (!res.ok) throw new Error("Failed to load billing history");
       return res.json();
     },
   });
@@ -239,6 +288,92 @@ export function BillingTab({ workspace }: BillingTabProps) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Billing History Timeline */}
+      <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-6 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold font-display mb-1">
+            Billing History
+          </h2>
+          <p className="text-xs text-sf-text-muted">
+            Chronological timeline of billing events, charges, and plan changes.
+          </p>
+        </div>
+        {history.isLoading ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-12 bg-sf-bg-tertiary rounded" />
+            <div className="h-12 bg-sf-bg-tertiary rounded" />
+            <div className="h-12 bg-sf-bg-tertiary rounded" />
+          </div>
+        ) : history.data && history.data.events.length > 0 ? (
+          <div className="space-y-1">
+            {history.data.events.map((event) => {
+              const config = EVENT_CONFIG[event.type];
+              const Icon = config.icon;
+              const isFuture = new Date(event.date) > new Date();
+              return (
+                <div
+                  key={event.id}
+                  className={`flex items-start gap-3 p-3 rounded-sf transition-colors ${
+                    isFuture
+                      ? "bg-blue-500/5 border border-blue-500/20"
+                      : "bg-sf-bg-tertiary border border-sf-border"
+                  }`}
+                >
+                  <div className={`flex-shrink-0 mt-0.5 ${config.color}`}>
+                    <Icon size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm font-medium text-sf-text-primary truncate">
+                        {event.description}
+                      </span>
+                      {event.amountUsd !== null && event.amountUsd > 0 && (
+                        <span className="text-sm font-medium text-sf-text-primary flex-shrink-0">
+                          ${event.amountUsd.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-sf-text-muted flex items-center gap-1">
+                        <Clock size={12} />
+                        {isFuture ? "Scheduled: " : ""}
+                        {formatDate(event.date)}
+                      </span>
+                      {isFuture && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-400">
+                          Upcoming
+                        </span>
+                      )}
+                      {event.metadata.pdfUrl && (
+                        <a
+                          href={event.metadata.pdfUrl as string}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-sf-accent hover:underline flex items-center gap-1"
+                        >
+                          <ExternalLink size={10} />
+                          PDF
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <Receipt size={32} className="mx-auto text-sf-text-muted mb-2" />
+            <p className="text-sm text-sf-text-muted">No billing history</p>
+            <p className="text-xs text-sf-text-muted mt-1">
+              {tier === "free"
+                ? "Upgrade to a paid plan to start seeing billing events here."
+                : "Billing events will appear here as they occur."}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}
