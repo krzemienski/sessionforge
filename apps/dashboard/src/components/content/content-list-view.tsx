@@ -47,7 +47,7 @@ export function ContentListView({
             key={tab.value}
             onClick={() => setStatusFilter(tab.value)}
             className={cn(
-              "px-3 py-1.5 text-sm rounded-sf transition-colors",
+              "px-3 py-1.5 text-sm rounded-sf transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent",
               statusFilter === tab.value
                 ? "bg-sf-accent-bg text-sf-accent"
                 : "text-sf-text-secondary hover:bg-sf-bg-hover"
@@ -65,7 +65,7 @@ export function ContentListView({
           <select
             value={seriesFilter}
             onChange={(e) => setSeriesFilter(e.target.value)}
-            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px]"
+            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <option value="">All Series</option>
             {seriesList.map((s: any) => (
@@ -74,7 +74,7 @@ export function ContentListView({
           </select>
           <button
             onClick={onManageSeries}
-            className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors"
+            className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
             aria-label="Manage series"
           >
             <Settings2 size={14} />
@@ -85,7 +85,7 @@ export function ContentListView({
           <select
             value={collectionFilter}
             onChange={(e) => setCollectionFilter(e.target.value)}
-            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px]"
+            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <option value="">All Collections</option>
             {collectionsList.map((c: any) => (
@@ -94,7 +94,7 @@ export function ContentListView({
           </select>
           <button
             onClick={onManageCollections}
-            className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors"
+            className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
             aria-label="Manage collections"
           >
             <Settings2 size={14} />
@@ -103,7 +103,7 @@ export function ContentListView({
         {(seriesFilter || collectionFilter) && (
           <button
             onClick={() => { setSeriesFilter(""); setCollectionFilter(""); }}
-            className="text-xs text-sf-text-muted hover:text-sf-accent transition-colors"
+            className="text-xs text-sf-text-muted hover:text-sf-accent transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             Clear filters
           </button>
@@ -161,13 +161,13 @@ export function ContentListView({
             <div className="flex items-center justify-center gap-3">
               <Link
                 href={`/${workspace}/insights`}
-                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sf-bg-primary"
               >
                 View Insights →
               </Link>
               <Link
                 href={`/${workspace}/content/new`}
-                className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
+                className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
               >
                 Create manually →
               </Link>

@@ -1,0 +1,46 @@
+{
+  "project_type": "monorepo",
+  "services": {
+    "dashboard": {
+      "path": "apps/dashboard",
+      "tech_stack": ["next.js 15", "react 19", "typescript", "tailwind css v4", "lexical editor"],
+      "port": 3000,
+      "dev_command": "bun run dev",
+      "test_command": "bun run test",
+      "test_unit_command": "bun run test:unit",
+      "test_integration_command": "bun run test:integration",
+      "test_e2e_command": "bun run test:e2e",
+      "build_command": "bun run build",
+      "lint_command": "bun run lint"
+    },
+    "db": {
+      "path": "packages/db",
+      "tech_stack": ["drizzle-orm", "neon serverless postgres"],
+      "port": null,
+      "dev_command": null,
+      "test_command": null
+    }
+  },
+  "infrastructure": {
+    "docker": true,
+    "database": "neon-postgresql",
+    "cache": "upstash-redis",
+    "hosting": "vercel",
+    "ci": "github-actions"
+  },
+  "conventions": {
+    "package_manager": "bun",
+    "linter": "eslint (next.js config)",
+    "formatter": "eslint",
+    "testing": {
+      "unit_integration": "vitest + happy-dom + @testing-library/react",
+      "e2e": "playwright",
+      "mock": "msw"
+    },
+    "styling": "tailwind css v4 with CSS custom properties (design tokens)",
+    "component_library": "custom components (no shadcn/ui)",
+    "icons": "lucide-react",
+    "state_management": "zustand + tanstack-query",
+    "fonts": ["JetBrains Mono (display)", "Inter (body)", "Fira Code (code)"]
+  }
+}

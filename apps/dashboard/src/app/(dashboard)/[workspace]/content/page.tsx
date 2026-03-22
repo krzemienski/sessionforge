@@ -138,7 +138,7 @@ export default function ContentPage() {
         </div>
         <button
           onClick={() => setShowExport(!showExport)}
-          className="flex items-center justify-center gap-2 bg-sf-bg-secondary border border-sf-border text-sf-text-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors w-full sm:w-auto min-h-[44px]"
+          className="flex items-center justify-center gap-2 bg-sf-bg-secondary border border-sf-border text-sf-text-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors w-full sm:w-auto min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
         >
           <Download size={16} /> Export
         </button>
@@ -182,7 +182,7 @@ export default function ContentPage() {
             key={tab.value}
             onClick={() => setActiveTab(tab.value)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sf transition-colors",
+              "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sf transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent",
               activeTab === tab.value
                 ? "bg-sf-bg-secondary text-sf-text-primary shadow-sm"
                 : "text-sf-text-secondary hover:text-sf-text-primary"

@@ -73,7 +73,7 @@ function ResultGroup({
             key={item.id}
             onClick={() => onSelect(item.id)}
             className={cn(
-              "w-full text-left px-4 py-3 transition-colors",
+              "w-full text-left px-4 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent focus-visible:ring-inset",
               isActive
                 ? "bg-sf-accent-bg"
                 : "hover:bg-sf-bg-hover"
@@ -186,7 +186,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
           )}
           <button
             onClick={onClose}
-            className="text-sf-text-muted hover:text-sf-text-secondary transition-colors"
+            className="text-sf-text-muted hover:text-sf-text-secondary transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
             aria-label="Close search"
           >
             <X size={18} />
@@ -205,7 +205,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
                   <button
                     key={s}
                     onClick={() => setQuery(s)}
-                    className="px-3 py-1.5 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-secondary hover:border-sf-border-focus hover:text-sf-text-primary transition-colors font-body"
+                    className="px-3 py-1.5 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-secondary hover:border-sf-border-focus hover:text-sf-text-primary transition-colors font-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
                   >
                     {s}
                   </button>
