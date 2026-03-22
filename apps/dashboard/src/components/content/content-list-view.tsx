@@ -41,10 +41,39 @@ export function ContentListView({
 }: ContentListViewProps) {
   return (
     <>
-      <div className="flex gap-2 flex-wrap mb-4">
+      <div
+        className="flex gap-2 flex-wrap mb-4"
+        role="tablist"
+        aria-label="Filter by status"
+        onKeyDown={(e) => {
+          const currentIndex = STATUS_TABS.findIndex((t) => t.value === statusFilter);
+          if (currentIndex === -1) return;
+          let nextIndex = -1;
+          if (e.key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % STATUS_TABS.length;
+          } else if (e.key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + STATUS_TABS.length) % STATUS_TABS.length;
+          } else if (e.key === "Home") {
+            nextIndex = 0;
+          } else if (e.key === "End") {
+            nextIndex = STATUS_TABS.length - 1;
+          }
+          if (nextIndex !== -1) {
+            e.preventDefault();
+            setStatusFilter(STATUS_TABS[nextIndex].value);
+            const tablist = e.currentTarget;
+            const buttons = tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+            buttons[nextIndex]?.focus();
+          }
+        }}
+      >
         {STATUS_TABS.map((tab) => (
           <button
             key={tab.value}
+            role="tab"
+            aria-selected={statusFilter === tab.value}
+            id={`tab-status-${tab.value || "all"}`}
+            tabIndex={statusFilter === tab.value ? 0 : -1}
             onClick={() => setStatusFilter(tab.value)}
             className={cn(
               "px-3 py-1.5 text-sm rounded-sf transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent",
