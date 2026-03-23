@@ -66,12 +66,12 @@ Plans:
   3. User can see Neon database provisioned with pooled connection for runtime and unpooled for migrations
   4. User can see build command runs drizzle-kit push before turbo build in Vercel project settings
   5. User can see all required env vars configured in Vercel project dashboard
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md -- Update vercel.json buildCommand with migration pipeline (drizzle-kit push --force before turbo build)
+- [ ] 03-02-PLAN.md -- Provision Neon Postgres, link Vercel project, configure env vars, first deploy
+- [ ] 03-03-PLAN.md -- Production verification (healthcheck, deployment validate, browser smoke test)
 
 ### Phase 4: Documentation
 **Goal**: Accurate, complete documentation covering quick-start, self-hosted deployment, API reference, architecture, and changelog -- all verified against the final deployed codebase
@@ -117,6 +117,6 @@ Phases execute in numeric order: 1 --> 2 --> 3 --> 4 --> 5
 |-------|----------------|--------|-----------|
 | 1. Worktree Convergence | 5/5 | Complete | - |
 | 2. Docker Hardening | 0/3 | Planning complete | - |
-| 3. Vercel + Neon Deployment | 0/3 | Not started | - |
+| 3. Vercel + Neon Deployment | 0/3 | Planning complete | - |
 | 4. Documentation | 0/3 | Not started | - |
 | 5. Feature Validation & Release | 0/3 | Not started | - |
