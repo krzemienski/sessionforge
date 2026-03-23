@@ -37,8 +37,8 @@ Requirements for v0.1.0-alpha release. Each maps to roadmap phases.
 
 - [ ] **DEPL-01**: User can access SessionForge at a live Vercel production URL
 - [ ] **DEPL-02**: User can see Neon database provisioned with production branch (scale-to-zero disabled)
-- [ ] **DEPL-03**: User can see pooled connection string used for runtime, unpooled for migrations
-- [ ] **DEPL-04**: User can see build command runs drizzle-kit push before turbo build
+- [x] **DEPL-03**: User can see pooled connection string used for runtime, unpooled for migrations
+- [x] **DEPL-04**: User can see build command runs drizzle-kit push before turbo build
 - [ ] **DEPL-05**: User can see all required env vars configured in Vercel project
 - [ ] **DEPL-06**: User can see /api/healthcheck returns 200 on production
 - [ ] **DEPL-07**: User can see /api/deployment/validate confirms all services connected
@@ -118,8 +118,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCK-07 | Phase 2 | Complete |
 | DEPL-01 | Phase 3 | Pending |
 | DEPL-02 | Phase 3 | Pending |
-| DEPL-03 | Phase 3 | Pending |
-| DEPL-04 | Phase 3 | Pending |
+| DEPL-03 | Phase 3 | Complete |
+| DEPL-04 | Phase 3 | Complete |
 | DEPL-05 | Phase 3 | Pending |
 | DEPL-06 | Phase 3 | Pending |
 | DEPL-07 | Phase 3 | Pending |

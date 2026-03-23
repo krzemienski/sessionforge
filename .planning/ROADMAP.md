@@ -69,7 +69,7 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Update vercel.json buildCommand with migration pipeline (drizzle-kit push --force before turbo build)
+- [x] 03-01-PLAN.md -- Update vercel.json buildCommand with migration pipeline (drizzle-kit push --force before turbo build)
 - [ ] 03-02-PLAN.md -- Provision Neon Postgres, link Vercel project, configure env vars, first deploy
 - [ ] 03-03-PLAN.md -- Production verification (healthcheck, deployment validate, browser smoke test)
 

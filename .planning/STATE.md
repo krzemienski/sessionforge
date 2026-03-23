@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-23T07:23:37.810Z"
+status: Ready to execute
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-23T07:59:36.289Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 11
+  completed_plans: 9
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Every feature branch merged cleanly into main, the full stack running identically in local Docker and Vercel production, and 50+ features proven functional end-to-end
-**Current focus:** Phase 02 — docker-hardening
+**Current focus:** Phase 03 — vercel-neon-deployment
 
 ## Current Position
 
-Phase: 03
-Plan: Not started
+Phase: 03 (vercel-neon-deployment) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Plan: Not started
 | Phase 02 P03 | 1min | 1 tasks | 1 files |
 | Phase 02 P01 | 2min | 2 tasks | 5 files |
 | Phase 02 P02 | 1min | 2 tasks | 3 files |
+| Phase 03 P01 | 1min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,7 @@ Recent decisions affecting current work:
 - [Phase 02]: Inline CJS require() in entrypoint (node -e does not support ESM imports)
 - [Phase 02]: postgres as direct dependency of @sessionforge/db for Docker standalone builds
 - [Phase 02]: Redis omitted from dev compose per D-07 (graceful fallback); healthcheck uses native fetch via node -e
+- [Phase 03]: Build-time migration: drizzle-kit push --force with unpooled Neon URL before turbo build in Vercel pipeline
 
 ### Pending Todos
 
@@ -93,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23T06:57:52.865Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-03-23T07:59:36.287Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
