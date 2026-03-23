@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
-import { Search, Pin, BookOpen, FolderOpen } from "lucide-react";
+import { Pin, BookOpen, FolderOpen } from "lucide-react";
+import { useFilterParams } from "@/hooks/use-filter-params";
+import { FilterPanel } from "@/components/portfolio/filter-panel";
+import { BulkOperationsBar } from "@/components/portfolio/bulk-operations-bar";
 
 interface Post {
   id: string;
@@ -13,6 +16,9 @@ interface Post {
   metaDescription: string | null;
   wordCount: number | null;
   keywords: any;
+  seriesId: string | null;
+  collectionIds: string[];
+  status: string;
 }
 
 interface Series {
@@ -38,7 +44,18 @@ interface PostGridProps {
   pinnedPosts: Post[];
   series: Series[];
   collections: Collection[];
+  workspaceSlug?: string;
 }
+
+const FILTER_DEFAULTS = {
+  search: "",
+  series: "all",
+  collection: "all",
+  contentType: "all",
+  status: "all",
+  dateFrom: "",
+  dateTo: "",
+};
 
 function formatDate(date: Date | null): string {
   if (!date) return "";
@@ -55,130 +72,157 @@ function estimateReadTime(wordCount: number | null): string {
   return `${minutes} min read`;
 }
 
+function applyFilters(posts: Post[], filters: typeof FILTER_DEFAULTS): Post[] {
+  let filtered = [...posts];
+
+  if (filters.search) {
+    const query = filters.search.toLowerCase();
+    filtered = filtered.filter(
+      (post) =>
+        post.title.toLowerCase().includes(query) ||
+        post.metaDescription?.toLowerCase().includes(query)
+    );
+  }
+
+  if (filters.contentType !== "all") {
+    filtered = filtered.filter(
+      (post) => post.contentType === filters.contentType
+    );
+  }
+
+  if (filters.series !== "all") {
+    filtered = filtered.filter((post) => post.seriesId === filters.series);
+  }
+
+  if (filters.collection !== "all") {
+    filtered = filtered.filter((post) =>
+      post.collectionIds.includes(filters.collection)
+    );
+  }
+
+  if (filters.status !== "all") {
+    filtered = filtered.filter((post) => post.status === filters.status);
+  }
+
+  if (filters.dateFrom) {
+    const from = new Date(filters.dateFrom);
+    filtered = filtered.filter((post) => {
+      const postDate = post.publishedAt ?? post.createdAt;
+      return new Date(postDate) >= from;
+    });
+  }
+
+  if (filters.dateTo) {
+    const to = new Date(filters.dateTo);
+    to.setHours(23, 59, 59, 999);
+    filtered = filtered.filter((post) => {
+      const postDate = post.publishedAt ?? post.createdAt;
+      return new Date(postDate) <= to;
+    });
+  }
+
+  return filtered;
+}
+
 export function PostGrid({
   posts,
   pinnedPosts,
   series,
   collections,
+  workspaceSlug,
 }: PostGridProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedContentType, setSelectedContentType] = useState<string>("all");
+  const [filters, setParam, resetParams] = useFilterParams(FILTER_DEFAULTS);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Get unique content types
-  const contentTypes = useMemo(() => {
-    const types = new Set<string>();
-    [...pinnedPosts, ...posts].forEach((post) => {
-      types.add(post.contentType);
+  const filteredPosts = useMemo(
+    () => applyFilters(posts, filters),
+    [posts, filters]
+  );
+
+  const filteredPinnedPosts = useMemo(
+    () => applyFilters(pinnedPosts, filters),
+    [pinnedPosts, filters]
+  );
+
+  function togglePost(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
     });
-    return Array.from(types).sort();
-  }, [posts, pinnedPosts]);
+  }
 
-  // Filter posts
-  const filteredPosts = useMemo(() => {
-    let filtered = [...posts];
-
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (post) =>
-          post.title.toLowerCase().includes(query) ||
-          post.metaDescription?.toLowerCase().includes(query)
-      );
+  function toggleSelectAll() {
+    const visibleIds = [
+      ...filteredPinnedPosts.map((p) => p.id),
+      ...filteredPosts.map((p) => p.id),
+    ];
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(visibleIds));
     }
+  }
 
-    // Filter by content type
-    if (selectedContentType !== "all") {
-      filtered = filtered.filter(
-        (post) => post.contentType === selectedContentType
-      );
-    }
-
-    // TODO: Filter by series/collection when post relationships are available
-
-    return filtered;
-  }, [posts, searchQuery, selectedContentType]);
-
-  // Filter pinned posts with same logic
-  const filteredPinnedPosts = useMemo(() => {
-    let filtered = [...pinnedPosts];
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (post) =>
-          post.title.toLowerCase().includes(query) ||
-          post.metaDescription?.toLowerCase().includes(query)
-      );
-    }
-
-    if (selectedContentType !== "all") {
-      filtered = filtered.filter(
-        (post) => post.contentType === selectedContentType
-      );
-    }
-
-    return filtered;
-  }, [pinnedPosts, searchQuery, selectedContentType]);
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
 
   const hasActiveFilters =
-    searchQuery ||
-    selectedContentType !== "all";
+    filters.search !== "" ||
+    filters.series !== "all" ||
+    filters.collection !== "all" ||
+    filters.contentType !== "all" ||
+    filters.status !== "all" ||
+    filters.dateFrom !== "" ||
+    filters.dateTo !== "";
 
   return (
     <div>
       {/* Filters Section */}
-      <div className="mb-8 space-y-4">
-        {/* Search */}
-        <div className="relative">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-sf-text-muted"
-            size={18}
-          />
-          <input
-            type="text"
-            placeholder="Search posts..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-sf-text-primary placeholder:text-sf-text-muted focus:outline-none focus:border-sf-accent"
-          />
-        </div>
+      <FilterPanel
+        filters={filters}
+        onFilterChange={setParam}
+        onReset={resetParams}
+        posts={[...pinnedPosts, ...posts]}
+        series={series}
+        collections={collections}
+        workspaceSlug={workspaceSlug}
+      />
 
-        {/* Filter Dropdowns */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Content Type Filter */}
-          {contentTypes.length > 1 && (
-            <select
-              value={selectedContentType}
-              onChange={(e) => setSelectedContentType(e.target.value)}
-              className="px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-sf-text-primary text-sm focus:outline-none focus:border-sf-accent"
-            >
-              <option value="all">All Types</option>
-              {contentTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                </option>
-              ))}
-            </select>
+      {/* Select All Bar */}
+      {(filteredPinnedPosts.length > 0 || filteredPosts.length > 0) && workspaceSlug && (
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={toggleSelectAll}
+            className="flex items-center gap-2 text-sm text-sf-text-secondary hover:text-sf-text-primary transition-colors"
+          >
+            <input
+              type="checkbox"
+              readOnly
+              checked={
+                (filteredPinnedPosts.length + filteredPosts.length) > 0 &&
+                [...filteredPinnedPosts, ...filteredPosts].every((p) => selectedIds.has(p.id))
+              }
+              className="h-4 w-4 rounded border-sf-border accent-sf-accent cursor-pointer"
+            />
+            <span>Select all</span>
+          </button>
+          {selectedIds.size > 0 && (
+            <span className="text-xs text-sf-text-muted">
+              {selectedIds.size} selected
+            </span>
           )}
         </div>
-
-        {/* Clear Filters */}
-        {hasActiveFilters && (
-          <button
-            onClick={() => {
-              setSearchQuery("");
-              setSelectedContentType("all");
-            }}
-            className="text-sm text-sf-accent hover:underline"
-          >
-            Clear all filters
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Featured Series */}
-      {series.length > 0 && series.filter(s => s.coverImage).length > 0 && (
+      {series.length > 0 && series.filter((s) => s.coverImage).length > 0 && (
         <div className="mb-12">
           <h3 className="text-lg font-semibold text-sf-text-primary mb-4 flex items-center gap-2">
             <BookOpen size={20} />
@@ -186,14 +230,13 @@ export function PostGrid({
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {series
-              .filter(s => s.coverImage)
+              .filter((s) => s.coverImage)
               .slice(0, 3)
               .map((s) => (
                 <div
                   key={s.id}
                   className="bg-sf-bg-secondary border border-sf-border rounded-sf overflow-hidden hover:border-sf-accent/50 transition-colors"
                 >
-                  {/* Cover Image */}
                   <div className="relative w-full aspect-video bg-sf-bg-tertiary">
                     <Image
                       src={s.coverImage!}
@@ -203,7 +246,6 @@ export function PostGrid({
                       className="object-cover"
                     />
                   </div>
-                  {/* Content */}
                   <div className="p-4">
                     <h4 className="text-base font-semibold text-sf-text-primary mb-2">
                       {s.title}
@@ -221,47 +263,46 @@ export function PostGrid({
       )}
 
       {/* Featured Collections */}
-      {collections.length > 0 && collections.filter(c => c.coverImage).length > 0 && (
-        <div className="mb-12">
-          <h3 className="text-lg font-semibold text-sf-text-primary mb-4 flex items-center gap-2">
-            <FolderOpen size={20} />
-            Featured Collections
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {collections
-              .filter(c => c.coverImage)
-              .slice(0, 3)
-              .map((c) => (
-                <div
-                  key={c.id}
-                  className="bg-sf-bg-secondary border border-sf-border rounded-sf overflow-hidden hover:border-sf-accent/50 transition-colors"
-                >
-                  {/* Cover Image */}
-                  <div className="relative w-full aspect-video bg-sf-bg-tertiary">
-                    <Image
-                      src={c.coverImage!}
-                      alt={c.title}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover"
-                    />
+      {collections.length > 0 &&
+        collections.filter((c) => c.coverImage).length > 0 && (
+          <div className="mb-12">
+            <h3 className="text-lg font-semibold text-sf-text-primary mb-4 flex items-center gap-2">
+              <FolderOpen size={20} />
+              Featured Collections
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {collections
+                .filter((c) => c.coverImage)
+                .slice(0, 3)
+                .map((c) => (
+                  <div
+                    key={c.id}
+                    className="bg-sf-bg-secondary border border-sf-border rounded-sf overflow-hidden hover:border-sf-accent/50 transition-colors"
+                  >
+                    <div className="relative w-full aspect-video bg-sf-bg-tertiary">
+                      <Image
+                        src={c.coverImage!}
+                        alt={c.title}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="p-4">
+                      <h4 className="text-base font-semibold text-sf-text-primary mb-2">
+                        {c.title}
+                      </h4>
+                      {c.description && (
+                        <p className="text-sm text-sf-text-secondary line-clamp-2">
+                          {c.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {/* Content */}
-                  <div className="p-4">
-                    <h4 className="text-base font-semibold text-sf-text-primary mb-2">
-                      {c.title}
-                    </h4>
-                    {c.description && (
-                      <p className="text-sm text-sf-text-secondary line-clamp-2">
-                        {c.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
+                ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Pinned Posts Grid */}
       {filteredPinnedPosts.length > 0 && (
@@ -274,15 +315,28 @@ export function PostGrid({
               <article
                 key={post.id}
                 id={`post-${post.id}`}
-                className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6 hover:border-sf-accent/50 transition-colors relative"
+                className={`bg-sf-bg-secondary border rounded-sf p-6 hover:border-sf-accent/50 transition-colors relative ${
+                  selectedIds.has(post.id) ? "border-sf-accent" : "border-sf-border"
+                }`}
               >
-                {/* Pinned Badge */}
-                <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1 bg-sf-accent/10 border border-sf-accent/20 rounded-sf text-xs font-medium text-sf-accent">
+                {workspaceSlug && (
+                  <div className="absolute top-4 left-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(post.id)}
+                      onChange={() => togglePost(post.id)}
+                      className="h-4 w-4 rounded border-sf-border accent-sf-accent cursor-pointer"
+                      aria-label={`Select "${post.title}"`}
+                    />
+                  </div>
+                )}
+
+                <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1 bg-sf-accent/10 border border-sf-accent/20 rounded-sf text-xs font-medium text-sf-accent`}>
                   <Pin size={12} />
                   <span>Pinned</span>
                 </div>
 
-                <h3 className="text-lg font-semibold mb-2 text-sf-text-primary pr-20">
+                <h3 className={`text-lg font-semibold mb-2 text-sf-text-primary pr-20 ${workspaceSlug ? "pl-7" : ""}`}>
                   {post.title}
                 </h3>
 
@@ -302,19 +356,22 @@ export function PostGrid({
                   </span>
                 </div>
 
-                {/* Keywords/Tags */}
-                {post.keywords && Array.isArray(post.keywords) && post.keywords.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {post.keywords.slice(0, 3).map((keyword: string, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-0.5 bg-sf-bg-tertiary border border-sf-border rounded text-xs text-sf-text-muted"
-                      >
-                        {keyword}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {post.keywords &&
+                  Array.isArray(post.keywords) &&
+                  post.keywords.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {post.keywords
+                        .slice(0, 3)
+                        .map((keyword: string, idx: number) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-sf-bg-tertiary border border-sf-border rounded text-xs text-sf-text-muted"
+                          >
+                            {keyword}
+                          </span>
+                        ))}
+                    </div>
+                  )}
               </article>
             ))}
           </div>
@@ -329,9 +386,23 @@ export function PostGrid({
               <article
                 key={post.id}
                 id={`post-${post.id}`}
-                className="bg-sf-bg-secondary border border-sf-border rounded-sf p-6 hover:border-sf-accent/50 transition-colors"
+                className={`bg-sf-bg-secondary border rounded-sf p-6 hover:border-sf-accent/50 transition-colors relative ${
+                  selectedIds.has(post.id) ? "border-sf-accent" : "border-sf-border"
+                }`}
               >
-                <h3 className="text-lg font-semibold mb-2 text-sf-text-primary">
+                {workspaceSlug && (
+                  <div className="absolute top-4 left-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(post.id)}
+                      onChange={() => togglePost(post.id)}
+                      className="h-4 w-4 rounded border-sf-border accent-sf-accent cursor-pointer"
+                      aria-label={`Select "${post.title}"`}
+                    />
+                  </div>
+                )}
+
+                <h3 className={`text-lg font-semibold mb-2 text-sf-text-primary ${workspaceSlug ? "pl-7" : ""}`}>
                   {post.title}
                 </h3>
 
@@ -351,19 +422,22 @@ export function PostGrid({
                   </span>
                 </div>
 
-                {/* Keywords/Tags */}
-                {post.keywords && Array.isArray(post.keywords) && post.keywords.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {post.keywords.slice(0, 3).map((keyword: string, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-0.5 bg-sf-bg-tertiary border border-sf-border rounded text-xs text-sf-text-muted"
-                      >
-                        {keyword}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {post.keywords &&
+                  Array.isArray(post.keywords) &&
+                  post.keywords.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {post.keywords
+                        .slice(0, 3)
+                        .map((keyword: string, idx: number) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-sf-bg-tertiary border border-sf-border rounded text-xs text-sf-text-muted"
+                          >
+                            {keyword}
+                          </span>
+                        ))}
+                    </div>
+                  )}
               </article>
             ))}
           </div>
@@ -374,11 +448,115 @@ export function PostGrid({
       {filteredPinnedPosts.length === 0 && filteredPosts.length === 0 && (
         <div className="text-center py-12 text-sf-text-muted">
           {hasActiveFilters ? (
-            <p>No posts match your filters. Try adjusting your search.</p>
+            <div className="space-y-4">
+              <p className="text-base text-sf-text-secondary">
+                No posts match your current filters.
+              </p>
+              <p className="text-sm">
+                {posts.length + pinnedPosts.length} total post
+                {posts.length + pinnedPosts.length !== 1 ? "s" : ""} available
+                — try broadening your search.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 mt-3">
+                {filters.search !== "" && (
+                  <button
+                    onClick={() => setParam("search", "")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>Search: &ldquo;{filters.search}&rdquo;</span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.series !== "all" && (
+                  <button
+                    onClick={() => setParam("series", "all")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>
+                      Series:{" "}
+                      {series.find((s) => s.id === filters.series)?.title ??
+                        filters.series}
+                    </span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.collection !== "all" && (
+                  <button
+                    onClick={() => setParam("collection", "all")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>
+                      Collection:{" "}
+                      {collections.find((c) => c.id === filters.collection)
+                        ?.title ?? filters.collection}
+                    </span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.contentType !== "all" && (
+                  <button
+                    onClick={() => setParam("contentType", "all")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>
+                      Type:{" "}
+                      {filters.contentType.replace(/_/g, " ")}
+                    </span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.status !== "all" && (
+                  <button
+                    onClick={() => setParam("status", "all")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>Status: {filters.status}</span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.dateFrom !== "" && (
+                  <button
+                    onClick={() => setParam("dateFrom", "")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>From: {filters.dateFrom}</span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+                {filters.dateTo !== "" && (
+                  <button
+                    onClick={() => setParam("dateTo", "")}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary hover:border-sf-accent/50 hover:text-sf-text-primary transition-colors"
+                  >
+                    <span>To: {filters.dateTo}</span>
+                    <span className="text-sf-text-muted">✕</span>
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={resetParams}
+                className="mt-2 text-xs text-sf-accent hover:underline"
+              >
+                Clear all filters
+              </button>
+            </div>
           ) : (
             <p>No content published yet.</p>
           )}
         </div>
+      )}
+
+      {/* Bulk Operations Bar */}
+      {workspaceSlug && (
+        <BulkOperationsBar
+          selectedCount={selectedIds.size}
+          selectedPostIds={Array.from(selectedIds)}
+          selectedPosts={[...filteredPinnedPosts, ...filteredPosts].filter((p) =>
+            selectedIds.has(p.id)
+          )}
+          workspaceSlug={workspaceSlug}
+          onClearSelection={clearSelection}
+        />
       )}
     </div>
   );

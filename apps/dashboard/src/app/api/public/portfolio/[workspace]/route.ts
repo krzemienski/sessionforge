@@ -59,6 +59,35 @@ export async function GET(
     ),
   });
 
+  // Fetch series and collection membership for published posts
+  const publishedPostIds = publishedPosts.map((p) => p.id);
+
+  let postSeriesMap: Record<string, string> = {};
+  let postCollectionsMap: Record<string, string[]> = {};
+
+  if (publishedPostIds.length > 0) {
+    const seriesPostRows = await db
+      .select({ postId: seriesPosts.postId, seriesId: seriesPosts.seriesId })
+      .from(seriesPosts)
+      .where(inArray(seriesPosts.postId, publishedPostIds));
+
+    postSeriesMap = seriesPostRows.reduce((acc, row) => {
+      acc[row.postId] = row.seriesId;
+      return acc;
+    }, {} as Record<string, string>);
+
+    const collectionPostRows = await db
+      .select({ postId: collectionPosts.postId, collectionId: collectionPosts.collectionId })
+      .from(collectionPosts)
+      .where(inArray(collectionPosts.postId, publishedPostIds));
+
+    postCollectionsMap = collectionPostRows.reduce((acc, row) => {
+      if (!acc[row.postId]) acc[row.postId] = [];
+      acc[row.postId].push(row.collectionId);
+      return acc;
+    }, {} as Record<string, string[]>);
+  }
+
   // Process pinned posts if they exist
   const pinnedPostIds = (portfolio.pinnedPostIds as string[]) || [];
   const pinnedPostsData =
@@ -81,6 +110,9 @@ export async function GET(
     metaDescription: p.metaDescription,
     wordCount: p.wordCount,
     keywords: p.keywords,
+    seriesId: postSeriesMap[p.id] ?? null,
+    collectionIds: postCollectionsMap[p.id] ?? [],
+    status: p.status,
   }));
 
   // Map pinned posts for response
@@ -93,6 +125,9 @@ export async function GET(
     metaDescription: p.metaDescription,
     wordCount: p.wordCount,
     keywords: p.keywords,
+    seriesId: postSeriesMap[p.id] ?? null,
+    collectionIds: postCollectionsMap[p.id] ?? [],
+    status: p.status,
   }));
 
   // Map series for response
