@@ -30,12 +30,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can see branch 038 explicitly skipped with documented rationale
   4. User can run `bun run build` on converged main with zero TypeScript errors
   5. User can run `git worktree list` showing only the main worktree with all feature branches merged or skipped
-**Plans**: TBD
+**Plans:** 5 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md -- Spec audit (001-030) and merge manifest generation
+- [ ] 01-02-PLAN.md -- Tier 1 merges: 037 (WCAG), 041 (mobile), 036 (series filtering)
+- [ ] 01-03-PLAN.md -- Tier 2 merges: 035 (versioning), 031 (A/B headlines), 034 (voice calibration)
+- [ ] 01-04-PLAN.md -- Tier 3 merges: 039 (structured data), 040 (repurposing), 032 (billing)
+- [ ] 01-05-PLAN.md -- Worktree cleanup, final build validation, convergence report
 
 ### Phase 2: Docker Hardening
 **Goal**: A working `docker compose up` experience from a clean clone -- Postgres starts, schema auto-migrates, app serves at localhost:3000, healthchecks pass
@@ -113,7 +115,7 @@ Phases execute in numeric order: 1 --> 2 --> 3 --> 4 --> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Worktree Convergence | 0/3 | Not started | - |
+| 1. Worktree Convergence | 0/5 | Planning complete | - |
 | 2. Docker Hardening | 0/3 | Not started | - |
 | 3. Vercel + Neon Deployment | 0/3 | Not started | - |
 | 4. Documentation | 0/3 | Not started | - |
