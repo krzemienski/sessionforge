@@ -31,7 +31,7 @@ Requirements for v0.1.0-alpha release. Each maps to roadmap phases.
 - [ ] **DOCK-04**: User can see all containers pass healthchecks (app + postgres)
 - [ ] **DOCK-05**: User can build the Docker image independently with `docker build`
 - [ ] **DOCK-06**: User can see node:22-slim runner image (not node:20), sharp installed, CLAUDECODE env cleared
-- [ ] **DOCK-07**: User can see .env.example documents every required environment variable
+- [x] **DOCK-07**: User can see .env.example documents every required environment variable
 
 ### Vercel + Neon Deployment
 
@@ -115,7 +115,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCK-04 | Phase 2 | Pending |
 | DOCK-05 | Phase 2 | Pending |
 | DOCK-06 | Phase 2 | Pending |
-| DOCK-07 | Phase 2 | Pending |
+| DOCK-07 | Phase 2 | Complete |
 | DEPL-01 | Phase 3 | Pending |
 | DEPL-02 | Phase 3 | Pending |
 | DEPL-03 | Phase 3 | Pending |
