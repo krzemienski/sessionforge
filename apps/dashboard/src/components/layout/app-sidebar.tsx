@@ -53,7 +53,7 @@ export function AppSidebar({
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-[260px] flex-shrink-0 border-r border-sf-border bg-sf-bg-secondary h-full overflow-hidden">
+    <aside className="hidden md:flex flex-col w-[260px] flex-shrink-0 border-r border-sf-border bg-sf-bg-secondary h-full overflow-hidden" aria-label="Sidebar">
       <div className="p-4 border-b border-sf-border">
         <Link href={`/${workspace}`} className="text-sf-accent font-bold tracking-tight font-display text-lg">
           SessionForge
@@ -61,7 +61,7 @@ export function AppSidebar({
         <p className="text-sf-text-muted text-xs mt-1 font-display truncate">{workspace}</p>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto" role="navigation" aria-label="Main navigation">
         {mainNav.map((item) => (
           <Link
             key={item.href}
@@ -109,6 +109,7 @@ export function AppSidebar({
               await signOut();
               router.push("/login");
             }}
+            aria-label="Sign out"
             className="text-sf-text-muted hover:text-sf-danger transition-colors"
           >
             <LogOut size={16} />

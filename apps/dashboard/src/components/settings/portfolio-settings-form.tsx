@@ -349,6 +349,7 @@ export function PortfolioSettingsForm({ workspace }: PortfolioSettingsFormProps)
                     disabled={unpinPost.isPending}
                     className="ml-3 p-1.5 text-sf-accent hover:bg-sf-bg-primary rounded transition-colors disabled:opacity-50"
                     title="Unpin post"
+                    aria-label="Unpin post"
                   >
                     <X size={16} />
                   </button>

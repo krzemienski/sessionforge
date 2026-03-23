@@ -105,9 +105,13 @@ export function UploadZone({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={handleClick}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(); } }}
+        role="button"
+        tabIndex={isUploading ? -1 : 0}
+        aria-label="Upload session files"
         className={`
           relative border-2 border-dashed rounded-sf-lg p-8 text-center cursor-pointer
-          transition-all duration-200
+          transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent
           ${
             isDragging
               ? "border-sf-accent bg-sf-accent/5 scale-[1.02]"

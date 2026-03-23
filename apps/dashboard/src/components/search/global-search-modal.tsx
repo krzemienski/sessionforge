@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useGlobalSearch } from "@/hooks/use-global-search";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { cn } from "@/lib/utils";
 import { Search, ScrollText, Lightbulb, FileText, X, Loader2 } from "lucide-react";
 
@@ -73,7 +74,7 @@ function ResultGroup({
             key={item.id}
             onClick={() => onSelect(item.id)}
             className={cn(
-              "w-full text-left px-4 py-3 transition-colors",
+              "w-full text-left px-4 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent focus-visible:ring-inset",
               isActive
                 ? "bg-sf-accent-bg"
                 : "hover:bg-sf-bg-hover"
@@ -98,6 +99,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({ onEscape: onClose });
   const router = useRouter();
 
   const { sessions, insights, content, isLoading } = useGlobalSearch(query, workspace);
@@ -133,10 +135,6 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
       if (allResults.length === 0) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -161,6 +159,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
 
   return (
     <div
+      ref={focusTrapRef}
       className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-sf-bg-primary/80 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -177,6 +176,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
             ref={inputRef}
             type="text"
             placeholder="Search sessions, insights, content..."
+            aria-label="Search sessions, insights, and content"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="flex-1 bg-transparent text-sf-text-primary placeholder:text-sf-text-muted text-sm focus:outline-none font-body"
@@ -186,7 +186,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
           )}
           <button
             onClick={onClose}
-            className="text-sf-text-muted hover:text-sf-text-secondary transition-colors"
+            className="text-sf-text-muted hover:text-sf-text-secondary transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
             aria-label="Close search"
           >
             <X size={18} />
@@ -205,7 +205,7 @@ export function GlobalSearchModal({ workspace, onClose }: GlobalSearchModalProps
                   <button
                     key={s}
                     onClick={() => setQuery(s)}
-                    className="px-3 py-1.5 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-secondary hover:border-sf-border-focus hover:text-sf-text-primary transition-colors font-body"
+                    className="px-3 py-1.5 bg-sf-bg-tertiary border border-sf-border rounded-sf text-sm text-sf-text-secondary hover:border-sf-border-focus hover:text-sf-text-primary transition-colors font-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
                   >
                     {s}
                   </button>

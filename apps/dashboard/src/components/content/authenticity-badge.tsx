@@ -103,7 +103,7 @@ export function AuthenticityBadge({
               <button
                 onClick={handleCopySnippet}
                 className="flex-shrink-0 p-1.5 rounded text-sf-text-muted hover:text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors"
-                title="Copy markdown snippet"
+                aria-label="Copy markdown snippet"
               >
                 <Copy size={13} />
               </button>

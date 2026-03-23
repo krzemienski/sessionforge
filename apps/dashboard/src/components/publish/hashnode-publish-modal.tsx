@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X, Send, ExternalLink, AlertCircle, Check } from "lucide-react";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface HashnodePublishModalProps {
   postId: string;
@@ -29,6 +30,8 @@ export function HashnodePublishModal({
   const [state, setState] = useState<ModalState>("form");
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({ enabled: isOpen, onEscape: onClose });
 
   if (!isOpen) return null;
 
@@ -103,7 +106,7 @@ export function HashnodePublishModal({
       <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
 
       {/* Modal */}
-      <div className="relative w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl">
+      <div ref={focusTrapRef} role="dialog" aria-modal="true" aria-label="Publish to Hashnode" className="relative w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-sf-border">
           <div>

@@ -20,6 +20,7 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
       className={cn(
         "relative w-full text-left p-4 rounded-sf-lg border transition-all",
         "hover:border-sf-accent hover:bg-sf-bg-hover",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sf-bg-primary",
         selected
           ? "border-sf-accent bg-sf-accent-bg"
           : "border-sf-border bg-sf-bg-secondary"

@@ -149,6 +149,7 @@ export function InlineEditControls({ currentWordCount, isStreaming, onSendMessag
         <button
           onClick={handleFeedback}
           disabled={isStreaming || !feedback.trim()}
+          aria-label={isStreaming ? "Sending feedback" : "Send feedback"}
           className="p-1.5 bg-sf-accent text-sf-bg-primary rounded-sf hover:bg-sf-accent-dim transition-colors disabled:opacity-50"
         >
           {isStreaming ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}

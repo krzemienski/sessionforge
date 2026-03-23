@@ -9,6 +9,7 @@ import {
   useDeleteCollection,
   type GroupItem,
 } from "@/hooks/use-series-collections";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface ManageGroupDialogProps {
   type: "series" | "collections";
@@ -44,6 +45,8 @@ export function ManageGroupDialog({ type, workspace, items, isOpen, onClose }: M
   const label = type === "series" ? "Series" : "Collection";
   const Icon = type === "series" ? BookOpen : FolderOpen;
 
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({ enabled: isOpen, onEscape: onClose });
+
   if (!isOpen) return null;
 
   async function handleCreate() {
@@ -78,7 +81,7 @@ export function ManageGroupDialog({ type, workspace, items, isOpen, onClose }: M
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative z-10 w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6 max-h-[80vh] flex flex-col">
+      <div ref={focusTrapRef} role="dialog" aria-modal="true" aria-label={`Manage ${type === "series" ? "series" : "collections"}`} className="relative z-10 w-full max-w-lg bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6 max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold font-display text-sf-text-primary flex items-center gap-2">
             <Icon size={18} /> Manage {type === "series" ? "Series" : "Collections"}

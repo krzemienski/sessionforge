@@ -450,6 +450,7 @@ function DiffOverlay({ postId, revision, onClose }: DiffOverlayProps) {
             </div>
             <button
               onClick={onClose}
+              aria-label="Close diff viewer"
               className="p-1.5 rounded-sf hover:bg-sf-bg-hover text-sf-text-muted hover:text-sf-text-primary transition-colors"
             >
               <X size={16} />

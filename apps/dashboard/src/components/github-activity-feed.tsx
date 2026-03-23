@@ -111,6 +111,7 @@ export function GitHubActivityFeed({ workspace, limit = 20 }: GitHubActivityFeed
                       disabled={isExcluding}
                       className="p-1.5 rounded-sf hover:bg-sf-bg-tertiary text-sf-text-muted hover:text-sf-text-secondary transition-colors disabled:opacity-50"
                       title="Exclude from content generation"
+                      aria-label="Exclude from content generation"
                     >
                       {isExcluding ? (
                         <Loader2 size={14} className="animate-spin" />

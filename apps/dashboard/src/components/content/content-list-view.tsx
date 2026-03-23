@@ -41,13 +41,42 @@ export function ContentListView({
 }: ContentListViewProps) {
   return (
     <>
-      <div className="flex gap-2 flex-wrap mb-4">
+      <div
+        className="flex gap-2 flex-wrap mb-4"
+        role="tablist"
+        aria-label="Filter by status"
+        onKeyDown={(e) => {
+          const currentIndex = STATUS_TABS.findIndex((t) => t.value === statusFilter);
+          if (currentIndex === -1) return;
+          let nextIndex = -1;
+          if (e.key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % STATUS_TABS.length;
+          } else if (e.key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + STATUS_TABS.length) % STATUS_TABS.length;
+          } else if (e.key === "Home") {
+            nextIndex = 0;
+          } else if (e.key === "End") {
+            nextIndex = STATUS_TABS.length - 1;
+          }
+          if (nextIndex !== -1) {
+            e.preventDefault();
+            setStatusFilter(STATUS_TABS[nextIndex].value);
+            const tablist = e.currentTarget;
+            const buttons = tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+            buttons[nextIndex]?.focus();
+          }
+        }}
+      >
         {STATUS_TABS.map((tab) => (
           <button
             key={tab.value}
+            role="tab"
+            aria-selected={statusFilter === tab.value}
+            id={`tab-status-${tab.value || "all"}`}
+            tabIndex={statusFilter === tab.value ? 0 : -1}
             onClick={() => setStatusFilter(tab.value)}
             className={cn(
-              "px-3 py-1.5 text-sm rounded-sf transition-colors",
+              "px-3 py-1.5 text-sm rounded-sf transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent",
               statusFilter === tab.value
                 ? "bg-sf-accent-bg text-sf-accent"
                 : "text-sf-text-secondary hover:bg-sf-bg-hover"
@@ -65,7 +94,8 @@ export function ContentListView({
           <select
             value={seriesFilter}
             onChange={(e) => setSeriesFilter(e.target.value)}
-            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px]"
+            aria-label="Filter by series"
+            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <option value="">All Series</option>
             {seriesList.map((s: any) => (
@@ -74,8 +104,8 @@ export function ContentListView({
           </select>
           <button
             onClick={onManageSeries}
-            className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors"
-            title="Manage Series"
+            className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
+            aria-label="Manage series"
           >
             <Settings2 size={14} />
           </button>
@@ -85,7 +115,8 @@ export function ContentListView({
           <select
             value={collectionFilter}
             onChange={(e) => setCollectionFilter(e.target.value)}
-            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px]"
+            aria-label="Filter by collection"
+            className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <option value="">All Collections</option>
             {collectionsList.map((c: any) => (
@@ -94,8 +125,8 @@ export function ContentListView({
           </select>
           <button
             onClick={onManageCollections}
-            className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors"
-            title="Manage Collections"
+            className="p-1.5 text-sf-text-muted hover:text-sf-text-primary transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
+            aria-label="Manage collections"
           >
             <Settings2 size={14} />
           </button>
@@ -103,7 +134,7 @@ export function ContentListView({
         {(seriesFilter || collectionFilter) && (
           <button
             onClick={() => { setSeriesFilter(""); setCollectionFilter(""); }}
-            className="text-xs text-sf-text-muted hover:text-sf-accent transition-colors"
+            className="text-xs text-sf-text-muted hover:text-sf-accent transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             Clear filters
           </button>
@@ -114,8 +145,16 @@ export function ContentListView({
         {contentList.map((post: any) => (
           <div
             key={post.id}
+            role="button"
+            tabIndex={0}
             onClick={() => onNavigateToPost(post.id)}
-            className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onNavigateToPost(post.id);
+              }
+            }}
+            className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sf-bg-primary"
           >
             <div className="flex items-center gap-2 mb-2">
               <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status] || "")}>
@@ -143,7 +182,7 @@ export function ContentListView({
                 <ExportDropdown markdown={post.markdown || ""} title={post.title || ""} />
               </div>
             </div>
-            <h3 className="font-semibold text-sf-text-primary mb-1">{post.title}</h3>
+            <h2 className="font-semibold text-sf-text-primary mb-1 text-base">{post.title}</h2>
             <p className="text-sm text-sf-text-secondary line-clamp-2">
               {post.markdown?.slice(0, 150)}...
             </p>
@@ -161,13 +200,13 @@ export function ContentListView({
             <div className="flex items-center justify-center gap-3">
               <Link
                 href={`/${workspace}/insights`}
-                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors"
+                className="flex items-center gap-2 bg-sf-accent text-sf-bg-primary px-4 py-2 rounded-sf font-medium text-sm hover:bg-sf-accent-dim transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sf-bg-primary"
               >
                 View Insights →
               </Link>
               <Link
                 href={`/${workspace}/content/new`}
-                className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors"
+                className="text-sm text-sf-accent hover:text-sf-accent-dim transition-colors rounded-sf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
               >
                 Create manually →
               </Link>

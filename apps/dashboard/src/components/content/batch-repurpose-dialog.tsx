@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Wand2, Check, AlertCircle } from "lucide-react";
 import { showToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface BatchRepurposeDialogProps {
   postId: string;
@@ -69,6 +70,8 @@ export function BatchRepurposeDialog({
   const [isComplete, setIsComplete] = useState(false);
 
   const availableFormats = getAvailableFormats(contentType);
+
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({ enabled: isOpen, onEscape: isProcessing ? undefined : onClose });
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -181,7 +184,7 @@ export function BatchRepurposeDialog({
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-md bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
+      <div ref={focusTrapRef} role="dialog" aria-modal="true" aria-label="Batch repurpose content" className="relative z-10 w-full max-w-md bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold font-display text-sf-text-primary">

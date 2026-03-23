@@ -138,7 +138,7 @@ export default function ContentPage() {
         </div>
         <button
           onClick={() => setShowExport(!showExport)}
-          className="flex items-center justify-center gap-2 bg-sf-bg-secondary border border-sf-border text-sf-text-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors w-full sm:w-auto min-h-[44px]"
+          className="flex items-center justify-center gap-2 bg-sf-bg-secondary border border-sf-border text-sf-text-primary px-4 py-2.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors w-full sm:w-auto min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
         >
           <Download size={16} /> Export
         </button>
@@ -176,13 +176,43 @@ export default function ContentPage() {
       />
 
       {/* View tabs */}
-      <div className="flex gap-1 mb-6 bg-sf-bg-tertiary rounded-sf p-0.5 w-fit">
+      <div
+        className="flex gap-1 mb-6 bg-sf-bg-tertiary rounded-sf p-0.5 w-fit"
+        role="tablist"
+        aria-label="Content view"
+        onKeyDown={(e) => {
+          const currentIndex = VIEW_TABS.findIndex((t) => t.value === activeTab);
+          if (currentIndex === -1) return;
+          let nextIndex = -1;
+          if (e.key === "ArrowRight") {
+            nextIndex = (currentIndex + 1) % VIEW_TABS.length;
+          } else if (e.key === "ArrowLeft") {
+            nextIndex = (currentIndex - 1 + VIEW_TABS.length) % VIEW_TABS.length;
+          } else if (e.key === "Home") {
+            nextIndex = 0;
+          } else if (e.key === "End") {
+            nextIndex = VIEW_TABS.length - 1;
+          }
+          if (nextIndex !== -1) {
+            e.preventDefault();
+            setActiveTab(VIEW_TABS[nextIndex].value);
+            const tablist = e.currentTarget;
+            const buttons = tablist.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+            buttons[nextIndex]?.focus();
+          }
+        }}
+      >
         {VIEW_TABS.map((tab) => (
           <button
             key={tab.value}
+            role="tab"
+            aria-selected={activeTab === tab.value}
+            aria-controls={`tabpanel-view-${tab.value}`}
+            id={`tab-view-${tab.value}`}
+            tabIndex={activeTab === tab.value ? 0 : -1}
             onClick={() => setActiveTab(tab.value)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sf transition-colors",
+              "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sf transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent",
               activeTab === tab.value
                 ? "bg-sf-bg-secondary text-sf-text-primary shadow-sm"
                 : "text-sf-text-secondary hover:text-sf-text-primary"
@@ -196,19 +226,24 @@ export default function ContentPage() {
 
       {/* Calendar view */}
       {activeTab === "calendar" && (
-        <CalendarView workspace={workspace} />
+        <div role="tabpanel" id="tabpanel-view-calendar" aria-labelledby="tab-view-calendar">
+          <CalendarView workspace={workspace} />
+        </div>
       )}
 
       {/* Pipeline view */}
       {activeTab === "pipeline" && (
-        <PipelineView
-          workspace={workspace}
-          onNavigateToPost={(postId) => router.push(`/${workspace}/content/${postId}`)}
-        />
+        <div role="tabpanel" id="tabpanel-view-pipeline" aria-labelledby="tab-view-pipeline">
+          <PipelineView
+            workspace={workspace}
+            onNavigateToPost={(postId) => router.push(`/${workspace}/content/${postId}`)}
+          />
+        </div>
       )}
 
       {/* List view */}
       {activeTab === "list" && (
+        <div role="tabpanel" id="tabpanel-view-list" aria-labelledby="tab-view-list">
         <ContentListView
           workspace={workspace}
           contentList={contentList}
@@ -225,6 +260,7 @@ export default function ContentPage() {
           isLoading={content.isLoading}
           onNavigateToPost={(postId) => router.push(`/${workspace}/content/${postId}`)}
         />
+        </div>
       )}
 
       {/* Loading state while determining default view */}

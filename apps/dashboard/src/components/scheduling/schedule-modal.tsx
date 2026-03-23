@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Calendar, X, Clock, RefreshCw } from "lucide-react";
 import { useSchedulePost, useReschedulePost } from "@/hooks/use-schedule";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 // Convert a date/time in the selected timezone to a UTC ISO string
 function toUTCFromTimezone(date: string, time: string, tz: string): string {
@@ -84,6 +85,7 @@ export function ScheduleModal({
   onClose,
   existingSchedule,
 }: ScheduleModalProps) {
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({ enabled: isOpen, onEscape: onClose });
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [timezone, setTimezone] = useState("UTC");
@@ -180,7 +182,7 @@ export function ScheduleModal({
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-md bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
+      <div ref={focusTrapRef} role="dialog" aria-modal="true" aria-label={existingSchedule ? "Reschedule post" : "Schedule post"} className="relative z-10 w-full max-w-md bg-sf-bg-secondary border border-sf-border rounded-sf-lg shadow-xl p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold font-display text-sf-text-primary">

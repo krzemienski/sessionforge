@@ -82,12 +82,18 @@ export function WorkspaceShell({
 
   return (
     <div className="flex h-screen bg-sf-bg-primary overflow-hidden">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-sf-accent focus:text-white focus:rounded-sf focus:text-sm focus:font-medium focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-sf-accent focus:ring-offset-2"
+      >
+        Skip to main content
+      </a>
       <AppSidebar
         workspace={workspace}
         userName={userName}
         onOpenSearch={() => setIsSearchOpen(true)}
       />
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6">
+      <main id="main-content" tabIndex={-1} aria-label="Main content" className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6 focus:outline-none">
         <div className="flex justify-end mb-2">
           <SystemHealthIndicator />
         </div>

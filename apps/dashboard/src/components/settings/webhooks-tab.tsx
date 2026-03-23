@@ -155,10 +155,10 @@ export function WebhooksTab({ workspace }: WebhooksTabProps) {
                     <span className="text-sm font-code text-sf-text-primary truncate">{wh.url}</span>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => toggleWebhook.mutate({ id: wh.id, enabled: !wh.enabled })} className="p-2 text-sf-text-muted hover:text-sf-text-primary transition-colors" title={wh.enabled ? "Disable" : "Enable"}>
+                    <button onClick={() => toggleWebhook.mutate({ id: wh.id, enabled: !wh.enabled })} className="p-2 text-sf-text-muted hover:text-sf-text-primary transition-colors" title={wh.enabled ? "Disable" : "Enable"} aria-label={wh.enabled ? "Disable webhook" : "Enable webhook"}>
                       {wh.enabled ? <ToggleRight size={18} className="text-sf-success" /> : <ToggleLeft size={18} />}
                     </button>
-                    <button onClick={() => deleteWebhook.mutate(wh.id)} disabled={deleteWebhook.isPending} className="p-2 text-sf-text-muted hover:text-sf-error transition-colors">
+                    <button onClick={() => deleteWebhook.mutate(wh.id)} disabled={deleteWebhook.isPending} className="p-2 text-sf-text-muted hover:text-sf-error transition-colors" aria-label="Delete webhook">
                       <Trash2 size={14} />
                     </button>
                   </div>
