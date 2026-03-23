@@ -49,6 +49,7 @@ export const contentTypeEnum = pgEnum("content_type", [
   "changelog",
   "newsletter",
   "custom",
+  "doc_page",
 ]);
 
 export const insightCategoryEnum = pgEnum("insight_category", [

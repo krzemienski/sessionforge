@@ -48,6 +48,7 @@ const DIRECTORY_MAP: Record<ContentType, string> = {
   twitter_thread: "social",
   linkedin_post: "social",
   changelog: "changelog",
+  doc_page: "docs",
 };
 
 export function slugifyTitle(title: string): string {

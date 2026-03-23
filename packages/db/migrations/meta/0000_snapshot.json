@@ -1,5 +1,5 @@
 {
-  "id": "46ab9800-97ca-4985-8993-067b4720bc58",
+  "id": "2cce5558-7d56-4d67-a9e0-d98e8a1a5e18",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -10205,7 +10205,8 @@
         "devto_post",
         "changelog",
         "newsletter",
-        "custom"
+        "custom",
+        "doc_page"
       ]
     },
     "public.edit_type": {

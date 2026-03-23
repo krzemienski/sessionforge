@@ -15,6 +15,7 @@ export type ContentType =
   | "devto_post"
   | "changelog"
   | "newsletter"
+  | "doc_page"
   | "custom";
 
 /**

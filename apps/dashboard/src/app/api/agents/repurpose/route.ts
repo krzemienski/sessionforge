@@ -18,6 +18,8 @@ const VALID_TARGET_FORMATS = [
   "changelog",
   "tldr",
   "blog_post",
+  "newsletter",
+  "doc_page",
 ] as const;
 
 type TargetFormat = (typeof VALID_TARGET_FORMATS)[number];
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
 
     if (!VALID_TARGET_FORMATS.includes(targetFormat as TargetFormat)) {
       throw new AppError(
-        "targetFormat must be one of: twitter_thread, linkedin_post, changelog, tldr, blog_post",
+        "targetFormat must be one of: twitter_thread, linkedin_post, changelog, tldr, blog_post, newsletter, doc_page",
         ERROR_CODES.VALIDATION_ERROR
       );
     }

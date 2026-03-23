@@ -7,7 +7,7 @@ CREATE TYPE "public"."backup_bundle_status" AS ENUM('pending', 'processing', 'co
 CREATE TYPE "public"."batch_job_status" AS ENUM('pending', 'processing', 'completed', 'failed', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."batch_job_type" AS ENUM('extract_insights', 'generate_content', 'batch_archive', 'batch_delete', 'backup_bundle', 'restore_bundle');--> statement-breakpoint
 CREATE TYPE "public"."content_asset_type" AS ENUM('diagram', 'hero_image', 'section_image', 'evidence_diagram', 'timeline_viz');--> statement-breakpoint
-CREATE TYPE "public"."content_type" AS ENUM('blog_post', 'twitter_thread', 'linkedin_post', 'devto_post', 'changelog', 'newsletter', 'custom');--> statement-breakpoint
+CREATE TYPE "public"."content_type" AS ENUM('blog_post', 'twitter_thread', 'linkedin_post', 'devto_post', 'changelog', 'newsletter', 'custom', 'doc_page');--> statement-breakpoint
 CREATE TYPE "public"."edit_type" AS ENUM('user_edit', 'ai_generated', 'auto_save', 'restore');--> statement-breakpoint
 CREATE TYPE "public"."experiment_kpi" AS ENUM('views', 'likes', 'comments', 'shares', 'engagement_rate');--> statement-breakpoint
 CREATE TYPE "public"."experiment_status" AS ENUM('draft', 'running', 'paused', 'completed', 'cancelled');--> statement-breakpoint
