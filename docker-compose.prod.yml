@@ -1,3 +1,15 @@
+# =============================================================================
+# Cloud / managed-infrastructure deployment
+# =============================================================================
+# Use this compose file when deploying to a host where Postgres and Redis
+# are provided externally (e.g., Neon, Upstash, AWS RDS).
+#
+# All environment variables are pulled from the host or a .env file.
+# No database or Redis containers are included.
+#
+# For local development with bundled Postgres: use docker-compose.yml
+# For self-hosted with bundled Postgres + Redis: use docker-compose.self-hosted.yml
+# =============================================================================
 services:
   app:
     build: .
