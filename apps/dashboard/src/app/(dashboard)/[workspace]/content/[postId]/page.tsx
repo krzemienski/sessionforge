@@ -60,6 +60,7 @@ import type { RiskFlag, VerificationSummary } from "@/lib/verification/types";
 import { useExperiments } from "@/hooks/use-experiments";
 import { useApprovalSettings, useReviewStatus, useSubmitForReview, useWorkspaceMembers } from "@/hooks/use-approval";
 import { useSession } from "@/lib/auth-client";
+import { ABComparisonModal, CompareVoiceButton } from "@/components/voice/ab-comparison-modal";
 
 const MarkdownEditor = dynamic(
   () => import("@/components/editor/markdown-editor").then((m) => m.MarkdownEditor),
@@ -154,6 +155,7 @@ export default function ContentEditorPage() {
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isPublishSheetOpen, setIsPublishSheetOpen] = useState(false);
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
+  const [isVoiceCompareOpen, setIsVoiceCompareOpen] = useState(false);
   const [seoRefreshKey, setSeoRefreshKey] = useState(0);
   const [isPublishGateOpen, setIsPublishGateOpen] = useState(false);
   const [approvalAlert, setApprovalAlert] = useState<string | null>(null);
@@ -498,6 +500,7 @@ export default function ContentEditorPage() {
               contentType={post.data?.contentType || "blog_post"}
               workspaceSlug={workspace}
             />
+            <CompareVoiceButton onClick={() => setIsVoiceCompareOpen(true)} />
             <button
               onClick={() => setShowHistory((v) => !v)}
               className={cn(
@@ -1079,6 +1082,13 @@ export default function ContentEditorPage() {
         contentType={post.data?.contentType as any || "blog_post"}
         isOpen={isTemplateDialogOpen}
         onClose={() => setIsTemplateDialogOpen(false)}
+      />
+
+      <ABComparisonModal
+        isOpen={isVoiceCompareOpen}
+        onClose={() => setIsVoiceCompareOpen(false)}
+        workspaceSlug={workspace}
+        contentType={post.data?.contentType || "blog_post"}
       />
 
       {/* Revision History Modal */}

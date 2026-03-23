@@ -1039,6 +1039,13 @@ CREATE TABLE "writing_style_profiles" (
 	"example_excerpts" jsonb,
 	"generation_status" "style_profile_generation_status" DEFAULT 'pending',
 	"generated_at" timestamp,
+	"custom_instructions" text,
+	"vocabulary_fingerprint" jsonb,
+	"anti_ai_patterns" jsonb,
+	"calibrated_from_samples" boolean DEFAULT false,
+	"formality_override" real,
+	"humor_override" real,
+	"technical_depth_override" real,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now()
 );

@@ -76,18 +76,18 @@ export async function PUT(
     const body = await req.json().catch(() => ({}));
 
     const {
-      formality,
-      technicalDepth,
-      humor,
+      formalityOverride,
+      humorOverride,
+      technicalDepthOverride,
       headingStyle,
       codeStyle,
       vocabularyPatterns,
     } = body as Record<string, unknown>;
 
     const updateValues: Record<string, unknown> = {};
-    if (formality !== undefined) updateValues.formality = formality;
-    if (technicalDepth !== undefined) updateValues.technicalDepth = technicalDepth;
-    if (humor !== undefined) updateValues.humor = humor;
+    if (formalityOverride !== undefined) updateValues.formalityOverride = formalityOverride;
+    if (humorOverride !== undefined) updateValues.humorOverride = humorOverride;
+    if (technicalDepthOverride !== undefined) updateValues.technicalDepthOverride = technicalDepthOverride;
     if (headingStyle !== undefined) updateValues.headingStyle = headingStyle;
     if (codeStyle !== undefined) updateValues.codeStyle = codeStyle;
     if (vocabularyPatterns !== undefined) updateValues.vocabularyPatterns = vocabularyPatterns;

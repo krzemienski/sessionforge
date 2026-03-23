@@ -8,6 +8,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TemplateSelector } from "@/components/templates/template-selector";
 import type { ContentTemplate } from "@/types/templates";
+import { ABComparisonModal, CompareVoiceButton } from "@/components/voice/ab-comparison-modal";
 
 const DIMS = [
   { key: "noveltyScore", label: "Novel Problem-Solving", weight: "3x" },
@@ -46,6 +47,7 @@ export default function InsightDetailPage() {
   const insight = useInsight(insightId);
   const ins = insight.data;
   const [selectedTemplate, setSelectedTemplate] = useState<ContentTemplate | null>(null);
+  const [isVoiceCompareOpen, setIsVoiceCompareOpen] = useState(false);
 
   const [selectedFormats, setSelectedFormats] = useState<Set<FormatKey>>(
     new Set<FormatKey>(["blog", "twitter", "linkedin", "newsletter", "changelog"])
@@ -166,7 +168,10 @@ export default function InsightDetailPage() {
 
       {/* Generate All Formats section */}
       <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4">
-        <h2 className="text-lg font-semibold font-display mb-1">Generate Content</h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold font-display">Generate Content</h2>
+          <CompareVoiceButton onClick={() => setIsVoiceCompareOpen(true)} />
+        </div>
         <p className="text-sm text-sf-text-secondary mb-4">
           Select formats to generate simultaneously from this insight.
         </p>
@@ -226,6 +231,14 @@ export default function InsightDetailPage() {
           {isAnyGenerating ? "Generating…" : "Generate Selected"}
         </button>
       </div>
+
+      <ABComparisonModal
+        isOpen={isVoiceCompareOpen}
+        onClose={() => setIsVoiceCompareOpen(false)}
+        workspaceSlug={workspace}
+        insightId={insightId}
+        contentType="blog_post"
+      />
     </div>
   );
 }

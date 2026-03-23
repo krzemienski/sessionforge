@@ -1,5 +1,5 @@
 {
-  "id": "10d1ea2d-7706-4656-b2d0-0877d46e515e",
+  "id": "46ab9800-97ca-4985-8993-067b4720bc58",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -10001,6 +10001,49 @@
         "generated_at": {
           "name": "generated_at",
           "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "custom_instructions": {
+          "name": "custom_instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "vocabulary_fingerprint": {
+          "name": "vocabulary_fingerprint",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anti_ai_patterns": {
+          "name": "anti_ai_patterns",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "calibrated_from_samples": {
+          "name": "calibrated_from_samples",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "formality_override": {
+          "name": "formality_override",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "humor_override": {
+          "name": "humor_override",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "technical_depth_override": {
+          "name": "technical_depth_override",
+          "type": "real",
           "primaryKey": false,
           "notNull": false
         },

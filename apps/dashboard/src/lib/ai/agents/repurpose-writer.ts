@@ -9,6 +9,7 @@ import { LINKEDIN_PROMPT } from "../prompts/social/linkedin-post";
 import { CHANGELOG_FROM_POST_PROMPT } from "../prompts/repurpose/changelog-from-post";
 import { TLDR_PROMPT } from "../prompts/repurpose/tldr";
 import { BLOG_FROM_SOCIAL_PROMPT } from "../prompts/repurpose/blog-from-social";
+import { injectStyleProfile } from "@/lib/style/profile-injector";
 import { createAgentMcpServer } from "../mcp-server-factory";
 import { runAgentStreaming } from "../agent-runner";
 
@@ -48,8 +49,8 @@ interface RepurposeWriterInput {
   customInstructions?: string;
 }
 
-export function streamRepurposeWriter(input: RepurposeWriterInput): Response {
-  const systemPrompt = PROMPTS[input.targetFormat];
+export async function streamRepurposeWriter(input: RepurposeWriterInput): Promise<Response> {
+  const systemPrompt = await injectStyleProfile(PROMPTS[input.targetFormat], input.workspaceId);
   const formatLabel = FORMAT_LABELS[input.targetFormat];
   const contentType = CONTENT_TYPES[input.targetFormat];
 

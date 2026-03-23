@@ -12,11 +12,13 @@ import { BackupRestoreTab } from "@/components/settings/backup-restore-tab";
 import { MembersTab } from "@/components/settings/members-tab";
 import { ApprovalSettingsTab } from "@/components/settings/approval-settings-tab";
 import { PortfolioSettingsForm } from "@/components/settings/portfolio-settings-form";
+import { VoiceProfileTab } from "@/components/settings/voice-profile-tab";
 
 const TABS = [
   { id: "general", label: "General" },
   { id: "members", label: "Members" },
   { id: "style", label: "Style" },
+  { id: "voice-profile", label: "Voice Profile" },
   { id: "api-keys", label: "API Keys" },
   { id: "integrations", label: "Integrations" },
   { id: "webhooks", label: "Webhooks" },
@@ -103,6 +105,7 @@ export default function SettingsPage() {
       {activeTab === "general" && <div role="tabpanel" id="tabpanel-settings-general" aria-labelledby="tab-settings-general"><GeneralTab workspace={workspace} /></div>}
       {activeTab === "members" && <div role="tabpanel" id="tabpanel-settings-members" aria-labelledby="tab-settings-members"><MembersTab workspace={workspace} /></div>}
       {activeTab === "style" && <div role="tabpanel" id="tabpanel-settings-style" aria-labelledby="tab-settings-style"><StyleTab workspace={workspace} /></div>}
+      {activeTab === "voice-profile" && <div role="tabpanel" id="tabpanel-settings-voice-profile" aria-labelledby="tab-settings-voice-profile"><VoiceProfileTab workspace={workspace} /></div>}
       {activeTab === "api-keys" && <div role="tabpanel" id="tabpanel-settings-api-keys" aria-labelledby="tab-settings-api-keys"><ApiKeysTab workspace={workspace} /></div>}
       {activeTab === "integrations" && <div role="tabpanel" id="tabpanel-settings-integrations" aria-labelledby="tab-settings-integrations"><IntegrationsTab workspace={workspace} /></div>}
       {activeTab === "webhooks" && <div role="tabpanel" id="tabpanel-settings-webhooks" aria-labelledby="tab-settings-webhooks"><WebhooksTab workspace={workspace} /></div>}
