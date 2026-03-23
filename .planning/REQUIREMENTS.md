@@ -75,9 +75,9 @@ Deferred to post-alpha. Tracked but not in current roadmap.
 
 ### Additional Worktree Features
 
-- **FEAT-01**: A/B headline experimentation (spec 031) — merge if clean, defer if conflicts
-- **FEAT-02**: Compliance billing trust center (spec 032) — merge if clean, defer if conflicts
-- **FEAT-03**: Voice calibration engine (spec 034) — merge if clean, defer if conflicts
+- **FEAT-01**: A/B headline experimentation (spec 031) -- merge if clean, defer if conflicts
+- **FEAT-02**: Compliance billing trust center (spec 032) -- merge if clean, defer if conflicts
+- **FEAT-03**: Voice calibration engine (spec 034) -- merge if clean, defer if conflicts
 
 ## Out of Scope
 
@@ -99,49 +99,49 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUDIT-01 | — | Pending |
-| AUDIT-02 | — | Pending |
-| AUDIT-03 | — | Pending |
-| AUDIT-04 | — | Pending |
-| CONV-01 | — | Pending |
-| CONV-02 | — | Pending |
-| CONV-03 | — | Pending |
-| CONV-04 | — | Pending |
-| CONV-05 | — | Pending |
-| CONV-06 | — | Pending |
-| DOCK-01 | — | Pending |
-| DOCK-02 | — | Pending |
-| DOCK-03 | — | Pending |
-| DOCK-04 | — | Pending |
-| DOCK-05 | — | Pending |
-| DOCK-06 | — | Pending |
-| DOCK-07 | — | Pending |
-| DEPL-01 | — | Pending |
-| DEPL-02 | — | Pending |
-| DEPL-03 | — | Pending |
-| DEPL-04 | — | Pending |
-| DEPL-05 | — | Pending |
-| DEPL-06 | — | Pending |
-| DEPL-07 | — | Pending |
-| DOCS-01 | — | Pending |
-| DOCS-02 | — | Pending |
-| DOCS-03 | — | Pending |
-| DOCS-04 | — | Pending |
-| DOCS-05 | — | Pending |
-| DOCS-06 | — | Pending |
-| FVAL-01 | — | Pending |
-| FVAL-02 | — | Pending |
-| FVAL-03 | — | Pending |
-| FVAL-04 | — | Pending |
-| FVAL-05 | — | Pending |
-| FVAL-06 | — | Pending |
-| FVAL-07 | — | Pending |
+| AUDIT-01 | Phase 1 | Pending |
+| AUDIT-02 | Phase 1 | Pending |
+| AUDIT-03 | Phase 1 | Pending |
+| AUDIT-04 | Phase 1 | Pending |
+| CONV-01 | Phase 1 | Pending |
+| CONV-02 | Phase 1 | Pending |
+| CONV-03 | Phase 1 | Pending |
+| CONV-04 | Phase 1 | Pending |
+| CONV-05 | Phase 1 | Pending |
+| CONV-06 | Phase 1 | Pending |
+| DOCK-01 | Phase 2 | Pending |
+| DOCK-02 | Phase 2 | Pending |
+| DOCK-03 | Phase 2 | Pending |
+| DOCK-04 | Phase 2 | Pending |
+| DOCK-05 | Phase 2 | Pending |
+| DOCK-06 | Phase 2 | Pending |
+| DOCK-07 | Phase 2 | Pending |
+| DEPL-01 | Phase 3 | Pending |
+| DEPL-02 | Phase 3 | Pending |
+| DEPL-03 | Phase 3 | Pending |
+| DEPL-04 | Phase 3 | Pending |
+| DEPL-05 | Phase 3 | Pending |
+| DEPL-06 | Phase 3 | Pending |
+| DEPL-07 | Phase 3 | Pending |
+| DOCS-01 | Phase 4 | Pending |
+| DOCS-02 | Phase 4 | Pending |
+| DOCS-03 | Phase 4 | Pending |
+| DOCS-04 | Phase 4 | Pending |
+| DOCS-05 | Phase 4 | Pending |
+| DOCS-06 | Phase 4 | Pending |
+| FVAL-01 | Phase 5 | Pending |
+| FVAL-02 | Phase 5 | Pending |
+| FVAL-03 | Phase 5 | Pending |
+| FVAL-04 | Phase 5 | Pending |
+| FVAL-05 | Phase 5 | Pending |
+| FVAL-06 | Phase 5 | Pending |
+| FVAL-07 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 37 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 37
+- Mapped to phases: 37
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-22*
-*Last updated: 2026-03-22 after initial definition*
+*Last updated: 2026-03-22 after roadmap creation*
