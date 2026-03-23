@@ -2,12 +2,15 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSessions, useScanSessions } from "@/hooks/use-sessions";
 import { useInsights } from "@/hooks/use-insights";
 import { useContent } from "@/hooks/use-content";
 import { useActivity } from "@/hooks/use-activity";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { ActivityLog } from "@/components/dashboard/activity-log";
+import { cn } from "@/lib/utils";
 import {
   Zap,
   ScrollText,
@@ -18,6 +21,7 @@ import {
   PenTool,
   X,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 
 function StatCard({
@@ -60,11 +64,27 @@ function StatCard({
 
 export default function DashboardHome() {
   const { workspace } = useParams<{ workspace: string }>();
+  const queryClient = useQueryClient();
   const sessions = useSessions(workspace, { limit: 100 });
   const insights = useInsights(workspace, { limit: 100 });
   const content = useContent(workspace, { limit: 100 });
   const scan = useScanSessions(workspace);
   const activity = useActivity(workspace);
+
+  // Pull-to-refresh
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["sessions", workspace] }),
+      queryClient.invalidateQueries({ queryKey: ["insights", workspace] }),
+      queryClient.invalidateQueries({ queryKey: ["content", workspace] }),
+      queryClient.invalidateQueries({ queryKey: ["activity", workspace] }),
+    ]);
+  }, [queryClient, workspace]);
+  const { pullDistance, isRefreshing, isPulling } = usePullToRefresh(
+    scrollRef,
+    handleRefresh
+  );
 
   const sessionList = sessions.data?.sessions ?? [];
   const insightList = insights.data?.insights ?? [];
@@ -87,7 +107,26 @@ export default function DashboardHome() {
   };
 
   return (
-    <div>
+    <div ref={scrollRef} className="relative">
+      {/* Pull-to-refresh indicator */}
+      {(isPulling || isRefreshing) && (
+        <div
+          className="flex items-center justify-center gap-2 text-sm text-sf-text-secondary overflow-hidden transition-all duration-200"
+          style={{ height: isRefreshing ? 48 : pullDistance * 0.6 }}
+        >
+          <Loader2
+            size={16}
+            className={cn(
+              "text-sf-accent",
+              isRefreshing && "animate-spin"
+            )}
+          />
+          <span className="text-xs font-medium">
+            {isRefreshing ? "Refreshing…" : "Pull to refresh"}
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold font-display">Dashboard</h1>

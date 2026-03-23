@@ -88,7 +88,7 @@ function PlatformRow({
           {PLATFORM_LABELS[platform] ?? platform}
         </span>
       </div>
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
         {[
           { label: "Impressions", value: metrics.impressions, icon: <Eye size={14} /> },
           { label: "Likes", value: metrics.likes, icon: <Heart size={14} /> },
@@ -133,15 +133,15 @@ export default function AnalyticsPage() {
     <div>
       <h1 className="text-2xl font-bold font-display mb-4">Analytics</h1>
       <AnalyticsTabs />
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h2 className="text-lg font-semibold font-display text-sf-text-secondary">Social Analytics</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf.value}
               onClick={() => setTimeframe(tf.value)}
               className={cn(
-                "px-3 py-1.5 rounded-sf text-sm font-medium transition-colors",
+                "px-3 py-1.5 rounded-sf text-sm font-medium transition-colors whitespace-nowrap flex-1 sm:flex-none min-h-[44px] sm:min-h-0",
                 timeframe === tf.value
                   ? "bg-sf-accent text-white"
                   : "bg-sf-bg-secondary border border-sf-border text-sf-text-secondary hover:border-sf-border-focus"

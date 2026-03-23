@@ -196,6 +196,85 @@ export function TrendChart({ posts, timeframe, className }: TrendChartProps) {
 
   const handleMouseLeave = useCallback(() => setTooltip(null), []);
 
+  // Shared logic to compute tooltip from a client x-coordinate
+  const computeTooltipFromClientX = useCallback(
+    (clientX: number) => {
+      const svg = svgRef.current;
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const touchX = ((clientX - rect.left) / rect.width) * SVG_W;
+      const usableW = SVG_W - PAD_X * 2;
+      const idx = Math.round(
+        ((touchX - PAD_X) / usableW) * (buckets.length - 1)
+      );
+      const clampedIdx = Math.max(0, Math.min(buckets.length - 1, idx));
+      const bucket = buckets[clampedIdx];
+      const val = bucket[activeMetric];
+      const safeMax = maxVal === 0 ? 1 : maxVal;
+      const x = PAD_X + (clampedIdx / (buckets.length - 1)) * usableW;
+      const y = PAD_Y + (SVG_H - PAD_Y * 2) * (1 - val / safeMax);
+      setTooltip({ x, y, bucket, metric: activeMetric });
+    },
+    [buckets, activeMetric, maxVal]
+  );
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent<SVGSVGElement>) => {
+      if (e.touches.length === 1) {
+        e.preventDefault();
+        computeTooltipFromClientX(e.touches[0].clientX);
+      }
+    },
+    [computeTooltipFromClientX]
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<SVGSVGElement>) => {
+      if (e.touches.length === 1) {
+        e.preventDefault();
+        computeTooltipFromClientX(e.touches[0].clientX);
+      }
+    },
+    [computeTooltipFromClientX]
+  );
+
+  const handleTouchEnd = useCallback(() => setTooltip(null), []);
+
+  // Pinch-to-zoom state
+  const [chartScale, setChartScale] = useState(1);
+  const pinchStartDist = useRef<number | null>(null);
+  const pinchStartScale = useRef(1);
+
+  const handleChartTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        pinchStartDist.current = Math.hypot(dx, dy);
+        pinchStartScale.current = chartScale;
+      }
+    },
+    [chartScale]
+  );
+
+  const handleChartTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (e.touches.length === 2 && pinchStartDist.current !== null) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const scale = pinchStartScale.current * (dist / pinchStartDist.current);
+        setChartScale(Math.min(Math.max(scale, 1), 3));
+      }
+    },
+    []
+  );
+
+  const handleChartTouchEnd = useCallback(() => {
+    pinchStartDist.current = null;
+  }, []);
+
   const isEmpty = maxVal === 0;
 
   return (
@@ -205,11 +284,11 @@ export function TrendChart({ posts, timeframe, className }: TrendChartProps) {
         className
       )}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
         <h3 className="font-semibold text-sf-text-primary font-display text-sm">
           Engagement Trend
         </h3>
-        <div className="flex items-center gap-1 flex-wrap justify-end">
+        <div className="flex items-center gap-1 flex-wrap justify-start sm:justify-end">
           {METRICS.map((m) => (
             <button
               key={m.key}
@@ -228,13 +307,32 @@ export function TrendChart({ posts, timeframe, className }: TrendChartProps) {
         </div>
       </div>
 
-      <div className="relative w-full" style={{ aspectRatio: `${SVG_W}/${SVG_H + 24}` }}>
+      <div
+        className="relative w-full overflow-hidden"
+        style={{
+          aspectRatio: `${SVG_W}/${SVG_H + 24}`,
+          touchAction: chartScale > 1 ? "none" : "pan-y",
+        }}
+        onTouchStart={handleChartTouchStart}
+        onTouchMove={handleChartTouchMove}
+        onTouchEnd={handleChartTouchEnd}
+      >
+        <div
+          style={{
+            transform: `scale(${chartScale})`,
+            transformOrigin: "center center",
+            transition: pinchStartDist.current !== null ? "none" : "transform 0.2s ease-out",
+          }}
+        >
         <svg
           ref={svgRef}
           viewBox={`0 0 ${SVG_W} ${SVG_H + 24}`}
           className="w-full h-full"
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
           <defs>
             <linearGradient id={`area-grad-${activeMetric}`} x1="0" y1="0" x2="0" y2="1">
@@ -364,6 +462,7 @@ export function TrendChart({ posts, timeframe, className }: TrendChartProps) {
             </>
           )}
         </svg>
+        </div>
 
         {/* Tooltip box */}
         {tooltip && !isEmpty && (

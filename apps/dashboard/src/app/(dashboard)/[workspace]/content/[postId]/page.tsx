@@ -6,7 +6,8 @@ import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useGhostIntegration, useGhostPublication } from "@/hooks/use-ghost";
 import { useMediumIntegration, useMediumPublication } from "@/hooks/use-medium";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X, ShieldCheck, MoreHorizontal, Search, BookOpen, Quote, FileText, Image, GitBranch } from "lucide-react";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import dynamic from "next/dynamic";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import type { Layout } from "react-resizable-panels";
@@ -142,6 +143,8 @@ export default function ContentEditorPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [isPublishSheetOpen, setIsPublishSheetOpen] = useState(false);
+  const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false);
   const [seoRefreshKey, setSeoRefreshKey] = useState(0);
   const [isPublishGateOpen, setIsPublishGateOpen] = useState(false);
   const [approvalAlert, setApprovalAlert] = useState<string | null>(null);
@@ -259,7 +262,17 @@ export default function ContentEditorPage() {
       return;
     }
     setStatus('published');
-    update.mutate({ id: postId, title, markdown, status: 'published', versionType: "major", editType: "user_edit" });
+    update.mutate(
+      { id: postId, title, markdown, status: 'published', versionType: "major", editType: "user_edit" },
+      {
+        onSuccess: () => {
+          // Haptic feedback on successful publish
+          if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+            navigator.vibrate([50, 30, 50]);
+          }
+        },
+      }
+    );
     lastSavedMarkdownRef.current = markdown;
   }, [update, postId, title, markdown, riskFlags.data, isWorkflowEnabled, isApproved]);
 
@@ -362,75 +375,87 @@ export default function ContentEditorPage() {
           <ArrowLeft size={16} /> Content
         </button>
         <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-          <button
-            onClick={() => setIsTemplateDialogOpen(true)}
-            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors"
-          >
-            Create Template from Post
-          </button>
-          {isBlogPost && (
+          {/* Desktop-only: individual publish buttons */}
+          <div className="hidden md:contents">
             <button
-              onClick={() => setHashnodeModalOpen(true)}
-              className="flex items-center gap-2 border border-sf-border text-sf-text-secondary px-4 py-2 rounded-sf font-medium text-sm hover:text-sf-text-primary hover:border-sf-border-focus transition-colors"
+              onClick={() => setIsTemplateDialogOpen(true)}
+              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors"
             >
-              <Send size={15} />
-              Publish to Hashnode
+              Create Template from Post
             </button>
-          )}
-          {isDevtoConnected && (
+            {isBlogPost && (
+              <button
+                onClick={() => setHashnodeModalOpen(true)}
+                className="flex items-center gap-2 border border-sf-border text-sf-text-secondary px-4 py-2 rounded-sf font-medium text-sm hover:text-sf-text-primary hover:border-sf-border-focus transition-colors"
+              >
+                <Send size={15} />
+                Publish to Hashnode
+              </button>
+            )}
+            {isDevtoConnected && (
+              <button
+                onClick={() => setIsDevtoModalOpen(true)}
+                disabled={devtoPublication.isLoading}
+                className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+              >
+                {devtoPublication.isLoading ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <Send size={14} />
+                )}
+                {isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}
+              </button>
+            )}
+            {isGhostConnected && (
+              <button
+                onClick={() => setIsGhostModalOpen(true)}
+                disabled={ghostPublication.isLoading}
+                className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+              >
+                {ghostPublication.isLoading ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <Send size={14} />
+                )}
+                {isAlreadyPublishedOnGhost ? "Update on Ghost" : "Publish to Ghost"}
+              </button>
+            )}
             <button
-              onClick={() => setIsDevtoModalOpen(true)}
-              disabled={devtoPublication.isLoading}
-              className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-2 md:py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50 min-h-[44px] md:min-h-0"
-            >
-              {devtoPublication.isLoading ? (
-                <RefreshCw size={14} className="animate-spin" />
-              ) : (
-                <Send size={14} />
-              )}
-              <span className="hidden sm:inline">{isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}</span>
-              <span className="sm:hidden">Dev.to</span>
-            </button>
-          )}
-          {isGhostConnected && (
-            <button
-              onClick={() => setIsGhostModalOpen(true)}
-              disabled={ghostPublication.isLoading}
+              onClick={() => setIsMediumModalOpen(true)}
+              disabled={!isMediumConnected || mediumPublication.isLoading}
               className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
             >
-              {ghostPublication.isLoading ? (
+              {mediumPublication.isLoading ? (
                 <RefreshCw size={14} className="animate-spin" />
               ) : (
                 <Send size={14} />
               )}
-              {isAlreadyPublishedOnGhost ? "Update on Ghost" : "Publish to Ghost"}
+              {isAlreadyPublishedMedium ? "Update on Medium" : "Publish to Medium"}
             </button>
-          )}
+          </div>
+
+          {/* Mobile-only: collapsed Publish button */}
           <button
-            onClick={() => setIsMediumModalOpen(true)}
-            disabled={!isMediumConnected || mediumPublication.isLoading}
-            className="flex items-center gap-2 bg-sf-bg-tertiary border border-sf-border text-sf-text-primary px-3 py-1.5 rounded-sf font-medium text-sm hover:bg-sf-bg-hover transition-colors disabled:opacity-50"
+            onClick={() => setIsPublishSheetOpen(true)}
+            className="md:hidden flex items-center gap-2 border border-sf-border text-sf-text-secondary px-3 py-2 rounded-sf font-medium text-sm hover:text-sf-text-primary hover:border-sf-border-focus transition-colors min-h-[44px] active:scale-95"
           >
-            {mediumPublication.isLoading ? (
-              <RefreshCw size={14} className="animate-spin" />
-            ) : (
-              <Send size={14} />
-            )}
-            {isAlreadyPublishedMedium ? "Update on Medium" : "Publish to Medium"}
+            <Send size={14} />
+            Publish…
           </button>
 
-          {/* View mode toggle */}
-          <div className="flex items-center bg-sf-bg-tertiary border border-sf-border rounded-sf overflow-hidden">
+          {/* View mode toggle — always visible */}
+          <div className="flex items-center bg-sf-bg-tertiary border border-sf-border rounded-sf overflow-hidden min-h-[44px] md:min-h-0">
             {viewModeButtons.map(({ mode, icon, label }) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
                 title={label}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium transition-colors min-h-[44px] md:min-h-0",
                   viewMode === mode
                     ? "bg-sf-accent text-sf-bg-primary"
                     : "text-sf-text-secondary hover:text-sf-text-primary hover:bg-sf-bg-secondary"
-                }`}
+                )}
               >
                 {icon}
                 <span className="hidden sm:inline">{label}</span>
@@ -438,6 +463,7 @@ export default function ContentEditorPage() {
             ))}
           </div>
 
+          {/* Status dropdown — always visible */}
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -450,23 +476,39 @@ export default function ContentEditorPage() {
             <option value="published">Published</option>
             <option value="archived">Archived</option>
           </select>
-          <ExportDropdown markdown={markdown} title={title} />
-          <RepurposeButton
-            postId={postId}
-            contentType={post.data?.contentType || "blog_post"}
-            workspaceSlug={workspace}
-          />
+
+          {/* Desktop-only: secondary actions inline */}
+          <div className="hidden md:contents">
+            <ExportDropdown markdown={markdown} title={title} />
+            <RepurposeButton
+              postId={postId}
+              contentType={post.data?.contentType || "blog_post"}
+              workspaceSlug={workspace}
+            />
+            <button
+              onClick={() => setShowHistory((v) => !v)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-sf font-medium text-sm transition-colors",
+                showHistory
+                  ? "bg-sf-accent text-sf-bg-primary"
+                  : "bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary hover:text-sf-text-primary"
+              )}
+            >
+              <History size={16} />
+              History
+            </button>
+          </div>
+
+          {/* Mobile-only: overflow "..." button for secondary actions */}
           <button
-            onClick={() => setShowHistory((v) => !v)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-sf font-medium text-sm transition-colors ${
-              showHistory
-                ? "bg-sf-accent text-sf-bg-primary"
-                : "bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary hover:text-sf-text-primary"
-            }`}
+            onClick={() => setIsMoreSheetOpen(true)}
+            className="md:hidden flex items-center justify-center bg-sf-bg-tertiary border border-sf-border rounded-sf min-h-[44px] min-w-[44px] text-sf-text-secondary hover:text-sf-text-primary hover:bg-sf-bg-hover transition-colors active:scale-95"
+            aria-label="More actions"
           >
-            <History size={16} />
-            History
+            <MoreHorizontal size={20} />
           </button>
+
+          {/* Save button — always visible */}
           <button
             onClick={handleSave}
             disabled={update.isPending}
@@ -761,38 +803,109 @@ export default function ContentEditorPage() {
         onSuccess={handleHashnodeSuccess}
       />
 
-      {/* Mobile AI Chat Button */}
+      {/* Mobile Sidebar Button */}
       <button
         onClick={() => setIsMobileSidebarOpen(true)}
         className="lg:hidden fixed bottom-20 right-4 bg-sf-accent text-sf-bg-primary p-4 rounded-full shadow-lg hover:bg-sf-accent-dim transition-colors z-40"
-        aria-label="Open AI Chat"
+        aria-label="Open sidebar"
       >
         <MessageSquare size={24} />
       </button>
 
-      {/* Mobile Sidebar Modal */}
+      {/* Mobile Sidebar Modal — all tabs */}
       {isMobileSidebarOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex flex-col bg-sf-bg-primary">
           {/* Modal Header */}
           <div className="flex items-center justify-between p-4 border-b border-sf-border">
-            <h2 className="text-lg font-semibold text-sf-text-primary">AI Assistant</h2>
+            <h2 className="text-lg font-semibold text-sf-text-primary">Editor Sidebar</h2>
             <button
               onClick={() => setIsMobileSidebarOpen(false)}
               className="p-2 hover:bg-sf-bg-hover rounded-sf transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-              aria-label="Close AI Chat"
+              aria-label="Close sidebar"
             >
               <X size={20} />
             </button>
           </div>
 
-          {/* Modal Content */}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 bg-sf-bg-secondary border-b border-sf-border overflow-hidden flex flex-col">
-              <AIChatSidebar chat={editorChat} />
+          {/* Tab Navigation */}
+          <div className="flex overflow-x-auto border-b border-sf-border px-2 gap-1 scrollbar-none">
+            {([
+              { key: "chat" as const, label: "AI Chat", icon: <MessageSquare size={14} /> },
+              { key: "seo" as const, label: "SEO", icon: <Search size={14} /> },
+              { key: "evidence" as const, label: "Evidence", icon: <BookOpen size={14} /> },
+              { key: "citations" as const, label: "Citations", icon: <Quote size={14} /> },
+              { key: "supplementary" as const, label: "More", icon: <FileText size={14} /> },
+              { key: "media" as const, label: "Media", icon: <Image size={14} /> },
+              { key: "repository" as const, label: "Repo", icon: <GitBranch size={14} /> },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setSidebarTab(tab.key)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-3 text-xs font-medium whitespace-nowrap transition-colors border-b-2 min-h-[44px]",
+                  sidebarTab === tab.key
+                    ? "border-sf-accent text-sf-accent"
+                    : "border-transparent text-sf-text-secondary hover:text-sf-text-primary"
+                )}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className="flex-1 bg-sf-bg-secondary overflow-hidden flex flex-col min-h-0">
+              {sidebarTab === "chat" && (
+                <AIChatSidebar chat={editorChat} />
+              )}
+              {sidebarTab === "seo" && (
+                <SeoPanel
+                  postId={postId}
+                  markdown={markdown}
+                  title={title}
+                  refreshKey={seoRefreshKey}
+                />
+              )}
+              {sidebarTab === "evidence" && (
+                <EvidenceExplorer
+                  postId={postId}
+                  highlightedCitation={highlightedCitation}
+                />
+              )}
+              {sidebarTab === "citations" && (
+                <CitationToggle
+                  markdown={markdown}
+                  enabled={citationsEnabled}
+                  onToggle={setCitationsEnabled}
+                  density={citationDensity}
+                  onDensityChange={setCitationDensity}
+                />
+              )}
+              {sidebarTab === "supplementary" && (
+                <SupplementaryPanel
+                  postId={postId}
+                  workspace={workspace}
+                />
+              )}
+              {sidebarTab === "media" && (
+                <MediaPanel
+                  postId={postId}
+                  workspace={workspace}
+                />
+              )}
+              {sidebarTab === "repository" && (
+                <RepositoryPanel
+                  postId={postId}
+                  workspace={workspace}
+                />
+              )}
             </div>
 
             {/* Mobile Sidebar Footer with Source and Badge */}
-            <div className="p-4 space-y-3 overflow-y-auto max-h-[40vh]">
+            <div className="p-4 space-y-3 overflow-y-auto max-h-[30vh] border-t border-sf-border">
+              <RepurposeTracker postId={postId} />
               {post.data?.insightId && <SourceCard postId={postId} />}
               <AuthenticityBadge
                 postId={postId}
@@ -805,6 +918,98 @@ export default function ContentEditorPage() {
           </div>
         </div>
       )}
+
+      {/* Mobile Publish BottomSheet */}
+      <BottomSheet
+        isOpen={isPublishSheetOpen}
+        onClose={() => setIsPublishSheetOpen(false)}
+        title="Publish to…"
+        snapPoints={[0.4]}
+      >
+        <div className="space-y-1">
+          {isBlogPost && (
+            <button
+              onClick={() => { setIsPublishSheetOpen(false); setHashnodeModalOpen(true); }}
+              className="flex items-center gap-3 w-full px-3 py-3 rounded-sf text-sm text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors min-h-[44px]"
+            >
+              <Send size={18} />
+              Publish to Hashnode
+            </button>
+          )}
+          {isDevtoConnected && (
+            <button
+              onClick={() => { setIsPublishSheetOpen(false); setIsDevtoModalOpen(true); }}
+              disabled={devtoPublication.isLoading}
+              className="flex items-center gap-3 w-full px-3 py-3 rounded-sf text-sm text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors disabled:opacity-50 min-h-[44px]"
+            >
+              {devtoPublication.isLoading ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+              {isAlreadyPublished ? "Update on Dev.to" : "Publish to Dev.to"}
+            </button>
+          )}
+          {isGhostConnected && (
+            <button
+              onClick={() => { setIsPublishSheetOpen(false); setIsGhostModalOpen(true); }}
+              disabled={ghostPublication.isLoading}
+              className="flex items-center gap-3 w-full px-3 py-3 rounded-sf text-sm text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors disabled:opacity-50 min-h-[44px]"
+            >
+              {ghostPublication.isLoading ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+              {isAlreadyPublishedOnGhost ? "Update on Ghost" : "Publish to Ghost"}
+            </button>
+          )}
+          <button
+            onClick={() => { setIsPublishSheetOpen(false); setIsMediumModalOpen(true); }}
+            disabled={!isMediumConnected || mediumPublication.isLoading}
+            className="flex items-center gap-3 w-full px-3 py-3 rounded-sf text-sm text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors disabled:opacity-50 min-h-[44px]"
+          >
+            {mediumPublication.isLoading ? <RefreshCw size={18} className="animate-spin" /> : <Send size={18} />}
+            {isAlreadyPublishedMedium ? "Update on Medium" : "Publish to Medium"}
+          </button>
+        </div>
+      </BottomSheet>
+
+      {/* Mobile More Actions BottomSheet */}
+      <BottomSheet
+        isOpen={isMoreSheetOpen}
+        onClose={() => setIsMoreSheetOpen(false)}
+        title="More actions"
+        snapPoints={[0.35]}
+      >
+        <div className="space-y-1">
+          <button
+            onClick={() => { setIsMoreSheetOpen(false); setShowHistory((v) => !v); }}
+            className={cn(
+              "flex items-center gap-3 w-full px-3 py-3 rounded-sf text-sm transition-colors min-h-[44px]",
+              showHistory ? "bg-sf-accent/10 text-sf-accent" : "text-sf-text-primary hover:bg-sf-bg-tertiary"
+            )}
+          >
+            <History size={18} />
+            History
+          </button>
+          <div
+            onClick={() => setIsMoreSheetOpen(false)}
+            className="flex items-center gap-3 w-full px-3 py-3 rounded-sf text-sm text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors min-h-[44px]"
+          >
+            <ExportDropdown markdown={markdown} title={title} />
+          </div>
+          <div
+            onClick={() => setIsMoreSheetOpen(false)}
+            className="flex items-center gap-3 w-full px-3 py-3 rounded-sf text-sm text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors min-h-[44px]"
+          >
+            <RepurposeButton
+              postId={postId}
+              contentType={post.data?.contentType || "blog_post"}
+              workspaceSlug={workspace}
+            />
+          </div>
+          <button
+            onClick={() => { setIsMoreSheetOpen(false); setIsTemplateDialogOpen(true); }}
+            className="flex items-center gap-3 w-full px-3 py-3 rounded-sf text-sm text-sf-text-primary hover:bg-sf-bg-tertiary transition-colors min-h-[44px]"
+          >
+            <Pencil size={18} />
+            Create Template from Post
+          </button>
+        </div>
+      </BottomSheet>
 
       <DevtoPublishModal
         postId={postId}

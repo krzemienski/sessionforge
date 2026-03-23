@@ -3,9 +3,9 @@
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useContent, useContentStreak, useExportContent } from "@/hooks/use-content";
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, LayoutGrid, List, Download, Zap } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarDays, LayoutGrid, List, Download, Zap, Loader2 } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { CalendarView } from "@/components/content/calendar-view";
 import { PipelineView } from "@/components/content/pipeline-view";
@@ -14,6 +14,7 @@ import { ManageGroupDialog } from "@/components/content/manage-group-dialog";
 import { useSearchParams } from "next/navigation";
 import { ExportPanel } from "@/components/content/export-panel";
 import { ContentListView } from "@/components/content/content-list-view";
+import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 
 type ViewTab = "calendar" | "pipeline" | "list";
 
@@ -27,8 +28,19 @@ export default function ContentPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [activeTab, setActiveTab] = useState<ViewTab | null>(null);
+
+  // Pull-to-refresh
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const handleRefresh = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["content", workspace] });
+  }, [queryClient, workspace]);
+  const { pullDistance, isRefreshing, isPulling } = usePullToRefresh(
+    scrollRef,
+    handleRefresh
+  );
 
   // Series & Collections filtering
   const [seriesFilter, setSeriesFilter] = useState<string>("");
@@ -123,7 +135,26 @@ export default function ContentPage() {
   };
 
   return (
-    <div>
+    <div ref={scrollRef} className="relative">
+      {/* Pull-to-refresh indicator */}
+      {(isPulling || isRefreshing) && (
+        <div
+          className="flex items-center justify-center gap-2 text-sm text-sf-text-secondary overflow-hidden transition-all duration-200"
+          style={{ height: isRefreshing ? 48 : pullDistance * 0.6 }}
+        >
+          <Loader2
+            size={16}
+            className={cn(
+              "text-sf-accent",
+              isRefreshing && "animate-spin"
+            )}
+          />
+          <span className="text-xs font-medium">
+            {isRefreshing ? "Refreshing…" : "Pull to refresh"}
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold font-display">Content</h1>
@@ -145,7 +176,7 @@ export default function ContentPage() {
       </div>
 
       {/* Pipeline status line */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary mb-4">
+      <div className="flex items-center gap-2 px-3 py-2 bg-sf-bg-secondary border border-sf-border rounded-sf text-xs text-sf-text-secondary mb-4 min-h-[44px] md:min-h-0">
         <Zap size={13} className="text-sf-text-muted flex-shrink-0" />
         {lastRun ? (
           <span>
@@ -175,9 +206,9 @@ export default function ContentPage() {
         onExport={handleExport}
       />
 
-      {/* View tabs */}
+      {/* View tabs - full-width on mobile with horizontal scroll-snap */}
       <div
-        className="flex gap-1 mb-6 bg-sf-bg-tertiary rounded-sf p-0.5 w-fit"
+        className="flex gap-1 mb-6 bg-sf-bg-tertiary rounded-sf p-0.5 w-full md:w-fit overflow-x-auto scroll-snap-x-mandatory scrollbar-none"
         role="tablist"
         aria-label="Content view"
         onKeyDown={(e) => {
@@ -212,7 +243,7 @@ export default function ContentPage() {
             tabIndex={activeTab === tab.value ? 0 : -1}
             onClick={() => setActiveTab(tab.value)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sf transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent",
+              "flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm rounded-sf transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent scroll-snap-start flex-1 md:flex-none min-h-[44px] md:min-h-0 whitespace-nowrap",
               activeTab === tab.value
                 ? "bg-sf-bg-secondary text-sf-text-primary shadow-sm"
                 : "text-sf-text-secondary hover:text-sf-text-primary"

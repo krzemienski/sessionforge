@@ -52,7 +52,10 @@ export function MobileBottomNav({ workspace }: { workspace: string }) {
         <div className="md:hidden fixed inset-0 z-[60]" onClick={() => setShowMore(false)}>
           <div className="absolute inset-0 bg-black/40" />
           <div
-            className="absolute bottom-16 left-0 right-0 bg-sf-bg-secondary border-t border-sf-border rounded-t-2xl p-4 space-y-1"
+            className="absolute left-0 right-0 bg-sf-bg-secondary border-t border-sf-border rounded-t-2xl p-4 space-y-1"
+            style={{
+              bottom: "calc(4rem + env(safe-area-inset-bottom))",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-2">
@@ -83,7 +86,11 @@ export function MobileBottomNav({ workspace }: { workspace: string }) {
 
       {/* Bottom nav bar */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-sf-bg-secondary border-t border-sf-border flex items-center justify-around z-50"
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-sf-bg-secondary border-t border-sf-border flex items-center justify-around z-50"
+        style={{
+          height: "calc(4rem + env(safe-area-inset-bottom))",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
         role="navigation"
         aria-label="Mobile navigation"
       >

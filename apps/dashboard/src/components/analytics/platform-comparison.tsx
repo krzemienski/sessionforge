@@ -108,8 +108,8 @@ function MetricComparisonRow({
   const best = getBestPlatform(byPlatform, metricKey);
 
   return (
-    <div className="flex items-center py-2 border-b border-sf-border last:border-0 gap-3">
-      <div className="flex items-center gap-1.5 text-sf-text-secondary w-28 flex-shrink-0">
+    <div className="flex flex-col sm:flex-row sm:items-center py-2 border-b border-sf-border last:border-0 gap-1.5 sm:gap-3">
+      <div className="flex items-center gap-1.5 text-sf-text-secondary sm:w-28 flex-shrink-0">
         <span className="flex-shrink-0">{icon}</span>
         <span className="text-xs">{label}</span>
       </div>
@@ -174,7 +174,7 @@ export function PlatformComparison({ byPlatform, className }: PlatformComparison
         className
       )}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
         <h3 className="font-semibold text-sf-text-primary font-display text-sm">
           Platform Comparison
         </h3>
@@ -189,7 +189,7 @@ export function PlatformComparison({ byPlatform, className }: PlatformComparison
       </div>
 
       {/* Platform header cards */}
-      <div className="flex items-center gap-2 mb-4 pl-[7.75rem]">
+      <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 mb-4 sm:pl-[7.75rem]">
         {platforms.map((platform) => {
           const engRate = computeEngagementRate(byPlatform[platform]);
           const isBest = platform === bestOverall;

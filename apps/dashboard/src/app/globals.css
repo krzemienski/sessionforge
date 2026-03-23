@@ -492,3 +492,186 @@ textarea:focus-visible,
   display: inline-flex;
   align-items: center;
 }
+
+/* ==========================================
+   Mobile CSS Utilities
+   ========================================== */
+
+/* Safe area inset padding for notched phones (iPhone X+, etc.) */
+.sf-safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.sf-safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sf-safe-area-left {
+  padding-left: env(safe-area-inset-left);
+}
+
+.sf-safe-area-right {
+  padding-right: env(safe-area-inset-right);
+}
+
+.sf-safe-area-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.sf-safe-area-y {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sf-safe-area-all {
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
+/* Touch action utilities */
+.sf-touch-none {
+  touch-action: none;
+}
+
+.sf-touch-pan-x {
+  touch-action: pan-x;
+}
+
+.sf-touch-pan-y {
+  touch-action: pan-y;
+}
+
+.sf-touch-pan-xy {
+  touch-action: pan-x pan-y;
+}
+
+.sf-touch-manipulation {
+  touch-action: manipulation;
+}
+
+.sf-touch-pinch-zoom {
+  touch-action: pinch-zoom;
+}
+
+/* Scroll snap utilities */
+.sf-snap-x {
+  scroll-snap-type: x mandatory;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sf-snap-y {
+  scroll-snap-type: y mandatory;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sf-snap-x-proximity {
+  scroll-snap-type: x proximity;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sf-snap-y-proximity {
+  scroll-snap-type: y proximity;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sf-snap-start {
+  scroll-snap-align: start;
+}
+
+.sf-snap-center {
+  scroll-snap-align: center;
+}
+
+.sf-snap-end {
+  scroll-snap-align: end;
+}
+
+.sf-snap-stop {
+  scroll-snap-stop: always;
+}
+
+/* Overscroll behavior for pull-to-refresh areas */
+.sf-overscroll-none {
+  overscroll-behavior: none;
+}
+
+.sf-overscroll-contain {
+  overscroll-behavior: contain;
+}
+
+.sf-overscroll-y-none {
+  overscroll-behavior-y: none;
+}
+
+.sf-overscroll-y-contain {
+  overscroll-behavior-y: contain;
+}
+
+.sf-overscroll-x-none {
+  overscroll-behavior-x: none;
+}
+
+.sf-overscroll-x-contain {
+  overscroll-behavior-x: contain;
+}
+
+/* Pull-to-refresh indicator animation */
+@keyframes sf-pull-to-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sf-pull-to-refresh-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-100%) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sf-pull-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin: 0 auto;
+  opacity: 0;
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+
+.sf-pull-indicator--active {
+  opacity: 1;
+  animation: sf-pull-to-refresh-fade-in 200ms ease forwards;
+}
+
+.sf-pull-indicator--refreshing {
+  opacity: 1;
+}
+
+.sf-pull-indicator--refreshing .sf-pull-indicator__spinner {
+  animation: sf-pull-to-refresh-spin 750ms linear infinite;
+}
+
+.sf-pull-indicator__spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--color-sf-border);
+  border-top-color: var(--color-sf-accent);
+  border-radius: var(--radius-sf-full);
+}

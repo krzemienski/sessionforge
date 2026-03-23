@@ -1,9 +1,9 @@
 "use client";
 
+import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
-import { Activity, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { Activity, ChevronDown, ChevronUp, RefreshCw, Clock } from "lucide-react";
 import { PipelineFlow } from "@/components/pipeline/pipeline-flow";
 import { PipelineFilters, type DateRange, type ContentType, type PipelineStatus } from "@/components/pipeline/pipeline-filters";
 import { PipelineMetrics, type PipelineMetricsData } from "@/components/pipeline/pipeline-metrics";
@@ -15,8 +15,53 @@ import { useRunDetail } from "@/hooks/use-run-detail";
 import { formatMs, timeAgo } from "@/lib/utils";
 import { type PipelineRun, statusBadgeClass, statusLabel, ACTIVE_STATUSES, dateRangeFromTimeframe } from "@/lib/pipeline-status";
 
+function RunCard({ run }: { run: PipelineRun }) {
+  return (
+    <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg p-4 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className={statusBadgeClass(run.status)}>
+          {statusLabel(run.status)}
+        </span>
+        <span className="text-xs text-sf-text-muted">
+          {run.startedAt ? timeAgo(run.startedAt) : "—"}
+        </span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-sf-text-muted">Trigger</span>
+        <span className="text-sf-text-secondary">{run.triggerName ?? "—"}</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-sf-text-muted">Sessions</span>
+        <span className="text-sf-text-secondary">{run.sessionsScanned ?? "—"}</span>
+      </div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-sf-text-muted">Insights</span>
+        <span className="text-sf-text-secondary">{run.insightsExtracted ?? "—"}</span>
+      </div>
+      {run.durationMs != null && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-sf-text-muted flex items-center gap-1">
+            <Clock size={12} />
+            Duration
+          </span>
+          <span className="text-sf-text-secondary">{formatMs(run.durationMs)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ObservabilityPage() {
   const { workspace } = useParams<{ workspace: string }>();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
 
   // Filter state
   const [dateRange, setDateRange] = useState<DateRange>("30d");
@@ -117,11 +162,11 @@ export default function ObservabilityPage() {
   return (
     <div>
       {/* 1. Header with title + subtitle */}
-      <div className="flex items-center gap-3 mb-6">
-        <Activity size={24} className="text-sf-accent" />
-        <div>
+      <div className="flex items-start sm:items-center gap-3 mb-6">
+        <Activity size={24} className="text-sf-accent flex-shrink-0 mt-0.5 sm:mt-0" />
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold font-display">Pipeline</h1>
-          <p className="text-sm text-sf-text-muted">
+          <p className="text-sm text-sf-text-muted break-words">
             Session ingestion, insight extraction, and content generation flow
           </p>
         </div>
@@ -149,8 +194,12 @@ export default function ObservabilityPage() {
         />
       </div>
 
-      {/* 4. PipelineFlow diagram (existing, kept as-is) */}
-      <PipelineFlow lastRun={lastRun} workspace={workspace} />
+      {/* 4. PipelineFlow diagram — horizontally scrollable on mobile */}
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+        <div className="min-w-[720px] sm:min-w-0">
+          <PipelineFlow lastRun={lastRun} workspace={workspace} />
+        </div>
+      </div>
 
       {/* 5. Two-column chart section */}
       {metrics.data && (
@@ -160,102 +209,113 @@ export default function ObservabilityPage() {
         </div>
       )}
 
-      {/* 6. Run History table with clickable rows expanding to RunDetailPanel */}
+      {/* 6. Run History — cards on mobile, table on sm+ */}
       {filteredRuns.length > 0 && (
         <div className="mt-8">
           <h2 className="text-sm font-semibold text-sf-text-primary uppercase tracking-wide mb-3 font-display">
             Run History
           </h2>
-          <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-sf-border text-left">
-                  <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide">Status</th>
-                  <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide">Trigger</th>
-                  <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide hidden sm:table-cell">Sessions</th>
-                  <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide hidden sm:table-cell">Insights</th>
-                  <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide hidden md:table-cell">Duration</th>
-                  <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide">When</th>
-                  <th className="px-4 py-2.5 w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRuns.slice(0, 20).map((run) => {
-                  const isSelected = selectedRunId === run.id;
 
-                  return (
-                    <tr
-                      key={run.id}
-                      className="border-b border-sf-border/50 last:border-0"
-                    >
-                      <td colSpan={7} className="p-0">
-                        {/* Clickable row */}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() =>
-                            setSelectedRunId(isSelected ? null : run.id ?? null)
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setSelectedRunId(isSelected ? null : run.id ?? null);
+          {isMobile ? (
+            /* Card-based layout for mobile */
+            <div className="space-y-3">
+              {filteredRuns.slice(0, 20).map((run) => (
+                <RunCard key={run.id} run={run} />
+              ))}
+            </div>
+          ) : (
+            /* Table layout for sm+ with expandable detail rows */
+            <div className="bg-sf-bg-secondary border border-sf-border rounded-sf-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-sf-border text-left">
+                    <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide">Status</th>
+                    <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide">Trigger</th>
+                    <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide hidden sm:table-cell">Sessions</th>
+                    <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide hidden sm:table-cell">Insights</th>
+                    <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide hidden md:table-cell">Duration</th>
+                    <th className="px-4 py-2.5 text-xs font-medium text-sf-text-muted uppercase tracking-wide">When</th>
+                    <th className="px-4 py-2.5 w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRuns.slice(0, 20).map((run) => {
+                    const isSelected = selectedRunId === run.id;
+
+                    return (
+                      <tr
+                        key={run.id}
+                        className="border-b border-sf-border/50 last:border-0"
+                      >
+                        <td colSpan={7} className="p-0">
+                          {/* Clickable row */}
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() =>
+                              setSelectedRunId(isSelected ? null : run.id ?? null)
                             }
-                          }}
-                          className="w-full text-left flex items-center hover:bg-sf-bg-tertiary/50 transition-colors cursor-pointer"
-                        >
-                          <span className="px-4 py-2.5">
-                            <span className={statusBadgeClass(run.status)}>
-                              {statusLabel(run.status)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setSelectedRunId(isSelected ? null : run.id ?? null);
+                              }
+                            }}
+                            className="w-full text-left flex items-center hover:bg-sf-bg-tertiary/50 transition-colors cursor-pointer"
+                          >
+                            <span className="px-4 py-2.5">
+                              <span className={statusBadgeClass(run.status)}>
+                                {statusLabel(run.status)}
+                              </span>
                             </span>
-                          </span>
-                          <span className="flex-1 px-4 py-2.5 text-sf-text-secondary truncate">
-                            {run.triggerName ?? "—"}
-                          </span>
-                          <span className="px-4 py-2.5 text-sf-text-secondary hidden sm:inline">
-                            {run.sessionsScanned ?? "—"}
-                          </span>
-                          <span className="px-4 py-2.5 text-sf-text-secondary hidden sm:inline">
-                            {run.insightsExtracted ?? "—"}
-                          </span>
-                          <span className="px-4 py-2.5 text-sf-text-muted hidden md:inline">
-                            {run.durationMs ? formatMs(run.durationMs) : "—"}
-                          </span>
-                          <span className="px-4 py-2.5 text-sf-text-muted">
-                            {run.startedAt ? timeAgo(run.startedAt) : "—"}
-                          </span>
-                          <span className="px-4 py-2.5 text-sf-text-muted">
-                            {isSelected ? (
-                              <ChevronUp size={14} />
-                            ) : (
-                              <ChevronDown size={14} />
-                            )}
-                          </span>
-                        </div>
-
-                        {/* Expanded detail panel */}
-                        {isSelected && runDetail.data && (
-                          <div className="px-4 pb-4 pt-2">
-                            <RunDetailPanel
-                              runDetail={runDetail.data}
-                              onClose={() => setSelectedRunId(null)}
-                            />
+                            <span className="flex-1 px-4 py-2.5 text-sf-text-secondary truncate">
+                              {run.triggerName ?? "\u2014"}
+                            </span>
+                            <span className="px-4 py-2.5 text-sf-text-secondary hidden sm:inline">
+                              {run.sessionsScanned ?? "\u2014"}
+                            </span>
+                            <span className="px-4 py-2.5 text-sf-text-secondary hidden sm:inline">
+                              {run.insightsExtracted ?? "\u2014"}
+                            </span>
+                            <span className="px-4 py-2.5 text-sf-text-muted hidden md:inline">
+                              {run.durationMs ? formatMs(run.durationMs) : "\u2014"}
+                            </span>
+                            <span className="px-4 py-2.5 text-sf-text-muted">
+                              {run.startedAt ? timeAgo(run.startedAt) : "\u2014"}
+                            </span>
+                            <span className="px-4 py-2.5 text-sf-text-muted">
+                              {isSelected ? (
+                                <ChevronUp size={14} />
+                              ) : (
+                                <ChevronDown size={14} />
+                              )}
+                            </span>
                           </div>
-                        )}
 
-                        {isSelected && runDetail.isLoading && (
-                          <div className="flex items-center justify-center py-6">
-                            <RefreshCw size={16} className="animate-spin text-sf-text-muted mr-2" />
-                            <span className="text-sm text-sf-text-muted">Loading run details…</span>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          {/* Expanded detail panel */}
+                          {isSelected && runDetail.data && (
+                            <div className="px-4 pb-4 pt-2">
+                              <RunDetailPanel
+                                runDetail={runDetail.data}
+                                onClose={() => setSelectedRunId(null)}
+                              />
+                            </div>
+                          )}
+
+                          {isSelected && runDetail.isLoading && (
+                            <div className="flex items-center justify-center py-6">
+                              <RefreshCw size={16} className="animate-spin text-sf-text-muted mr-2" />
+                              <span className="text-sm text-sf-text-muted">Loading run details...</span>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
