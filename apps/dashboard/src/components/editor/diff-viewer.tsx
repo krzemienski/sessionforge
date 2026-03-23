@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { diffLines } from "diff";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -92,6 +92,111 @@ function computeSegments(
   return segments;
 }
 
+// Flatten all segment lines to a simple string array for fence detection
+function flattenSegmentLines(segments: Segment[]): string[] {
+  const result: string[] = [];
+  for (const segment of segments) {
+    for (const line of segment.lines) {
+      result.push(typeof line === "string" ? line : line.content);
+    }
+  }
+  return result;
+}
+
+type FenceEntry = { language: string; isDelimiter: boolean };
+
+// Detect markdown code fences and return a map from globalIndex -> fence info
+function detectCodeFences(lines: string[]): Map<number, FenceEntry> {
+  const map = new Map<number, FenceEntry>();
+  let inFence = false;
+  let language = "";
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const openMatch = line.match(/^```(\w*)\s*$/);
+
+    if (!inFence && openMatch) {
+      inFence = true;
+      language = openMatch[1] ?? "";
+      map.set(i, { language, isDelimiter: true });
+    } else if (inFence && /^```\s*$/.test(line)) {
+      map.set(i, { language, isDelimiter: true });
+      inFence = false;
+      language = "";
+    } else if (inFence) {
+      map.set(i, { language, isDelimiter: false });
+    }
+  }
+
+  return map;
+}
+
+// Apply syntax highlighting to code fence blocks; returns map of globalIndex -> HTML
+async function buildHighlightMap(segments: Segment[]): Promise<Map<number, string>> {
+  const hlMap = new Map<number, string>();
+
+  try {
+    // highlight.js may resolve as the HLJSApi directly (ambient module)
+    // or as a module with a .default export — handle both
+    const hljsRaw: any = await import("highlight.js");
+    const hljs: any = hljsRaw.default ?? hljsRaw;
+    const allLines = flattenSegmentLines(segments);
+    const fenceMap = detectCodeFences(allLines);
+
+    // Walk through fence entries, grouping non-delimiter lines into blocks
+    let blockLanguage = "";
+    let blockLines: string[] = [];
+    let blockIndices: number[] = [];
+
+    const flushBlock = () => {
+      if (blockLines.length === 0) return;
+      const code = blockLines.join("\n");
+      let highlighted: string;
+      try {
+        if (blockLanguage && hljs.getLanguage(blockLanguage)) {
+          highlighted = hljs.highlight(code, { language: blockLanguage }).value;
+        } else {
+          highlighted = hljs.highlightAuto(code).value;
+        }
+      } catch {
+        highlighted = code;
+      }
+      const highlightedLines = highlighted.split("\n");
+      blockIndices.forEach((idx, i) => {
+        hlMap.set(idx, highlightedLines[i] ?? "");
+      });
+      blockLines = [];
+      blockIndices = [];
+    };
+
+    for (let i = 0; i < allLines.length; i++) {
+      const fence = fenceMap.get(i);
+      if (!fence) {
+        // Not in a fence — flush any pending block
+        if (blockLines.length > 0) {
+          flushBlock();
+        }
+        continue;
+      }
+      if (fence.isDelimiter) {
+        // Opener sets language; closer flushes current block
+        if (blockLines.length > 0) {
+          flushBlock();
+        }
+        blockLanguage = fence.language;
+      } else {
+        blockLines.push(allLines[i]);
+        blockIndices.push(i);
+      }
+    }
+    flushBlock();
+  } catch {
+    // highlight.js unavailable — return empty map (plain text fallback)
+  }
+
+  return hlMap;
+}
+
 export function DiffViewer({
   fromContent,
   toContent,
@@ -103,6 +208,29 @@ export function DiffViewer({
   );
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [highlightMap, setHighlightMap] = useState<Map<number, string>>(new Map());
+
+  // Compute per-segment start offsets for global line indexing
+  const segmentOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    let offset = 0;
+    for (const segment of segments) {
+      offsets.push(offset);
+      offset += segment.lines.length;
+    }
+    return offsets;
+  }, [segments]);
+
+  // Lazily load highlight.js and compute highlighting on mount/content change
+  useEffect(() => {
+    let cancelled = false;
+    buildHighlightMap(segments).then((map) => {
+      if (!cancelled) setHighlightMap(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [segments]);
 
   function toggleCollapse(id: string) {
     setExpandedIds((prev) => {
@@ -126,35 +254,55 @@ export function DiffViewer({
     );
   }
 
+  function renderLineContent(html: string | undefined, plainText: string) {
+    if (html !== undefined) {
+      return (
+        <span
+          className="whitespace-pre-wrap break-all flex-1"
+          dangerouslySetInnerHTML={{ __html: html || "\u00a0" }}
+        />
+      );
+    }
+    return (
+      <span className="whitespace-pre-wrap break-all flex-1">
+        {plainText || "\u00a0"}
+      </span>
+    );
+  }
+
   return (
     <div className="font-mono text-xs rounded-sf-lg overflow-hidden border border-sf-border">
       {segments.map((segment, idx) => {
+        const segOffset = segmentOffsets[idx] ?? 0;
+
         if (segment.type === "change") {
           return (
             <div key={idx}>
-              {segment.lines.map((line, lineIdx) => (
-                <div
-                  key={lineIdx}
-                  className={cn(
-                    "flex items-start gap-2 px-3 py-0.5 leading-5",
-                    line.type === "added"
-                      ? "bg-sf-success/15 text-sf-text-primary"
-                      : "bg-sf-danger/15 text-sf-text-primary"
-                  )}
-                >
-                  <span
+              {segment.lines.map((line, lineIdx) => {
+                const gIdx = segOffset + lineIdx;
+                const hlHtml = highlightMap.get(gIdx);
+                return (
+                  <div
+                    key={lineIdx}
                     className={cn(
-                      "select-none w-4 flex-shrink-0 font-bold text-center",
-                      line.type === "added" ? "text-sf-success" : "text-sf-danger"
+                      "flex items-start gap-2 px-3 py-0.5 leading-5",
+                      line.type === "added"
+                        ? "bg-sf-success/15 text-sf-text-primary"
+                        : "bg-sf-danger/15 text-sf-text-primary"
                     )}
                   >
-                    {line.type === "added" ? "+" : "−"}
-                  </span>
-                  <span className="whitespace-pre-wrap break-all flex-1">
-                    {line.content || "\u00a0"}
-                  </span>
-                </div>
-              ))}
+                    <span
+                      className={cn(
+                        "select-none w-4 flex-shrink-0 font-bold text-center",
+                        line.type === "added" ? "text-sf-success" : "text-sf-danger"
+                      )}
+                    >
+                      {line.type === "added" ? "+" : "−"}
+                    </span>
+                    {renderLineContent(hlHtml, line.content)}
+                  </div>
+                );
+              })}
             </div>
           );
         }
@@ -162,19 +310,21 @@ export function DiffViewer({
         if (segment.type === "context") {
           return (
             <div key={idx}>
-              {segment.lines.map((line, lineIdx) => (
-                <div
-                  key={lineIdx}
-                  className="flex items-start gap-2 px-3 py-0.5 leading-5 bg-sf-bg-secondary text-sf-text-secondary"
-                >
-                  <span className="select-none w-4 flex-shrink-0 text-sf-text-muted text-center">
-                    {" "}
-                  </span>
-                  <span className="whitespace-pre-wrap break-all flex-1">
-                    {line || "\u00a0"}
-                  </span>
-                </div>
-              ))}
+              {segment.lines.map((line, lineIdx) => {
+                const gIdx = segOffset + lineIdx;
+                const hlHtml = highlightMap.get(gIdx);
+                return (
+                  <div
+                    key={lineIdx}
+                    className="flex items-start gap-2 px-3 py-0.5 leading-5 bg-sf-bg-secondary text-sf-text-secondary"
+                  >
+                    <span className="select-none w-4 flex-shrink-0 text-sf-text-muted text-center">
+                      {" "}
+                    </span>
+                    {renderLineContent(hlHtml, line)}
+                  </div>
+                );
+              })}
             </div>
           );
         }
@@ -200,19 +350,21 @@ export function DiffViewer({
               </button>
               {isExpanded && (
                 <div>
-                  {segment.lines.map((line, lineIdx) => (
-                    <div
-                      key={lineIdx}
-                      className="flex items-start gap-2 px-3 py-0.5 leading-5 bg-sf-bg-secondary text-sf-text-secondary"
-                    >
-                      <span className="select-none w-4 flex-shrink-0 text-sf-text-muted text-center">
-                        {" "}
-                      </span>
-                      <span className="whitespace-pre-wrap break-all flex-1">
-                        {line || "\u00a0"}
-                      </span>
-                    </div>
-                  ))}
+                  {segment.lines.map((line, lineIdx) => {
+                    const gIdx = segOffset + lineIdx;
+                    const hlHtml = highlightMap.get(gIdx);
+                    return (
+                      <div
+                        key={lineIdx}
+                        className="flex items-start gap-2 px-3 py-0.5 leading-5 bg-sf-bg-secondary text-sf-text-secondary"
+                      >
+                        <span className="select-none w-4 flex-shrink-0 text-sf-text-muted text-center">
+                          {" "}
+                        </span>
+                        {renderLineContent(hlHtml, line)}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

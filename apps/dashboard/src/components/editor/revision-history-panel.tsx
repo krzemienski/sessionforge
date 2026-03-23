@@ -392,11 +392,26 @@ interface DiffOverlayProps {
 
 function DiffOverlay({ postId, revision, onClose }: DiffOverlayProps) {
   const [diffMode, setDiffMode] = useState<"unified" | "split">("unified");
+  const [fromRevisionId, setFromRevisionId] = useState<string | null>(
+    revision.parentRevisionId
+  );
+
+  const revisions = useRevisions(postId);
+  const revisionList: RevisionEntry[] = revisions.data?.revisions ?? [];
+
   const targetRev = useRevision(postId, revision.id);
-  const parentRev = useRevision(postId, revision.parentRevisionId ?? "");
+  const fromRev = useRevision(postId, fromRevisionId ?? "");
 
   const isLoading =
-    targetRev.isLoading || (!!revision.parentRevisionId && parentRev.isLoading);
+    targetRev.isLoading || (!!fromRevisionId && fromRev.isLoading);
+
+  function formatFromOptionLabel(rev: RevisionEntry): string {
+    const version = rev.versionLabel
+      ? `${rev.versionLabel} (v${rev.versionNumber})`
+      : `v${rev.versionNumber}`;
+    const editSuffix = rev.editType === "ai_generated" ? " · AI" : "";
+    return `${version}${editSuffix}`;
+  }
 
   return (
     <div
@@ -407,18 +422,38 @@ function DiffOverlay({ postId, revision, onClose }: DiffOverlayProps) {
     >
       <div className="w-full max-w-3xl bg-sf-bg-secondary border border-sf-border rounded-sf-lg my-8 overflow-hidden shadow-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-sf-border">
-          <div>
+          <div className="flex flex-col gap-1.5 min-w-0">
             <h3 className="font-display font-semibold text-sf-text-primary text-sm">
               Changes in v{revision.versionNumber}
             </h3>
-            <p className="text-xs text-sf-text-secondary mt-0.5">
+            <p className="text-xs text-sf-text-secondary">
               {getEditTypeLabel(revision.editType)}
               {revision.createdAt
                 ? ` · ${new Date(revision.createdAt).toLocaleString()}`
                 : ""}
             </p>
+            {/* Compare from dropdown */}
+            <div className="flex items-center gap-2 mt-0.5">
+              <label className="text-xs text-sf-text-muted flex-shrink-0">
+                Compare from:
+              </label>
+              <select
+                value={fromRevisionId ?? ""}
+                onChange={(e) => setFromRevisionId(e.target.value || null)}
+                className="bg-sf-bg-primary border border-sf-border rounded-sf px-2 py-1 text-xs text-sf-text-primary focus:outline-none focus:border-sf-border-focus"
+              >
+                <option value="">(empty — show full content)</option>
+                {revisionList
+                  .filter((r) => r.id !== revision.id)
+                  .map((rev) => (
+                    <option key={rev.id} value={rev.id}>
+                      {formatFromOptionLabel(rev)}
+                    </option>
+                  ))}
+              </select>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0 self-start mt-1">
             {/* Diff mode toggle */}
             <div className="flex items-center gap-1 bg-sf-bg-primary rounded-sf p-0.5 border border-sf-border">
               <button
@@ -464,12 +499,12 @@ function DiffOverlay({ postId, revision, onClose }: DiffOverlayProps) {
             </div>
           ) : diffMode === "unified" ? (
             <DiffViewer
-              fromContent={parentRev.data?.markdown ?? ""}
+              fromContent={fromRev.data?.markdown ?? ""}
               toContent={targetRev.data?.markdown ?? ""}
             />
           ) : (
             <SideBySideDiffViewer
-              fromContent={parentRev.data?.markdown ?? ""}
+              fromContent={fromRev.data?.markdown ?? ""}
               toContent={targetRev.data?.markdown ?? ""}
             />
           )}
