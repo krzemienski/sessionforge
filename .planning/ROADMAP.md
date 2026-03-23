@@ -49,12 +49,12 @@ Plans:
   3. User can see all containers pass healthchecks (docker compose ps shows healthy for app and postgres)
   4. User can see .env.example documenting every required environment variable
   5. User can build the Docker image independently with `docker build` using node:22-slim runner with sharp installed
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md -- Dockerfile fixes (node:22-slim, CLAUDECODE, entrypoint) and migration runner
+- [ ] 02-02-PLAN.md -- Compose env var alignment, app healthcheck, Redis detection fix
+- [ ] 02-03-PLAN.md -- Comprehensive .env.example documentation
 
 ### Phase 3: Vercel + Neon Deployment
 **Goal**: SessionForge live at a Vercel production URL with Neon Postgres, automatic schema migrations in the build pipeline, and all services verified connected
@@ -115,8 +115,8 @@ Phases execute in numeric order: 1 --> 2 --> 3 --> 4 --> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Worktree Convergence | 0/5 | Planning complete | - |
-| 2. Docker Hardening | 0/3 | Not started | - |
+| 1. Worktree Convergence | 5/5 | Complete | - |
+| 2. Docker Hardening | 0/3 | Planning complete | - |
 | 3. Vercel + Neon Deployment | 0/3 | Not started | - |
 | 4. Documentation | 0/3 | Not started | - |
 | 5. Feature Validation & Release | 0/3 | Not started | - |
