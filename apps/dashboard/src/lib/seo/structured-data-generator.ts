@@ -62,6 +62,10 @@ export interface ArticleSchema extends SchemaBase {
     "@type": "WebPage";
     "@id": string;
   };
+  /** TechArticle: proficiency level of the target audience. */
+  proficiencyLevel?: "Beginner" | "Expert";
+  /** TechArticle: technologies or libraries the article depends on. */
+  dependencies?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,14 +127,44 @@ export interface FAQPageSchema extends SchemaBase {
 }
 
 // ---------------------------------------------------------------------------
+// SoftwareApplication schema
+// ---------------------------------------------------------------------------
+
+/** schema.org Offer object for software pricing. */
+export interface SchemaOffer {
+  "@type": "Offer";
+  price: string;
+  priceCurrency: string;
+}
+
+/** schema.org SoftwareApplication JSON-LD structure. */
+export interface SoftwareApplicationSchema extends SchemaBase {
+  "@type": "SoftwareApplication";
+  name: string;
+  description: string;
+  author: SchemaPerson;
+  datePublished: string;
+  dateModified: string;
+  url?: string;
+  image?: SchemaImageObject | string;
+  applicationCategory?: string;
+  operatingSystem?: string;
+  offers?: SchemaOffer;
+}
+
+// ---------------------------------------------------------------------------
 // Union result type
 // ---------------------------------------------------------------------------
 
 /** Discriminated union of all supported JSON-LD schema types. */
-export type StructuredData = ArticleSchema | HowToSchema | FAQPageSchema;
+export type StructuredData =
+  | ArticleSchema
+  | HowToSchema
+  | FAQPageSchema
+  | SoftwareApplicationSchema;
 
 /** Indicates which schema type was selected for the content. */
-export type SchemaType = "Article" | "HowTo" | "FAQPage";
+export type SchemaType = "Article" | "HowTo" | "FAQPage" | "SoftwareApplication";
 
 /** Input metadata for structured data generation. */
 export interface StructuredDataInput {
@@ -385,6 +419,230 @@ function isHowToContent(markdown: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// TechArticle detection
+// ---------------------------------------------------------------------------
+
+/** Fenced code block pattern — triple backticks with optional language tag. */
+const FENCED_CODE_BLOCK_PATTERN = /^```[\s\S]*?^```/gm;
+
+/**
+ * Extracts fenced code blocks from markdown content.
+ *
+ * @param markdown - Raw markdown string.
+ * @returns Array of code block strings (including fences).
+ */
+function extractCodeBlocks(markdown: string): string[] {
+  return markdown.match(FENCED_CODE_BLOCK_PATTERN) || [];
+}
+
+/**
+ * Determines whether the content qualifies as a TechArticle.
+ * Content is considered technical when it contains at least one fenced code block.
+ *
+ * @param markdown - Raw markdown to inspect.
+ * @returns `true` if the content contains fenced code blocks.
+ */
+export function isTechContent(markdown: string): boolean {
+  return FENCED_CODE_BLOCK_PATTERN.test(markdown);
+}
+
+/**
+ * Advanced technical indicators that suggest expert-level content.
+ * Used for proficiency level detection.
+ */
+const ADVANCED_PATTERNS = [
+  /\b(?:async|await|concurrency|mutex|semaphore|deadlock)\b/i,
+  /\b(?:architecture|microservice|distributed|scalab)/i,
+  /\b(?:kubernetes|k8s|docker|containeriz)/i,
+  /\b(?:webpack|bundl|tree[\s-]?shak|code[\s-]?split)/i,
+  /\b(?:generic|polymorphi|abstract|interface|inheritance)\b/i,
+  /\b(?:regex|regexp|regular\s+expression)/i,
+  /\b(?:optimiz|performance|benchmark|profil)/i,
+  /\b(?:security|vulnerabilit|authentication|authorization|oauth|jwt)\b/i,
+  /\b(?:ci[\s/]cd|pipeline|deploy|infrastructure)/i,
+];
+
+/**
+ * Determines the proficiency level of technical content.
+ *
+ * Expert-level content is identified by:
+ * - 3+ code blocks, OR
+ * - Multiple advanced technical indicator patterns.
+ *
+ * @param markdown - Raw markdown content.
+ * @returns "Beginner" or "Expert" proficiency level.
+ */
+export function detectProficiencyLevel(
+  markdown: string
+): "Beginner" | "Expert" {
+  const codeBlocks = extractCodeBlocks(markdown);
+  if (codeBlocks.length >= 3) return "Expert";
+
+  const advancedHits = ADVANCED_PATTERNS.filter((p) => p.test(markdown)).length;
+  if (advancedHits >= 3) return "Expert";
+
+  return "Beginner";
+}
+
+/**
+ * Extracts technology dependencies from code block language tags.
+ * Parses the language identifier after the opening triple backticks.
+ *
+ * @param markdown - Raw markdown content.
+ * @returns Comma-separated string of unique language/technology names, or undefined if none found.
+ */
+export function extractDependencies(markdown: string): string | undefined {
+  const langPattern = /^```(\w[\w+#-]*)\s*$/gm;
+  const langs = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  while ((match = langPattern.exec(markdown)) !== null) {
+    langs.add(match[1].toLowerCase());
+  }
+
+  return langs.size > 0 ? Array.from(langs).join(", ") : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// SoftwareApplication detection
+// ---------------------------------------------------------------------------
+
+/** Patterns that indicate software/application-related content. */
+const SOFTWARE_PATTERNS = [
+  /\b(?:install(?:ation|ing|ed)?|uninstall)\b/i,
+  /\bv?\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?\b/,
+  /\b(?:system\s+requirements?|minimum\s+requirements?|recommended\s+requirements?)\b/i,
+  /\b(?:download(?:ing|ed|s)?)\b/i,
+  /\b(?:software|application|app|tool|utility|program|executable)\b/i,
+  /\b(?:operating\s+system|(?:windows|macos|linux|android|ios)\s+(?:support|compatible|version))\b/i,
+  /\b(?:release\s+notes?|changelog|what'?s\s+new)\b/i,
+  /\b(?:license|licensing|free(?:ware)?|open[\s-]?source|proprietary)\b/i,
+];
+
+/** Minimum number of software pattern matches required for detection. */
+const SOFTWARE_PATTERN_THRESHOLD = 3;
+
+/**
+ * Determines whether the content is best represented as a SoftwareApplication.
+ * Requires multiple software-related indicators to be present.
+ *
+ * @param markdown - Raw markdown to inspect.
+ * @returns `true` if the content appears to describe a software application.
+ */
+function isSoftwareContent(markdown: string): boolean {
+  const hits = SOFTWARE_PATTERNS.filter((p) => p.test(markdown)).length;
+  return hits >= SOFTWARE_PATTERN_THRESHOLD;
+}
+
+/**
+ * Detects the application category from content by checking for common categories.
+ *
+ * @param markdown - Raw markdown content.
+ * @returns Detected application category, or "SoftwareApplication" as default.
+ */
+function detectApplicationCategory(markdown: string): string {
+  const categoryPatterns: [RegExp, string][] = [
+    [/\b(?:game|gaming|gameplay)\b/i, "GameApplication"],
+    [/\b(?:business|enterprise|crm|erp)\b/i, "BusinessApplication"],
+    [/\b(?:developer|development|ide|sdk|api|programming)\b/i, "DeveloperApplication"],
+    [/\b(?:design|graphic|photo|image\s+edit)\b/i, "DesignApplication"],
+    [/\b(?:education|learning|tutorial|course)\b/i, "EducationalApplication"],
+    [/\b(?:security|antivirus|firewall|encryption)\b/i, "SecurityApplication"],
+    [/\b(?:browser|web\s+browser)\b/i, "WebApplication"],
+    [/\b(?:multimedia|video|audio|music|media\s+player)\b/i, "MultimediaApplication"],
+    [/\b(?:utility|utilities|tool|tools)\b/i, "UtilitiesApplication"],
+  ];
+
+  for (const [pattern, category] of categoryPatterns) {
+    if (pattern.test(markdown)) return category;
+  }
+
+  return "SoftwareApplication";
+}
+
+/**
+ * Detects mentioned operating systems from content.
+ *
+ * @param markdown - Raw markdown content.
+ * @returns Comma-separated string of detected OS names, or undefined if none found.
+ */
+function detectOperatingSystem(markdown: string): string | undefined {
+  const osPatterns: [RegExp, string][] = [
+    [/\b(?:windows)\b/i, "Windows"],
+    [/\b(?:macos|mac\s+os|os\s*x)\b/i, "macOS"],
+    [/\b(?:linux|ubuntu|debian|fedora|centos)\b/i, "Linux"],
+    [/\b(?:android)\b/i, "Android"],
+    [/\b(?:ios|iphone|ipad)\b/i, "iOS"],
+  ];
+
+  const detected = new Set<string>();
+  for (const [pattern, name] of osPatterns) {
+    if (pattern.test(markdown)) detected.add(name);
+  }
+
+  return detected.size > 0 ? Array.from(detected).join(", ") : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// HowTo time estimation
+// ---------------------------------------------------------------------------
+
+/** Base minutes per step for simple text-only steps. */
+const BASE_MINUTES_PER_STEP = 2;
+
+/** Additional minutes per step when the step text exceeds this word count. */
+const COMPLEX_STEP_WORD_THRESHOLD = 50;
+
+/** Additional minutes added for steps with high word counts. */
+const COMPLEX_STEP_EXTRA_MINUTES = 3;
+
+/** Additional minutes added when content contains code blocks. */
+const CODE_BLOCK_EXTRA_MINUTES = 5;
+
+/**
+ * Estimates the total time required to complete a HowTo guide.
+ *
+ * Calculation:
+ * - Each step contributes a base of 2 minutes.
+ * - Steps whose text exceeds 50 words add an extra 3 minutes each.
+ * - If the overall content contains fenced code blocks, 5 minutes is added.
+ *
+ * @param steps - Parsed HowTo steps.
+ * @param content - Original markdown content (used for code block detection).
+ * @returns ISO 8601 duration string (e.g. "PT15M" or "PT1H30M").
+ */
+export function estimateHowToTime(steps: HowToStep[], content: string): string {
+  let totalMinutes = 0;
+
+  for (const step of steps) {
+    totalMinutes += BASE_MINUTES_PER_STEP;
+
+    const wordCount = step.text.split(/\s+/).filter(Boolean).length;
+    if (wordCount > COMPLEX_STEP_WORD_THRESHOLD) {
+      totalMinutes += COMPLEX_STEP_EXTRA_MINUTES;
+    }
+  }
+
+  if (FENCED_CODE_BLOCK_PATTERN.test(content)) {
+    // Reset lastIndex since the pattern uses the global flag
+    FENCED_CODE_BLOCK_PATTERN.lastIndex = 0;
+    totalMinutes += CODE_BLOCK_EXTRA_MINUTES;
+  }
+  // Reset lastIndex to avoid side-effects on subsequent calls
+  FENCED_CODE_BLOCK_PATTERN.lastIndex = 0;
+
+  // Ensure a minimum of 1 minute
+  totalMinutes = Math.max(totalMinutes, 1);
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0 && minutes > 0) return `PT${hours}H${minutes}M`;
+  if (hours > 0) return `PT${hours}H`;
+  return `PT${minutes}M`;
+}
+
+// ---------------------------------------------------------------------------
 // Schema builders
 // ---------------------------------------------------------------------------
 
@@ -451,10 +709,11 @@ function generateArticleSchema(input: StructuredDataInput): ArticleSchema {
   const dateModified = input.dateModified ?? input.datePublished;
   const description = input.description ?? extractExcerpt(input.content);
   const plainBody = stripMarkdown(input.content);
+  const isTech = isTechContent(input.content);
 
   const schema: ArticleSchema = {
     "@context": "https://schema.org",
-    "@type": "Article",
+    "@type": isTech ? "TechArticle" : "Article",
     headline: input.title,
     description,
     author: buildPerson(input.author),
@@ -463,6 +722,12 @@ function generateArticleSchema(input: StructuredDataInput): ArticleSchema {
     dateModified,
     wordCount: plainBody.split(/\s+/).filter(Boolean).length,
   };
+
+  if (isTech) {
+    schema.proficiencyLevel = detectProficiencyLevel(input.content);
+    const deps = extractDependencies(input.content);
+    if (deps) schema.dependencies = deps;
+  }
 
   if (input.url) {
     schema.url = input.url;
@@ -494,6 +759,10 @@ function generateHowToSchema(input: StructuredDataInput): HowToSchema {
   const description = input.description ?? extractExcerpt(input.content);
   const steps = parseHowToSteps(input.content);
 
+  const totalTime = steps.length > 0
+    ? estimateHowToTime(steps, input.content)
+    : undefined;
+
   const schema: HowToSchema = {
     "@context": "https://schema.org",
     "@type": "HowTo",
@@ -505,6 +774,7 @@ function generateHowToSchema(input: StructuredDataInput): HowToSchema {
     step: steps,
   };
 
+  if (totalTime) schema.totalTime = totalTime;
   if (input.url) schema.url = input.url;
   if (input.imageUrl) schema.image = buildImage(input.imageUrl);
 
@@ -538,6 +808,47 @@ function generateFAQPageSchema(input: StructuredDataInput): FAQPageSchema {
   return schema;
 }
 
+/**
+ * Generates a SoftwareApplication JSON-LD schema from software-related content.
+ *
+ * @param input - Post metadata and content.
+ * @returns Complete SoftwareApplicationSchema.
+ */
+function generateSoftwareApplicationSchema(
+  input: StructuredDataInput
+): SoftwareApplicationSchema {
+  const dateModified = input.dateModified ?? input.datePublished;
+  const description = input.description ?? extractExcerpt(input.content);
+
+  const schema: SoftwareApplicationSchema = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: input.title,
+    description,
+    author: buildPerson(input.author),
+    datePublished: input.datePublished,
+    dateModified,
+  };
+
+  const category = detectApplicationCategory(input.content);
+  schema.applicationCategory = category;
+
+  const os = detectOperatingSystem(input.content);
+  if (os) schema.operatingSystem = os;
+
+  // Default to free offer; content mentioning pricing could be extended later
+  schema.offers = {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+  };
+
+  if (input.url) schema.url = input.url;
+  if (input.imageUrl) schema.image = buildImage(input.imageUrl);
+
+  return schema;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -548,7 +859,8 @@ function generateFAQPageSchema(input: StructuredDataInput): FAQPageSchema {
  * Detection priority:
  * 1. FAQPage — if the content has 3+ question-style headings.
  * 2. HowTo — if the content has step-style headings or 3+ numbered list items.
- * 3. Article — default for all other content.
+ * 3. SoftwareApplication — if the content has 3+ software-related indicators.
+ * 4. Article — default for all other content.
  *
  * @param content - Raw markdown content to analyse.
  * @returns The detected schema type.
@@ -556,6 +868,7 @@ function generateFAQPageSchema(input: StructuredDataInput): FAQPageSchema {
 export function detectSchemaType(content: string): SchemaType {
   if (isFAQContent(content)) return "FAQPage";
   if (isHowToContent(content)) return "HowTo";
+  if (isSoftwareContent(content)) return "SoftwareApplication";
   return "Article";
 }
 
@@ -583,6 +896,9 @@ export function generateStructuredData(
       break;
     case "HowTo":
       schema = generateHowToSchema(input);
+      break;
+    case "SoftwareApplication":
+      schema = generateSoftwareApplicationSchema(input);
       break;
     default:
       schema = generateArticleSchema(input);

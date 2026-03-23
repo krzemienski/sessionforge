@@ -7,6 +7,7 @@ export interface SeoMetadata {
   additionalKeywords?: string[] | null;
   ogTitle?: string | null;
   ogDescription?: string | null;
+  ogImage?: string | null;
   twitterTitle?: string | null;
   twitterDescription?: string | null;
   twitterCard?: string | null;

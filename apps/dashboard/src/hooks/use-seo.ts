@@ -83,6 +83,43 @@ export function useGenerateMeta() {
   });
 }
 
+export interface ValidationIssue {
+  severity: "error" | "warning";
+  path: string;
+  message: string;
+}
+
+export interface ValidationResult {
+  id: string;
+  valid: boolean;
+  type: string;
+  issues: ValidationIssue[];
+  errorCount: number;
+  warningCount: number;
+}
+
+export function useValidateStructuredData() {
+  const qc = useQueryClient();
+  return useMutation<
+    ValidationResult,
+    Error,
+    { id: string; structuredData?: Record<string, unknown> }
+  >({
+    mutationFn: async ({ id, structuredData }) => {
+      const res = await fetch(`/api/content/${id}/seo/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ structuredData }),
+      });
+      if (!res.ok) throw new Error("Structured data validation failed");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["seo", vars.id] });
+    },
+  });
+}
+
 export function useUpdateSeo() {
   const qc = useQueryClient();
   return useMutation({

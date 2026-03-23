@@ -10,6 +10,7 @@ import { withApiHandler } from "@/lib/api-handler";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
+import { wrapInScriptTag } from "@/lib/seo/structured-data-generator";
 
 export const dynamic = "force-dynamic";
 
@@ -122,7 +123,9 @@ export async function POST(
         publicationId: integration.hashnodePublicationId,
         title: post.title,
         subtitle: body.subtitle,
-        contentMarkdown: post.markdown,
+        contentMarkdown: post.structuredData
+          ? `${post.markdown}\n\n${wrapInScriptTag(JSON.stringify(post.structuredData, null, 2))}`
+          : post.markdown,
         tags,
         coverImageUrl: body.coverImageUrl,
         seoTitle: body.seoTitle,

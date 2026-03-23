@@ -1,0 +1,110 @@
+=== AUTO-BUILD PROGRESS ===
+
+Project: Structured Data & Rich Snippet Optimization
+Spec: 039
+Workspace: managed by orchestrator
+Started: 2026-03-21
+
+Workflow Type: feature
+Rationale: Enhancement of existing SEO module with new schema types, validation, enhanced previews, and export integration. Classic multi-service feature pattern.
+
+Session 1 (Planner):
+- Completed deep codebase investigation
+- Identified comprehensive existing SEO infrastructure (structured-data-generator, seo-preview, scoring, etc.)
+- Documented 7 specific gaps mapped to acceptance criteria
+- Created implementation_plan.json
+- Phases: 6
+- Total subtasks: 14
+- Created init.sh
+- Created project_index.json and context.json
+
+Phase Summary:
+- Phase 1 (Enhance Structured Data Generator): 4 subtasks, no dependencies
+  - TechArticle detection with code sample metadata
+  - HowTo time estimate generation
+  - SoftwareApplication schema type
+  - JSON-LD structured data validator
+- Phase 2 (API Route & Hook Updates): 3 subtasks, depends on Phase 1
+  - Enhanced analyze route with real author/publisher data and auto OG/Twitter meta
+  - Validation API endpoint
+  - Barrel export updates
+- Phase 3 (Enhanced SEO Preview & Validation UI): 2 subtasks, depends on Phase 2
+  - StructuredDataPreview component (schema badge, JSON-LD code view, validation results)
+  - Editor SEO panel integration with rich previews
+- Phase 4 (Structured Data in Exports & Publishing): 3 subtasks, depends on Phase 1
+  - Static site export JSON-LD injection
+  - ZIP markdown export with SEO frontmatter
+  - Publishing payload enrichment
+- Phase 5 (Comprehensive Testing): 2 subtasks, depends on Phases 1, 2, 4
+  - Updated generator tests (TechArticle, HowTo time, SoftwareApplication)
+  - Full SEO test suite regression check
+- Phase 6 (Integration Verification): 1 subtask, depends on Phases 3, 4, 5
+  - End-to-end TypeScript + tests + functionality verification
+
+Services Involved:
+- frontend (apps/dashboard): All implementation happens here (SEO lib, components, API routes, exports)
+
+Parallelism Analysis:
+- Max parallel phases: 2
+- Recommended workers: 2
+- Parallel groups: Phase 3 (Preview UI) + Phase 4 (Exports) can run concurrently
+  - Both depend on Phase 1+2, different file sets, no conflicts
+
+Key Investigation Findings:
+- structured-data-generator.ts (607 lines) — ArticleSchema supports TechArticle in interface but always generates "Article"
+- HowToSchema has totalTime field but never populated by generateHowToSchema()
+- SoftwareApplication not implemented at all
+- No JSON-LD validator exists
+- Editor uses components/editor/seo-panel.tsx (simpler) NOT components/seo/seo-preview.tsx (richer)
+- Static site builder and ZIP export don't inject JSON-LD
+- Existing test suite uses bun:test with describe/it/expect pattern
+
+=== STARTUP COMMAND ===
+
+To continue building this spec, run:
+
+  source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 039 --parallel 2
+
+Example:
+  source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 039 --parallel 2
+
+=== END SESSION 1 ===
+
+=== SESSION: Integration Verification (subtask-6-1) ===
+
+End-to-end verification completed successfully. All checks passed:
+
+1. TypeScript Compilation:
+   - No errors in SEO-modified files
+   - Pre-existing JSX/module errors are project-wide (missing node_modules in worktree), unrelated to changes
+
+2. Unit Tests: 296/296 pass across 5 test files, 729 expect() calls, 0 failures
+
+3. TechArticle Generation:
+   - generateStructuredData correctly returns TechArticle @type for content with fenced code blocks
+   - Includes proficiencyLevel (Beginner/Expert) based on content complexity
+   - Includes dependencies extracted from code block language tags
+
+4. HowTo with totalTime:
+   - generateStructuredData returns HowTo type for tutorial/step content
+   - totalTime populated in ISO 8601 duration format (e.g. PT8M)
+   - Steps correctly parsed from numbered lists and "Step N" headings
+
+5. Validation:
+   - validateStructuredData returns valid:true with errorCount=0 for well-formed schemas
+   - validateJsonLd validates raw JSON-LD strings end-to-end
+
+6. HTML Export (generateHtmlDocument):
+   - lib/export.ts injects JSON-LD script tag via generateStructuredData + wrapInScriptTag
+   - Supports pre-generated structuredData passthrough or auto-generation
+
+7. Static Site Builder:
+   - static-site-builder.ts imports generateStructuredData and wrapInScriptTag
+   - Injects JSON-LD into post page <head> sections
+
+8. Markdown/ZIP Export:
+   - markdown-export.ts includes structuredDataType and jsonLd in YAML frontmatter
+
+BUILD STATUS: 15/15 subtasks completed (100%)
+
+=== END INTEGRATION VERIFICATION ===

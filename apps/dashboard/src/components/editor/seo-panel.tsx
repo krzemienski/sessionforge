@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle, Sparkles, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, Sparkles, Loader2, ChevronDown, ChevronUp, Eye, Code2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSeoData, useGenerateSeo, useSaveSeo } from "@/hooks/use-content";
 import { computeSeoScore, computeReadabilityScore } from "@/lib/seo";
+import { SeoPreview } from "@/components/seo/seo-preview";
+import { StructuredDataPreview } from "@/components/seo/structured-data-preview";
 import type { SeoMetadata } from "@/lib/seo";
 
 interface SeoPanelProps {
@@ -36,6 +38,45 @@ function metaDescCounterColor(len: number): string {
   if (len >= 145 && len <= 155) return "text-sf-success";
   if (len >= 120) return "text-amber-500";
   return "text-red-500";
+}
+
+function CollapsibleSection({
+  title,
+  icon: Icon,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="border border-sf-border rounded-sf overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center justify-between w-full px-3 py-2.5 text-xs font-medium text-sf-text-secondary hover:bg-sf-bg-tertiary transition-colors select-none"
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-1.5">
+          <Icon size={13} className="text-sf-text-muted" />
+          {title}
+        </span>
+        {open ? (
+          <ChevronUp size={13} className="text-sf-text-muted" />
+        ) : (
+          <ChevronDown size={13} className="text-sf-text-muted" />
+        )}
+      </button>
+      {open && (
+        <div className="border-t border-sf-border p-3">
+          {children}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SeoPanel({ postId, markdown, title, refreshKey }: SeoPanelProps) {
@@ -186,25 +227,6 @@ export function SeoPanel({ postId, markdown, title, refreshKey }: SeoPanelProps)
               />
             </div>
 
-            {/* Social Preview */}
-            {(seoMetadata?.ogTitle || seoMetadata?.ogDescription) && (
-              <div>
-                <p className="text-xs font-medium text-sf-text-secondary mb-2">Social Preview</p>
-                <div className="bg-sf-bg-tertiary border border-sf-border rounded-sf p-3 space-y-1">
-                  {seoMetadata.ogTitle && (
-                    <p className="text-sm font-semibold text-sf-text-primary line-clamp-1">
-                      {seoMetadata.ogTitle}
-                    </p>
-                  )}
-                  {seoMetadata.ogDescription && (
-                    <p className="text-xs text-sf-text-secondary line-clamp-2">
-                      {seoMetadata.ogDescription}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Readability */}
             <div>
               <p className="text-xs font-medium text-sf-text-secondary mb-2">Readability</p>
@@ -227,6 +249,21 @@ export function SeoPanel({ postId, markdown, title, refreshKey }: SeoPanelProps)
                 <p className="text-xs text-sf-text-muted">{liveReadability.suggestions[0]}</p>
               )}
             </div>
+
+            {/* Search & Social Preview — collapsible */}
+            <CollapsibleSection title="Search & Social Preview" icon={Eye}>
+              <SeoPreview
+                postId={postId}
+                metaTitle={metaTitle || undefined}
+                metaDescription={metaDescription || undefined}
+                ogImage={seoMetadata?.ogImage ?? undefined}
+              />
+            </CollapsibleSection>
+
+            {/* Structured Data — collapsible */}
+            <CollapsibleSection title="Structured Data" icon={Code2}>
+              <StructuredDataPreview postId={postId} />
+            </CollapsibleSection>
 
             {/* Empty state — no SEO metadata generated yet */}
             {!seoMetadata && (

@@ -1,5 +1,7 @@
 import JSZip from "jszip";
 import type { contentTypeEnum, postStatusEnum } from "@sessionforge/db";
+import type { SeoMetadata } from "../seo/scoring";
+import type { SchemaType } from "../seo/structured-data-generator";
 
 type ContentType = (typeof contentTypeEnum.enumValues)[number];
 type PostStatus = (typeof postStatusEnum.enumValues)[number];
@@ -16,6 +18,12 @@ export interface ExportablePost {
   platformFooterEnabled?: boolean;
   /** Session duration in minutes — used in the attribution footer text */
   durationMinutes?: number | null;
+  /** Optional SEO metadata to include in frontmatter */
+  seoMetadata?: SeoMetadata | null;
+  /** Optional structured data type (e.g. "Article", "HowTo") */
+  structuredDataType?: SchemaType | null;
+  /** Optional JSON-LD string to embed in frontmatter */
+  jsonLd?: string | null;
 }
 
 export interface ExportFileEntry {
@@ -70,6 +78,23 @@ function buildFilename(post: ExportablePost): string {
   return `${datePrefix}-${slug}.md`;
 }
 
+/**
+ * Escapes a YAML scalar value by wrapping in double quotes and escaping
+ * internal double quotes and backslashes.
+ */
+function yamlString(value: string): string {
+  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+/**
+ * Serialises a string array as an inline YAML sequence, e.g.
+ * ["keyword one", "keyword two"]
+ */
+function yamlStringArray(items: string[]): string {
+  return `[${items.map(yamlString).join(", ")}]`;
+}
+
 export function buildFrontmatter(post: ExportablePost): string {
   const date = post.createdAt
     ? post.createdAt.toISOString()
@@ -82,8 +107,40 @@ export function buildFrontmatter(post: ExportablePost): string {
     "tags: []",
     `type: ${post.contentType}`,
     `status: ${post.status ?? "draft"}`,
-    "---",
   ];
+
+  // SEO metadata fields
+  const seo = post.seoMetadata;
+  if (seo) {
+    if (seo.metaTitle) {
+      lines.push(`meta_title: ${yamlString(seo.metaTitle)}`);
+    }
+    if (seo.metaDescription) {
+      lines.push(`meta_description: ${yamlString(seo.metaDescription)}`);
+    }
+
+    const keywordParts: string[] = [];
+    if (seo.focusKeyword) {
+      keywordParts.push(seo.focusKeyword);
+    }
+    if (seo.additionalKeywords && seo.additionalKeywords.length > 0) {
+      keywordParts.push(...seo.additionalKeywords);
+    }
+    if (keywordParts.length > 0) {
+      lines.push(`keywords: ${yamlStringArray(keywordParts)}`);
+    }
+  }
+
+  // Structured data fields
+  if (post.structuredDataType) {
+    lines.push(`structured_data_type: ${yamlString(post.structuredDataType)}`);
+  }
+
+  if (post.jsonLd) {
+    lines.push(`json_ld: ${yamlString(post.jsonLd)}`);
+  }
+
+  lines.push("---");
 
   return lines.join("\n");
 }
