@@ -37,7 +37,7 @@ Plans:
 - [x] 01-02-PLAN.md -- Tier 1 merges: 037 (WCAG), 041 (mobile), 036 (series filtering)
 - [x] 01-03-PLAN.md -- Tier 2 merges: 035 (versioning), 031 (A/B headlines), 034 (voice calibration)
 - [x] 01-04-PLAN.md -- Tier 3 merges: 039 (structured data), 040 (repurposing), 032 (billing)
-- [ ] 01-05-PLAN.md -- Worktree cleanup, final build validation, convergence report
+- [x] 01-05-PLAN.md -- Worktree cleanup, final build validation, convergence report
 
 ### Phase 2: Docker Hardening
 **Goal**: A working `docker compose up` experience from a clean clone -- Postgres starts, schema auto-migrates, app serves at localhost:3000, healthchecks pass
