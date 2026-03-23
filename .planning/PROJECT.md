@@ -31,8 +31,8 @@ Every feature branch merged cleanly into main, the full stack running identicall
 
 ### Active
 
-- [ ] Full audit of all 41 spec implementations (verify 001-030 merged correctly)
-- [ ] Converge 10 remaining worktrees (031-041) into main with per-merge validation
+- [x] Full audit of all 41 spec implementations (verify 001-030 merged correctly) — Validated in Phase 1: Worktree Convergence
+- [x] Converge 10 remaining worktrees (031-041) into main with per-merge validation — Validated in Phase 1: Worktree Convergence (9 merged, 038 skipped per D-06)
 - [ ] Post editing controls: make longer/shorter, free-text feedback, length presets
 - [ ] Edit history preservation with revert capability
 - [ ] Full Docker containerization with multi-stage builds
@@ -53,7 +53,7 @@ Every feature branch merged cleanly into main, the full stack running identicall
 
 ## Context
 
-**Brownfield state:** The codebase has 31 feature specs (001-041 with gaps). Specs 001-030 appear merged into main already. 10 active worktrees remain for specs 031-041, each with implementation work on separate branches. The .auto-claude/ directory manages specs and task tracking.
+**Current state (post-Phase 1):** All 10 worktrees converged into main. 9 branches merged (037, 041, 036, 035, 031, 034, 039, 040, 032), 1 skipped (038 — test files only). Schema at 3032 lines with all additions. Production build passes. Ready for Docker containerization.
 
 **Active worktrees (031-041):**
 - 031: A/B headline and hook experimentation
