@@ -52,7 +52,7 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Dockerfile fixes (node:22-slim, CLAUDECODE, entrypoint) and migration runner
+- [x] 02-01-PLAN.md -- Dockerfile fixes (node:22-slim, CLAUDECODE, entrypoint) and migration runner
 - [ ] 02-02-PLAN.md -- Compose env var alignment, app healthcheck, Redis detection fix
 - [x] 02-03-PLAN.md -- Comprehensive .env.example documentation
 

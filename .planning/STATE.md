@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-03-23T06:53:40.469Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-23T06:54:29.678Z"
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 ## Current Position
 
 Phase: 02 (docker-hardening) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Plan: 2 of 3
 | Phase 01 P04 | 6min | 3 tasks | 28 files |
 | Phase 01 P05 | 4min | 2 tasks | 1 files |
 | Phase 02 P03 | 1min | 1 tasks | 1 files |
+| Phase 02 P01 | 2min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -74,6 +75,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Used git branch -D for all branch deletions (no remote tracking exists, merges confirmed on local HEAD)
 - [Phase 01]: Phase 1 complete: all 10 worktrees removed, 10 branches deleted, build passes, convergence report produced
 - [Phase 02]: Corrected DATABASE_DRIVER compose file reference: basic docker-compose.yml does not set DATABASE_DRIVER, only self-hosted variant does
+- [Phase 02]: node:22-slim runner base (Node 22 LTS) for Docker production stage
+- [Phase 02]: Inline CJS require() in entrypoint (node -e does not support ESM imports)
+- [Phase 02]: postgres as direct dependency of @sessionforge/db for Docker standalone builds
 
 ### Pending Todos
 
@@ -87,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23T06:53:40.467Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-03-23T06:54:29.676Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
