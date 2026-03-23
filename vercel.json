@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "bun install",
-  "buildCommand": "cd apps/dashboard && bun run build",
+  "buildCommand": "cd packages/db && bunx drizzle-kit push --force --url=$DATABASE_URL_UNPOOLED && cd ../.. && turbo build --filter=@sessionforge/dashboard",
   "outputDirectory": "apps/dashboard/.next",
   "functions": {
     "apps/dashboard/src/app/api/agents/**/*.ts": {
