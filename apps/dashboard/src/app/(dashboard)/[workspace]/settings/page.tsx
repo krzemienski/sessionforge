@@ -13,6 +13,7 @@ import { MembersTab } from "@/components/settings/members-tab";
 import { ApprovalSettingsTab } from "@/components/settings/approval-settings-tab";
 import { PortfolioSettingsForm } from "@/components/settings/portfolio-settings-form";
 import { VoiceProfileTab } from "@/components/settings/voice-profile-tab";
+import { BillingTab } from "@/components/settings/billing-tab";
 
 const TABS = [
   { id: "general", label: "General" },
@@ -26,6 +27,7 @@ const TABS = [
   { id: "backup-restore", label: "Backup & Restore" },
   { id: "approval", label: "Approval" },
   { id: "portfolio", label: "Portfolio" },
+  { id: "billing", label: "Billing" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -113,6 +115,7 @@ export default function SettingsPage() {
       {activeTab === "backup-restore" && <div role="tabpanel" id="tabpanel-settings-backup-restore" aria-labelledby="tab-settings-backup-restore"><BackupRestoreTab workspace={workspace} /></div>}
       {activeTab === "approval" && <div role="tabpanel" id="tabpanel-settings-approval" aria-labelledby="tab-settings-approval"><ApprovalSettingsTab workspace={workspace} /></div>}
       {activeTab === "portfolio" && <div role="tabpanel" id="tabpanel-settings-portfolio" aria-labelledby="tab-settings-portfolio"><PortfolioSettingsForm workspace={workspace} /></div>}
+      {activeTab === "billing" && <div role="tabpanel" id="tabpanel-settings-billing" aria-labelledby="tab-settings-billing"><BillingTab workspace={workspace} /></div>}
     </div>
   );
 }
