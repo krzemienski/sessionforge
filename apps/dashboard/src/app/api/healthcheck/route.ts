@@ -27,7 +27,7 @@ export async function GET() {
   }
 
   // When Redis is not configured (dev mode), don't mark as degraded
-  const redisConfigured = !!process.env.UPSTASH_REDIS_URL;
+  const redisConfigured = !!process.env.UPSTASH_REDIS_URL || !!process.env.REDIS_URL;
   const status = dbOk ? (redisConfigured ? (redisOk ? "ok" : "degraded") : "ok") : "degraded";
 
   return NextResponse.json(
