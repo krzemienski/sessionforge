@@ -25,10 +25,10 @@ Requirements for v0.1.0-alpha release. Each maps to roadmap phases.
 
 ### Docker Containerization
 
-- [ ] **DOCK-01**: User can run `docker compose up` from a clean clone and get the full app with local Postgres
+- [x] **DOCK-01**: User can run `docker compose up` from a clean clone and get the full app with local Postgres
 - [x] **DOCK-02**: User can see Postgres schema auto-migrated on first compose up (no manual db:push)
-- [ ] **DOCK-03**: User can access the app at localhost:3000 with data from local Postgres
-- [ ] **DOCK-04**: User can see all containers pass healthchecks (app + postgres)
+- [x] **DOCK-03**: User can access the app at localhost:3000 with data from local Postgres
+- [x] **DOCK-04**: User can see all containers pass healthchecks (app + postgres)
 - [x] **DOCK-05**: User can build the Docker image independently with `docker build`
 - [x] **DOCK-06**: User can see node:22-slim runner image (not node:20), sharp installed, CLAUDECODE env cleared
 - [x] **DOCK-07**: User can see .env.example documents every required environment variable
@@ -109,10 +109,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONV-04 | Phase 1 | Complete |
 | CONV-05 | Phase 1 | Complete |
 | CONV-06 | Phase 1 | Complete |
-| DOCK-01 | Phase 2 | Pending |
+| DOCK-01 | Phase 2 | Complete |
 | DOCK-02 | Phase 2 | Complete |
-| DOCK-03 | Phase 2 | Pending |
-| DOCK-04 | Phase 2 | Pending |
+| DOCK-03 | Phase 2 | Complete |
+| DOCK-04 | Phase 2 | Complete |
 | DOCK-05 | Phase 2 | Complete |
 | DOCK-06 | Phase 2 | Complete |
 | DOCK-07 | Phase 2 | Complete |
