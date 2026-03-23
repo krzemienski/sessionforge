@@ -16,7 +16,7 @@ Requirements for v0.1.0-alpha release. Each maps to roadmap phases.
 
 ### Worktree Convergence
 
-- [ ] **CONV-01**: User can confirm non-schema worktrees (037, 041, 036) merge cleanly into main with build passing
+- [x] **CONV-01**: User can confirm non-schema worktrees (037, 041, 036) merge cleanly into main with build passing
 - [ ] **CONV-02**: User can confirm schema-touching worktrees (035, 031, 034) merge with Drizzle migration regenerated after each
 - [ ] **CONV-03**: User can confirm cross-cutting worktrees (039, 040, 032) merge with functional validation
 - [ ] **CONV-04**: User can see all worktrees removed and branches deleted after successful merge
@@ -103,7 +103,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUDIT-02 | Phase 1 | Complete |
 | AUDIT-03 | Phase 1 | Complete |
 | AUDIT-04 | Phase 1 | Complete |
-| CONV-01 | Phase 1 | Pending |
+| CONV-01 | Phase 1 | Complete |
 | CONV-02 | Phase 1 | Pending |
 | CONV-03 | Phase 1 | Pending |
 | CONV-04 | Phase 1 | Pending |
