@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 5 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Spec audit (001-030) and merge manifest generation
+- [x] 01-01-PLAN.md -- Spec audit (001-030) and merge manifest generation
 - [ ] 01-02-PLAN.md -- Tier 1 merges: 037 (WCAG), 041 (mobile), 036 (series filtering)
 - [ ] 01-03-PLAN.md -- Tier 2 merges: 035 (versioning), 031 (A/B headlines), 034 (voice calibration)
 - [ ] 01-04-PLAN.md -- Tier 3 merges: 039 (structured data), 040 (repurposing), 032 (billing)

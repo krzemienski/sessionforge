@@ -9,10 +9,10 @@ Requirements for v0.1.0-alpha release. Each maps to roadmap phases.
 
 ### Spec Audit
 
-- [ ] **AUDIT-01**: User can verify specs 001-030 are fully merged into main with no missing code
-- [ ] **AUDIT-02**: User can see a merge manifest ranking remaining worktrees (031-041) by conflict risk
-- [ ] **AUDIT-03**: User can confirm branch 038 is skipped (test file mandate violation, 15K+ lines)
-- [ ] **AUDIT-04**: User can see git diff stats for each remaining worktree against current main
+- [x] **AUDIT-01**: User can verify specs 001-030 are fully merged into main with no missing code
+- [x] **AUDIT-02**: User can see a merge manifest ranking remaining worktrees (031-041) by conflict risk
+- [x] **AUDIT-03**: User can confirm branch 038 is skipped (test file mandate violation, 15K+ lines)
+- [x] **AUDIT-04**: User can see git diff stats for each remaining worktree against current main
 
 ### Worktree Convergence
 
@@ -99,10 +99,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUDIT-01 | Phase 1 | Pending |
-| AUDIT-02 | Phase 1 | Pending |
-| AUDIT-03 | Phase 1 | Pending |
-| AUDIT-04 | Phase 1 | Pending |
+| AUDIT-01 | Phase 1 | Complete |
+| AUDIT-02 | Phase 1 | Complete |
+| AUDIT-03 | Phase 1 | Complete |
+| AUDIT-04 | Phase 1 | Complete |
 | CONV-01 | Phase 1 | Pending |
 | CONV-02 | Phase 1 | Pending |
 | CONV-03 | Phase 1 | Pending |
