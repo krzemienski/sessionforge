@@ -103,6 +103,7 @@
       "dependencies": {
         "@neondatabase/serverless": "^0.10",
         "drizzle-orm": "^0.39",
+        "postgres": "^3.4.8",
       },
       "devDependencies": {
         "@sessionforge/tsconfig": "workspace:*",
