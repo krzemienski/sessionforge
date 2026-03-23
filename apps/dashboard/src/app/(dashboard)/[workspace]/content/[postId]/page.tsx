@@ -7,7 +7,7 @@ import { useDevtoIntegration, useDevtoPublication } from "@/hooks/use-devto";
 import { useGhostIntegration, useGhostPublication } from "@/hooks/use-ghost";
 import { useMediumIntegration, useMediumPublication } from "@/hooks/use-medium";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X, ShieldCheck, MoreHorizontal, Search, BookOpen, Quote, FileText, Image, GitBranch } from "lucide-react";
+import { ArrowLeft, Save, ExternalLink, Send, RefreshCw, Pencil, Columns2, Eye, ChevronDown, Loader2, History, MessageSquare, X, ShieldCheck, MoreHorizontal, Search, BookOpen, Quote, FileText, Image, GitBranch, FlaskConical } from "lucide-react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import dynamic from "next/dynamic";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
@@ -57,6 +57,7 @@ import { RepurposeTracker } from "@/components/content/repurpose-tracker";
 import { useRiskFlags, useResolveFlag } from "@/hooks/use-risk-flags";
 import { useVerification } from "@/hooks/use-verification";
 import type { RiskFlag, VerificationSummary } from "@/lib/verification/types";
+import { useExperiments } from "@/hooks/use-experiments";
 import { useApprovalSettings, useReviewStatus, useSubmitForReview, useWorkspaceMembers } from "@/hooks/use-approval";
 import { useSession } from "@/lib/auth-client";
 
@@ -84,6 +85,11 @@ const RiskFlagsPanel = dynamic(
 
 const PublishGateModal = dynamic(
   () => import("@/components/editor/publish-gate-modal").then((m) => m.PublishGateModal),
+  { ssr: false }
+);
+
+const ExperimentSetupPanel = dynamic(
+  () => import("@/components/experiments/experiment-setup-panel").then((m) => m.ExperimentSetupPanel),
   { ssr: false }
 );
 
@@ -125,6 +131,7 @@ export default function ContentEditorPage() {
   const ghostPublication = useGhostPublication(postId, workspace);
   const mediumIntegration = useMediumIntegration(workspace);
   const mediumPublication = useMediumPublication(postId, workspace);
+  const experiments = useExperiments(workspace, postId);
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState("draft");
@@ -136,6 +143,7 @@ export default function ContentEditorPage() {
   const [citationDensity, setCitationDensity] = useState<CitationDensity>("all");
   const [highlightedCitation, setHighlightedCitation] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showExperiment, setShowExperiment] = useState(false);
   const [badgeEnabled, setBadgeEnabled] = useState(false);
   const [platformFooterEnabled, setPlatformFooterEnabled] = useState(false);
   const [isDevtoModalOpen, setIsDevtoModalOpen] = useState(false);
@@ -346,6 +354,10 @@ export default function ContentEditorPage() {
   const isMediumConnected = mediumIntegration.data?.connected && mediumIntegration.data?.enabled;
   const isAlreadyPublishedMedium = mediumPublication.data?.published === true;
 
+  const activeExperiment = experiments.data?.experiments?.find(
+    (exp: { status: string }) => exp.status === "running" || exp.status === "paused" || exp.status === "scheduled"
+  ) ?? null;
+
   const viewModeButtons: { mode: ViewMode; icon: React.ReactNode; label: string }[] = [
     { mode: "edit", icon: <Pencil size={14} />, label: "Edit" },
     { mode: "split", icon: <Columns2 size={14} />, label: "Split" },
@@ -499,6 +511,28 @@ export default function ContentEditorPage() {
               History
             </button>
           </div>
+
+          {/* A/B Test button */}
+          <button
+            onClick={() => setShowExperiment(true)}
+            className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-sf font-medium text-sm transition-colors ${
+              showExperiment
+                ? "bg-sf-accent text-sf-bg-primary"
+                : "bg-sf-bg-tertiary border border-sf-border text-sf-text-secondary hover:text-sf-text-primary"
+            }`}
+          >
+            <FlaskConical size={16} />
+            A/B Test
+            {activeExperiment && (
+              <span className={cn(
+                "w-2 h-2 rounded-full",
+                activeExperiment.status === "running" ? "bg-green-500 animate-pulse" :
+                activeExperiment.status === "paused" ? "bg-amber-500" :
+                activeExperiment.status === "completed" ? "bg-blue-500" :
+                "bg-sf-text-muted"
+              )} />
+            )}
+          </button>
 
           {/* Mobile-only: overflow "..." button for secondary actions */}
           <button
@@ -1093,6 +1127,15 @@ export default function ContentEditorPage() {
           setSidebarTab("verify");
         }}
         onOverridePublish={handleOverridePublish}
+      />
+
+      {/* A/B Test Experiment Panel */}
+      <ExperimentSetupPanel
+        postId={postId}
+        workspace={workspace}
+        isOpen={showExperiment}
+        onClose={() => setShowExperiment(false)}
+        existingExperiment={activeExperiment ?? undefined}
       />
     </div>
   );

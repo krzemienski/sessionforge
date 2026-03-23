@@ -5,71 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1772676172832,
-      "tag": "0000_dark_yellowjacket",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1772676533209,
-      "tag": "0001_aspiring_clea",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1772681875237,
-      "tag": "0001_minor_malice",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1772676736327,
-      "tag": "0002_huge_meteorite",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1772512800000,
-      "tag": "0002_hashnode_integration",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1772685567678,
-      "tag": "0003_ghost_integration",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1772685432976,
-      "tag": "0004_eminent_moondragon",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1772685393815,
-      "tag": "0002_faithful_landau",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1772685496014,
-      "tag": "0003_dizzy_forge",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1772685583704,
-      "tag": "0004_nifty_mimic",
+      "when": 1774243895694,
+      "tag": "0000_amazing_brood",
       "breakpoints": true
     }
   ]

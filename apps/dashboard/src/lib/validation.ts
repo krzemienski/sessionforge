@@ -180,6 +180,84 @@ export const triggerExecuteSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Experiment schemas (A/B Headline & Hook Testing)
+// ---------------------------------------------------------------------------
+
+export const variantCreateSchema = z.object({
+  label: z.string().min(1, "label is required"),
+  headlineText: z.string().min(1, "headlineText is required"),
+  hookText: z.string().min(1, "hookText is required"),
+  trafficAllocation: z
+    .number({ required_error: "trafficAllocation is required" })
+    .min(0, "trafficAllocation must be >= 0")
+    .max(1, "trafficAllocation must be <= 1"),
+  isControl: z.boolean().optional().default(false),
+});
+
+export const experimentCreateSchema = z.object({
+  workspaceSlug: z.string().min(1, "workspaceSlug is required"),
+  postId: z.string().min(1, "postId is required"),
+  name: z.string().min(1, "name is required"),
+  kpi: z.enum(["views", "likes", "comments", "shares", "engagement_rate"], {
+    errorMap: () => ({
+      message:
+        "kpi must be one of: views, likes, comments, shares, engagement_rate",
+    }),
+  }),
+  startsAt: z.string().datetime().optional(),
+  endsAt: z.string().datetime().optional(),
+  variants: z
+    .array(variantCreateSchema)
+    .min(2, "at least two variants are required"),
+});
+
+export const experimentUpdateSchema = z.object({
+  name: z.string().min(1, "name cannot be empty").optional(),
+  kpi: z
+    .enum(["views", "likes", "comments", "shares", "engagement_rate"], {
+      errorMap: () => ({
+        message:
+          "kpi must be one of: views, likes, comments, shares, engagement_rate",
+      }),
+    })
+    .optional(),
+  status: z
+    .enum(["draft", "running", "paused", "completed", "cancelled"], {
+      errorMap: () => ({
+        message:
+          "status must be one of: draft, running, paused, completed, cancelled",
+      }),
+    })
+    .optional(),
+  startsAt: z.string().datetime().optional().nullable(),
+  endsAt: z.string().datetime().optional().nullable(),
+});
+
+export const variantUpdateSchema = z.object({
+  label: z.string().min(1, "label cannot be empty").optional(),
+  headlineText: z.string().min(1, "headlineText cannot be empty").optional(),
+  hookText: z.string().min(1, "hookText cannot be empty").optional(),
+  trafficAllocation: z
+    .number()
+    .min(0, "trafficAllocation must be >= 0")
+    .max(1, "trafficAllocation must be <= 1")
+    .optional(),
+  isControl: z.boolean().optional(),
+});
+
+export const resultRecordSchema = z.object({
+  variantId: z.string().min(1, "variantId is required"),
+  impressions: z.number().int().nonnegative().optional(),
+  clicks: z.number().int().nonnegative().optional(),
+  views: z.number().int().nonnegative().optional(),
+  likes: z.number().int().nonnegative().optional(),
+  comments: z.number().int().nonnegative().optional(),
+  shares: z.number().int().nonnegative().optional(),
+  engagementRate: z.number().nonnegative().optional(),
+  recordedAt: z.string().datetime().optional(),
+});
+
+// ---------------------------------------------------------------------------
 // Workspace member management schemas
 // ---------------------------------------------------------------------------
 
@@ -239,6 +317,11 @@ export type DevtoPublishInput = z.infer<typeof devtoPublishSchema>;
 export type TriggerCreateInput = z.infer<typeof triggerCreateSchema>;
 export type TriggerUpdateInput = z.infer<typeof triggerUpdateSchema>;
 export type TriggerExecuteInput = z.infer<typeof triggerExecuteSchema>;
+export type VariantCreateInput = z.infer<typeof variantCreateSchema>;
+export type VariantUpdateInput = z.infer<typeof variantUpdateSchema>;
+export type ExperimentCreateInput = z.infer<typeof experimentCreateSchema>;
+export type ExperimentUpdateInput = z.infer<typeof experimentUpdateSchema>;
+export type ResultRecordInput = z.infer<typeof resultRecordSchema>;
 export type MemberInviteInput = z.infer<typeof memberInviteSchema>;
 export type MemberUpdateRoleInput = z.infer<typeof memberUpdateRoleSchema>;
 export type MemberRemoveInput = z.infer<typeof memberRemoveSchema>;

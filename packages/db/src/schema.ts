@@ -244,6 +244,22 @@ export const riskFlagStatusEnum = pgEnum("risk_flag_status", [
   "overridden",
 ]);
 
+export const experimentStatusEnum = pgEnum("experiment_status", [
+  "draft",
+  "running",
+  "paused",
+  "completed",
+  "cancelled",
+]);
+
+export const experimentKpiEnum = pgEnum("experiment_kpi", [
+  "views",
+  "likes",
+  "comments",
+  "shares",
+  "engagement_rate",
+]);
+
 export const approvalDecisionTypeEnum = pgEnum("approval_decision_type", [
   "approved",
   "rejected",
@@ -1920,6 +1936,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   linkedinPublications: many(linkedinPublications),
   socialAnalytics: many(socialAnalytics),
   scanSources: many(scanSources),
+  experiments: many(experiments),
   approvalWorkflow: one(approvalWorkflows),
 }));
 
@@ -2045,6 +2062,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
   }),
   riskFlagResolutions: many(riskFlagResolutions),
   reviewers: many(postReviewers),
+  experiments: many(experiments),
   approvalDecisions: many(approvalDecisions),
   researchItems: many(researchItems),
 }));
@@ -2900,3 +2918,107 @@ export const backupBundlesRelations = relations(backupBundles, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+// ── Experiments (A/B Headline & Hook Testing) ──
+
+export const experiments = pgTable(
+  "experiments",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    postId: text("post_id")
+      .notNull()
+      .references(() => posts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    kpi: experimentKpiEnum("kpi").notNull(),
+    status: experimentStatusEnum("status").default("draft"),
+    startsAt: timestamp("starts_at"),
+    endsAt: timestamp("ends_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("experiments_workspaceId_idx").on(table.workspaceId),
+    index("experiments_postId_idx").on(table.postId),
+    index("experiments_status_idx").on(table.status),
+  ]
+);
+
+export const experimentVariants = pgTable(
+  "experiment_variants",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    experimentId: text("experiment_id")
+      .notNull()
+      .references(() => experiments.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    headlineText: text("headline_text").notNull(),
+    hookText: text("hook_text").notNull(),
+    trafficAllocation: real("traffic_allocation").notNull(),
+    isControl: boolean("is_control").default(false),
+    isWinner: boolean("is_winner").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("experiment_variants_experimentId_idx").on(table.experimentId),
+  ]
+);
+
+export const experimentResults = pgTable(
+  "experiment_results",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    variantId: text("variant_id")
+      .notNull()
+      .references(() => experimentVariants.id, { onDelete: "cascade" }),
+    impressions: integer("impressions").default(0),
+    clicks: integer("clicks").default(0),
+    views: integer("views").default(0),
+    likes: integer("likes").default(0),
+    comments: integer("comments").default(0),
+    shares: integer("shares").default(0),
+    engagementRate: real("engagement_rate").default(0),
+    recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("experiment_results_variantId_idx").on(table.variantId),
+    index("experiment_results_recordedAt_idx").on(table.recordedAt),
+  ]
+);
+
+export const experimentsRelations = relations(experiments, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [experiments.workspaceId],
+    references: [workspaces.id],
+  }),
+  post: one(posts, {
+    fields: [experiments.postId],
+    references: [posts.id],
+  }),
+  variants: many(experimentVariants),
+}));
+
+export const experimentVariantsRelations = relations(
+  experimentVariants,
+  ({ one, many }) => ({
+    experiment: one(experiments, {
+      fields: [experimentVariants.experimentId],
+      references: [experiments.id],
+    }),
+    results: many(experimentResults),
+  })
+);
+
+export const experimentResultsRelations = relations(
+  experimentResults,
+  ({ one }) => ({
+    variant: one(experimentVariants, {
+      fields: [experimentResults.variantId],
+      references: [experimentVariants.id],
+    }),
+  })
+);

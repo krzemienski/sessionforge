@@ -1,1 +1,0 @@
-ALTER TABLE "medium_integrations" ADD COLUMN "medium_user_id" text;
