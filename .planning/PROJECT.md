@@ -35,8 +35,8 @@ Every feature branch merged cleanly into main, the full stack running identicall
 - [x] Converge 10 remaining worktrees (031-041) into main with per-merge validation — Validated in Phase 1: Worktree Convergence (9 merged, 038 skipped per D-06)
 - [ ] Post editing controls: make longer/shorter, free-text feedback, length presets
 - [ ] Edit history preservation with revert capability
-- [ ] Full Docker containerization with multi-stage builds
-- [ ] docker compose up zero-step local dev with local Postgres
+- [x] Full Docker containerization with multi-stage builds — Validated in Phase 2: Docker Hardening (node:22-slim, entrypoint, .dockerignore)
+- [x] docker compose up zero-step local dev with local Postgres — Validated in Phase 2: Docker Hardening (auto-migration, healthchecks, UAT pending runtime test)
 - [ ] Production deployment to Vercel with Neon Postgres
 - [ ] GitHub Actions CI pipeline (lint, build, container verification)
 - [ ] 50+ features validated end-to-end in both local Docker and Vercel production
@@ -53,7 +53,7 @@ Every feature branch merged cleanly into main, the full stack running identicall
 
 ## Context
 
-**Current state (post-Phase 1):** All 10 worktrees converged into main. 9 branches merged (037, 041, 036, 035, 031, 034, 039, 040, 032), 1 skipped (038 — test files only). Schema at 3032 lines with all additions. Production build passes. Ready for Docker containerization.
+**Current state (post-Phase 2):** All worktrees converged, Docker infrastructure hardened. Dockerfile uses node:22-slim with auto-migration entrypoint, CLAUDECODE env cleared. docker-compose.yml has correct env vars and healthchecks. .env.example comprehensively documented. Ready for Vercel + Neon deployment.
 
 **Active worktrees (031-041):**
 - 031: A/B headline and hook experimentation
