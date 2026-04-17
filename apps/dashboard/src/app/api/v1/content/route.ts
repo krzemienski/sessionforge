@@ -2,15 +2,16 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq, desc, and, sql } from "drizzle-orm/sql";
-import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
+import { authenticateApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+export const GET = withV1ApiHandler(async (req) => {
+  const auth = await authenticateApiKey(req as NextRequest);
+  if (!auth) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
 
-  const { searchParams } = req.nextUrl;
+  const { searchParams } = (req as NextRequest).nextUrl;
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 100);
   const offset = parseInt(searchParams.get("offset") ?? "0");
   const contentType = searchParams.get("type");
@@ -51,4 +52,4 @@ export async function GET(req: NextRequest) {
     limit,
     offset,
   });
-}
+});

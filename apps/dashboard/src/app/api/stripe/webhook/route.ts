@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { subscriptions } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import type { PlanTier } from "@/lib/billing/plans";
+import { ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -59,9 +60,17 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get("stripe-signature");
 
   if (!signature) {
+    console.error(
+      JSON.stringify({
+        level: "warn",
+        timestamp: new Date().toISOString(),
+        source: "stripe.webhook",
+        error: "Missing stripe-signature header",
+      }),
+    );
     return NextResponse.json(
-      { error: "Missing stripe-signature header" },
-      { status: 400 }
+      { error: "Missing stripe-signature header", code: ERROR_CODES.BAD_REQUEST },
+      { status: 400 },
     );
   }
 
@@ -69,9 +78,21 @@ export async function POST(req: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      JSON.stringify({
+        level: "warn",
+        timestamp: new Date().toISOString(),
+        source: "stripe.webhook",
+        error: `Webhook signature verification failed: ${message}`,
+      }),
+    );
     return NextResponse.json(
-      { error: `Webhook signature verification failed: ${(err as Error).message}` },
-      { status: 400 }
+      {
+        error: `Webhook signature verification failed: ${message}`,
+        code: ERROR_CODES.BAD_REQUEST,
+      },
+      { status: 400 },
     );
   }
 

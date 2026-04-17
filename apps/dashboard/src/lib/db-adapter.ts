@@ -45,8 +45,13 @@ function createDb(): NeonHttpDatabase<typeof schema> {
     return neonDrizzle({ client: sql, schema });
   } else {
     const sql = postgres(databaseUrl);
-    // Cast to NeonHttpDatabase for consistent typing — both drivers expose
-    // the same query API when schema is provided.
+    // Type-laundering: both drivers expose an identical runtime query API when
+    // schema is provided, but their TS types diverge (internal `_` field
+    // carries driver-specific session types). Consumers type against
+    // NeonHttpDatabase throughout the codebase; casting here keeps call sites
+    // driver-agnostic. Full elimination would require a generic wrapper type
+    // or unifying on a single driver — tracked for Wave 4 or future drizzle
+    // bump.
     return pgDrizzle({ client: sql, schema }) as unknown as NeonHttpDatabase<typeof schema>;
   }
 }
