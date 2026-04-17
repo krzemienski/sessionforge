@@ -12,13 +12,17 @@
     "db:migrate": "bun run src/migrate.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.39",
+    "drizzle-orm": "^0.41",
     "@neondatabase/serverless": "^0.10",
     "postgres": "^3.4.8"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.30",
+    "drizzle-kit": "^0.31.9",
     "typescript": "^5.7",
     "@sessionforge/tsconfig": "workspace:*"
+  },
+  "engines": {
+    "bun": ">=1.2.4",
+    "node": ">=20"
   }
 }
