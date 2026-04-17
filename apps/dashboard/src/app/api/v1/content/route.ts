@@ -2,14 +2,12 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq, desc, and, sql } from "drizzle-orm/sql";
-import { authenticateApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
-import { AppError, ERROR_CODES } from "@/lib/errors";
+import { requireApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export const GET = withV1ApiHandler(async (req) => {
-  const auth = await authenticateApiKey(req as NextRequest);
-  if (!auth) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  const auth = await requireApiKey(req as NextRequest);
 
   const { searchParams } = (req as NextRequest).nextUrl;
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 100);

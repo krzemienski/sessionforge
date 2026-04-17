@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { workspaces } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
-import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
+import { requireApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 import { scanSessionFiles } from "@/lib/sessions/scanner";
 import { parseSessionFile } from "@/lib/sessions/parser";
 import { normalizeSession } from "@/lib/sessions/normalizer";
@@ -12,15 +13,12 @@ import { fireWebhookEvent } from "@/lib/webhooks/events";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-export async function POST(req: NextRequest) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+export const POST = withV1ApiHandler(async (req) => {
+  const auth = await requireApiKey(req as NextRequest);
 
   const body = await req.json().catch(() => ({}));
   const rawLookback = (body as { lookbackDays?: unknown }).lookbackDays;
 
-  // Validate lookbackDays explicitly so callers can't accidentally launch a
-  // full scan by POSTing an empty body. Default 7 days (was 30).
   let lookbackDays = 7;
   if (rawLookback !== undefined) {
     if (
@@ -29,7 +27,10 @@ export async function POST(req: NextRequest) {
       rawLookback < 1 ||
       rawLookback > 365
     ) {
-      return apiError("lookbackDays must be a number between 1 and 365", 400);
+      throw new AppError(
+        "lookbackDays must be a number between 1 and 365",
+        ERROR_CODES.VALIDATION_ERROR,
+      );
     }
     lookbackDays = Math.floor(rawLookback);
   }
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
     .limit(1);
 
   if (!workspace.length) {
-    return apiError("No workspace found", 404);
+    throw new AppError("No workspace found", ERROR_CODES.NOT_FOUND);
   }
 
   const ws = workspace[0];
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     files.map(async (meta) => {
       const parsed = await parseSessionFile(meta.filePath);
       return normalizeSession(meta, parsed);
-    })
+    }),
   );
 
   const result = await indexSessions(ws.id, normalized);
@@ -75,4 +76,4 @@ export async function POST(req: NextRequest) {
     errors: result.errors,
     durationMs,
   });
-}
+});

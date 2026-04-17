@@ -1,3 +1,6 @@
+import { NextResponse } from "next/server";
+import { withV1ApiHandler } from "@/lib/api-auth";
+
 export const dynamic = "force-dynamic";
 
 const openApiDocument = {
@@ -39,7 +42,26 @@ const openApiDocument = {
         properties: {
           data: { type: "null" },
           meta: { type: "object" },
-          error: { type: "string", description: "Human-readable error message" },
+          error: {
+            type: "object",
+            properties: {
+              message: {
+                type: "string",
+                description: "Human-readable error message",
+              },
+              code: {
+                type: "string",
+                description:
+                  "Stable machine-readable error code (UNAUTHORIZED, NOT_FOUND, VALIDATION_ERROR, BAD_REQUEST, INTERNAL_ERROR, FORBIDDEN)",
+              },
+              details: {
+                type: "object",
+                description:
+                  "Optional structured validation details (e.g. Zod flatten output). Present for VALIDATION_ERROR responses.",
+              },
+            },
+            required: ["message", "code"],
+          },
         },
         required: ["error"],
       },
@@ -916,10 +938,6 @@ const openApiDocument = {
   },
 };
 
-export function GET() {
-  return new Response(JSON.stringify(openApiDocument), {
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-}
+export const GET = withV1ApiHandler(async () => {
+  return NextResponse.json(openApiDocument);
+});

@@ -30,6 +30,18 @@ export async function authenticateApiKey(request: Request) {
   return { workspace: apiKey.workspace, apiKeyId: apiKey.id };
 }
 
+/**
+ * API-key auth guard for v1 routes: returns the authenticated context or
+ * throws `AppError("Unauthorized", UNAUTHORIZED)` so withV1ApiHandler
+ * normalizes the response. Collapses the `authenticateApiKey + null check`
+ * prologue every v1 route used to duplicate.
+ */
+export async function requireApiKey(request: Request) {
+  const auth = await authenticateApiKey(request);
+  if (!auth) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
+  return auth;
+}
+
 /** Public v1 envelope for successful responses. */
 export function apiResponse<T>(
   data: T,
@@ -85,17 +97,24 @@ export async function parseV1Body<T>(
   return parsed.data;
 }
 
-type V1HandlerFn = (req: Request) => Promise<NextResponse>;
+type V1HandlerFn<Ctx = undefined> = Ctx extends undefined
+  ? (req: Request) => Promise<NextResponse>
+  : (req: Request, ctx: Ctx) => Promise<NextResponse>;
 
 /**
  * Wraps a public v1 route handler so every thrown AppError / unknown error is
  * normalized to the `{data, meta, error: {message, code, details?}}` envelope.
  * Callers stop needing per-route try/catch + per-route error branching.
+ *
+ * Supports both static routes `(req) => ...` and Next 15 dynamic routes
+ * `(req, { params }) => ...` — the context arg (if any) is forwarded verbatim.
  */
-export function withV1ApiHandler(handler: V1HandlerFn): V1HandlerFn {
-  return async (req: Request) => {
+export function withV1ApiHandler<Ctx = undefined>(
+  handler: V1HandlerFn<Ctx>,
+): V1HandlerFn<Ctx> {
+  const wrapped = async (req: Request, ctx?: Ctx): Promise<NextResponse> => {
     try {
-      return await handler(req);
+      return await (handler as (req: Request, ctx?: Ctx) => Promise<NextResponse>)(req, ctx);
     } catch (err) {
       if (err instanceof AppError) {
         const errorObj: Record<string, unknown> = {
@@ -110,7 +129,6 @@ export function withV1ApiHandler(handler: V1HandlerFn): V1HandlerFn {
           { status: err.statusCode },
         );
       }
-      // Non-AppError: log for operators, opaque message to clients.
       console.error(
         JSON.stringify({
           level: "error",
@@ -124,4 +142,5 @@ export function withV1ApiHandler(handler: V1HandlerFn): V1HandlerFn {
       return apiError("Internal server error", 500, ERROR_CODES.INTERNAL_ERROR);
     }
   };
+  return wrapped as V1HandlerFn<Ctx>;
 }

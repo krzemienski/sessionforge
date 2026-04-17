@@ -2,15 +2,14 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { claudeSessions } from "@sessionforge/db";
 import { eq, desc, asc, gte, and, sql } from "drizzle-orm/sql";
-import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
+import { requireApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+export const GET = withV1ApiHandler(async (req) => {
+  const auth = await requireApiKey(req as NextRequest);
 
-  const { searchParams } = req.nextUrl;
+  const { searchParams } = (req as NextRequest).nextUrl;
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 100);
   const offset = parseInt(searchParams.get("offset") ?? "0");
   const sort = searchParams.get("sort") ?? "startedAt";
@@ -61,4 +60,4 @@ export async function GET(req: NextRequest) {
     limit,
     offset,
   });
-}
+});

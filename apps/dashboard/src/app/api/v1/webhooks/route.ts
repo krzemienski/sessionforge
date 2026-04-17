@@ -3,13 +3,13 @@ import { randomBytes } from "crypto";
 import { db } from "@/lib/db";
 import { webhookEndpoints } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
-import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
+import { requireApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+export const GET = withV1ApiHandler(async (req) => {
+  const auth = await requireApiKey(req as NextRequest);
 
   const endpoints = await db.query.webhookEndpoints.findMany({
     where: eq(webhookEndpoints.workspaceId, auth.workspace.id),
@@ -24,17 +24,25 @@ export async function GET(req: NextRequest) {
   });
 
   return apiResponse(endpoints);
-}
+});
 
-export async function POST(req: NextRequest) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+export const POST = withV1ApiHandler(async (req) => {
+  const auth = await requireApiKey(req as NextRequest);
 
-  const body = await req.json();
-  const { url, events } = body as { url?: string; events?: string[] };
+  let body: { url?: string; events?: string[] };
+  try {
+    body = (await req.json()) as { url?: string; events?: string[] };
+  } catch {
+    throw new AppError("Invalid JSON body", ERROR_CODES.BAD_REQUEST);
+  }
+
+  const { url, events } = body;
 
   if (!url || !events || !Array.isArray(events) || events.length === 0) {
-    return apiError("url and events (non-empty array) are required", 400);
+    throw new AppError(
+      "url and events (non-empty array) are required",
+      ERROR_CODES.VALIDATION_ERROR,
+    );
   }
 
   const secret = randomBytes(32).toString("hex");
@@ -59,6 +67,6 @@ export async function POST(req: NextRequest) {
       createdAt: endpoint.createdAt,
     },
     {},
-    201
+    201,
   );
-}
+});

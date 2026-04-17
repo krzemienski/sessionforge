@@ -2,18 +2,17 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { webhookEndpoints } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
-import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
+import { requireApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+type RouteCtx = { params: Promise<{ id: string }> };
 
-  const { id } = await params;
+export const PATCH = withV1ApiHandler<RouteCtx>(async (req, ctx) => {
+  const auth = await requireApiKey(req as NextRequest);
+
+  const { id } = await ctx.params;
   const wsId = auth.workspace.id;
 
   const existing = await db.query.webhookEndpoints.findFirst({
@@ -21,20 +20,27 @@ export async function PATCH(
   });
 
   if (!existing) {
-    return apiError("Webhook endpoint not found", 404);
+    throw new AppError("Webhook endpoint not found", ERROR_CODES.NOT_FOUND);
   }
 
   let body: { url?: string; events?: string[]; enabled?: boolean };
   try {
-    body = await req.json();
+    body = (await req.json()) as {
+      url?: string;
+      events?: string[];
+      enabled?: boolean;
+    };
   } catch {
-    return apiError("Invalid JSON body", 400);
+    throw new AppError("Invalid JSON body", ERROR_CODES.BAD_REQUEST);
   }
 
   const { url, events, enabled } = body;
 
   if (events !== undefined && (!Array.isArray(events) || events.length === 0)) {
-    return apiError("events must be a non-empty array", 400);
+    throw new AppError(
+      "events must be a non-empty array",
+      ERROR_CODES.VALIDATION_ERROR,
+    );
   }
 
   const updates: {
@@ -48,7 +54,10 @@ export async function PATCH(
   if (enabled !== undefined) updates.enabled = enabled;
 
   if (Object.keys(updates).length === 0) {
-    return apiError("No valid fields to update", 400);
+    throw new AppError(
+      "No valid fields to update",
+      ERROR_CODES.VALIDATION_ERROR,
+    );
   }
 
   const [updated] = await db
@@ -65,16 +74,12 @@ export async function PATCH(
     createdAt: updated.createdAt,
     updatedAt: updated.updatedAt,
   });
-}
+});
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+export const DELETE = withV1ApiHandler<RouteCtx>(async (req, ctx) => {
+  const auth = await requireApiKey(req as NextRequest);
 
-  const { id } = await params;
+  const { id } = await ctx.params;
   const wsId = auth.workspace.id;
 
   const existing = await db.query.webhookEndpoints.findFirst({
@@ -82,10 +87,10 @@ export async function DELETE(
   });
 
   if (!existing) {
-    return apiError("Webhook endpoint not found", 404);
+    throw new AppError("Webhook endpoint not found", ERROR_CODES.NOT_FOUND);
   }
 
   await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, id));
 
   return apiResponse({ deleted: true });
-}
+});

@@ -2,20 +2,19 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
-import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
+import { requireApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 import { updatePost } from "@/lib/ai/tools/post-manager";
 import { fireWebhookEvent } from "@/lib/webhooks/events";
 
 export const dynamic = "force-dynamic";
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+type RouteCtx = { params: Promise<{ id: string }> };
 
-  const { id } = await params;
+export const PATCH = withV1ApiHandler<RouteCtx>(async (req, ctx) => {
+  const auth = await requireApiKey(req as NextRequest);
+
+  const { id } = await ctx.params;
   const wsId = auth.workspace.id;
 
   const existing = await db.query.posts.findFirst({
@@ -23,38 +22,39 @@ export async function PATCH(
   });
 
   if (!existing) {
-    return apiError("Post not found", 404);
+    throw new AppError("Post not found", ERROR_CODES.NOT_FOUND);
   }
 
   let body: { title?: string; markdown?: string; status?: string };
   try {
     body = await req.json();
   } catch {
-    return apiError("Invalid JSON body", 400);
+    throw new AppError("Invalid JSON body", ERROR_CODES.BAD_REQUEST);
   }
 
   const { title, markdown, status } = body;
 
+  let updated;
   try {
-    const updated = await updatePost(wsId, id, {
+    updated = await updatePost(wsId, id, {
       title,
       markdown,
       status: status as Parameters<typeof updatePost>[2]["status"],
     });
-
-    if (status === "published") {
-      fireWebhookEvent(wsId, "content.published", {
-        postId: id,
-        title: updated.title,
-        contentType: updated.contentType,
-      });
-    }
-
-    return apiResponse(updated, {});
   } catch (error) {
-    return apiError(
+    throw new AppError(
       error instanceof Error ? error.message : "Update failed",
-      500
+      ERROR_CODES.INTERNAL_ERROR,
     );
   }
-}
+
+  if (status === "published") {
+    fireWebhookEvent(wsId, "content.published", {
+      postId: id,
+      title: updated.title,
+      contentType: updated.contentType,
+    });
+  }
+
+  return apiResponse(updated, {});
+});

@@ -8,7 +8,8 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { posts } from "@sessionforge/db";
 import { desc, eq } from "drizzle-orm/sql";
-import { authenticateApiKey, apiResponse, apiError } from "@/lib/api-auth";
+import { requireApiKey, apiResponse, withV1ApiHandler } from "@/lib/api-auth";
+import { AppError, ERROR_CODES } from "@/lib/errors";
 import { BLOG_TECHNICAL_PROMPT } from "@/lib/ai/prompts/blog/technical";
 import { BLOG_TUTORIAL_PROMPT } from "@/lib/ai/prompts/blog/tutorial";
 import { BLOG_CONVERSATIONAL_PROMPT } from "@/lib/ai/prompts/blog/conversational";
@@ -50,28 +51,30 @@ const CONTENT_TYPE_CONFIG: Record<
   },
 };
 
-export async function POST(req: NextRequest) {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return apiError("Unauthorized", 401);
+export const POST = withV1ApiHandler(async (req) => {
+  const auth = await requireApiKey(req as NextRequest);
 
   let body: { insightId?: string; contentType?: string; tone?: string };
   try {
     body = await req.json();
   } catch {
-    return apiError("Invalid JSON body", 400);
+    throw new AppError("Invalid JSON body", ERROR_CODES.BAD_REQUEST);
   }
 
   const { insightId, contentType, tone } = body;
 
   if (!insightId || !contentType) {
-    return apiError("insightId and contentType are required", 400);
+    throw new AppError(
+      "insightId and contentType are required",
+      ERROR_CODES.VALIDATION_ERROR,
+    );
   }
 
   const config = CONTENT_TYPE_CONFIG[contentType];
   if (!config) {
-    return apiError(
+    throw new AppError(
       `Invalid contentType. Must be one of: ${Object.keys(CONTENT_TYPE_CONFIG).join(", ")}`,
-      400,
+      ERROR_CODES.VALIDATION_ERROR,
     );
   }
 
@@ -83,24 +86,21 @@ export async function POST(req: NextRequest) {
   const mcpServer = createAgentMcpServer(config.agentType, wsId);
 
   try {
-    await runAgent(
-      {
-        agentType: config.agentType,
-        workspaceId: wsId,
-        systemPrompt,
-        userMessage,
-        mcpServer,
-        trackRun: false,
-      },
-    );
+    await runAgent({
+      agentType: config.agentType,
+      workspaceId: wsId,
+      systemPrompt,
+      userMessage,
+      mcpServer,
+      trackRun: false,
+    });
   } catch (error) {
-    return apiError(
+    throw new AppError(
       error instanceof Error ? error.message : "Content generation failed",
-      500,
+      ERROR_CODES.INTERNAL_ERROR,
     );
   }
 
-  // Query the DB for the most recently created post
   let createdPost: { id: string; title: string; contentType: string } | null = null;
   try {
     const [latest] = await db
@@ -118,11 +118,14 @@ export async function POST(req: NextRequest) {
       createdPost = latest;
     }
   } catch {
-    // DB query failure
+    // DB query failure — fall through to not-found error below
   }
 
   if (!createdPost) {
-    return apiError("Content generation completed but no post was created", 500);
+    throw new AppError(
+      "Content generation completed but no post was created",
+      ERROR_CODES.INTERNAL_ERROR,
+    );
   }
 
   void fireWebhookEvent(wsId, "content.generated", {
@@ -139,4 +142,4 @@ export async function POST(req: NextRequest) {
     },
     {},
   );
-}
+});
