@@ -3,22 +3,18 @@
   "version": "0.1.0-alpha",
   "private": true,
   "type": "module",
+  "engines": {
+    "bun": ">=1.2.4",
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "test": "vitest run",
-    "test:unit": "vitest run --exclude 'tests/e2e/**'",
-    "test:integration": "vitest run tests/integration",
-    "test:a11y": "playwright test tests/a11y/",
-    "test:e2e": "playwright test",
-    "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest"
+    "lint": "next lint"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.63",
-    "@anthropic-ai/sdk": "^0.78.0",
     "@better-auth/drizzle-adapter": "^1.5.3",
     "@lexical/code": "^0.41.0",
     "@lexical/link": "^0.41.0",
@@ -37,7 +33,6 @@
     "cron-parser": "^5.5.0",
     "diff": "^7.0.0",
     "drizzle-orm": "^0.39",
-    "highlight.js": "^11.11.1",
     "ioredis": "^5",
     "jszip": "^3.10.1",
     "lexical": "^0.41.0",
@@ -60,33 +55,22 @@
     "ssh2": "^1.17.0",
     "stripe": "^17",
     "tailwind-merge": "^3.5.0",
-    "zod": "^3.24.0",
-    "zustand": "^5.0.11"
+    "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@lexical/headless": "^0.41.0",
-    "@axe-core/playwright": "^4.10.1",
-    "@playwright/test": "^1.58.2",
     "@sessionforge/tsconfig": "workspace:*",
     "@tailwindcss/postcss": "^4",
-    "@testing-library/react": "^16.0.0",
-    "@testing-library/user-event": "^14.5.2",
     "@types/diff": "^7.0.0",
-    "@types/jszip": "^3.4.1",
     "@types/node": "^22",
     "@types/prismjs": "^1.26.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/sharp": "^0.32.0",
     "@types/ssh2": "^1.15.5",
     "drizzle-kit": "^0.31.9",
     "eslint": "^8.0.0",
     "eslint-config-next": "^15.0.0",
-    "happy-dom": "^15.0.0",
-    "msw": "^2.7.0",
     "postcss": "^8",
     "tailwindcss": "^4",
-    "typescript": "^5.7",
-    "vitest": "^4.0.0"
+    "typescript": "^5.7"
   }
 }

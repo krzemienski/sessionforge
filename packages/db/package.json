@@ -12,7 +12,7 @@
     "db:migrate": "bun run src/migrate.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.41",
+    "drizzle-orm": "^0.39",
     "@neondatabase/serverless": "^0.10",
     "postgres": "^3.4.8"
   },

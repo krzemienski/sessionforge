@@ -82,7 +82,7 @@ export async function GET(
   <channel>
     <title>${escapeXml(workspace.name)}</title>
     <link>${escapeXml(portfolioUrl)}</link>
-    <description>${escapeXml(portfolio.bio || `${workspace.name}'s portfolio`)}</description>
+    <description>${escapeXml(portfolio?.bio || `${workspace.name}'s portfolio`)}</description>
     <language>en</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
     <atom:link href="${escapeXml(`${baseUrl}/api/public/portfolio/${workspaceSlug}/rss`)}" rel="self" type="application/rss+xml" />
