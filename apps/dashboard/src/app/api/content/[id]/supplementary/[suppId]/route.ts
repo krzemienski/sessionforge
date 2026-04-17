@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
@@ -13,7 +14,8 @@ import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
 
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 export const dynamic = "force-dynamic";
 

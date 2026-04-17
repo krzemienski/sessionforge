@@ -9,7 +9,7 @@
  * based on cronExpression + lastRunAt, and fires executePipeline().
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db } from "@/lib/db";
 import {
   automationRuns,
@@ -114,8 +114,27 @@ export async function GET(request: Request) {
       })
       .returning();
 
-    // Fire-and-forget (same pattern as execute route)
-    executePipeline(newRun.id, trigger, workspace);
+    // Keep the lambda alive until the pipeline finishes. Without `after()`,
+    // Vercel terminates the response handler as soon as `return NextResponse.json`
+    // runs, silently truncating long-running pipelines. `after()` runs on the
+    // Vercel runtime's post-response hook; in local/self-hosted runtimes it
+    // falls back to running synchronously in-request.
+    after(async () => {
+      try {
+        await executePipeline(newRun.id, trigger, workspace);
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            level: "error",
+            timestamp: new Date().toISOString(),
+            source: "cron.automation.executePipeline",
+            runId: newRun.id,
+            triggerId: trigger.id,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        );
+      }
+    });
 
     results.push({ triggerId: trigger.id, name: trigger.name, status: "started", runId: newRun.id });
     console.log(`[cron] Started pipeline for trigger "${trigger.name}" (${trigger.id}), run ${newRun.id}`);

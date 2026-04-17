@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * Git repository analyzer.
  * Shallow-clones a public repo to a temp directory, extracts structure,
@@ -11,7 +12,8 @@ import crypto from "crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
 // Allow Claude SDK subprocess spawning even when running inside a Claude Code session
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 export interface RepoAnalysis {
   url: string;

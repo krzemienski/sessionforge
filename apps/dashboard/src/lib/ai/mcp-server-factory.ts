@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * MCP server factory for AI agents.
  * Converts existing tool definitions and handlers into Agent SDK
@@ -10,7 +11,8 @@
 
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 import { z } from "zod";
 

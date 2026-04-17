@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * Style learner agent that analyzes published posts and their AI drafts
  * to build a writing style profile. Uses the Agent SDK for text generation
@@ -7,7 +8,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { instrumentQuery } from "@/lib/observability/instrument-query";
 
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 import { db } from "@/lib/db";
 import { posts, writingStyleProfiles } from "@sessionforge/db";

@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * SEO metadata generator using the Agent SDK.
  * Analyzes blog post content and generates optimized metadata (no tools needed).
@@ -7,7 +8,8 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
 import { instrumentQuery } from "@/lib/observability/instrument-query";
 
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 import type { SeoMetadata } from "./scoring";
 

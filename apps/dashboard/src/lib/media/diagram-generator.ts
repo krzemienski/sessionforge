@@ -1,8 +1,10 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
 import { instrumentQuery } from "@/lib/observability/instrument-query";
 
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

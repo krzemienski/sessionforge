@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * Evidence classifier — uses Anthropic SDK to classify session search results
  * into typed evidence categories relevant to a given topic.
@@ -9,7 +10,8 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getHaikuModel } from "@/lib/ai/orchestration/model-selector";
 import { instrumentQuery } from "@/lib/observability/instrument-query";
 
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 import type { SearchHit } from "./miner";
 
 // ── Types ──────────────────────────────────────────────────────────────────

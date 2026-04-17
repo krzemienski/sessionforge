@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * AI-powered meta suggestions generator.
  * Uses the Agent SDK to analyse post content and produce optimised
@@ -8,7 +9,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { getSonnetModel } from "../ai/orchestration/model-selector";
 
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 /** Structured meta suggestions produced by the AI generator. */
 export interface MetaSuggestions {

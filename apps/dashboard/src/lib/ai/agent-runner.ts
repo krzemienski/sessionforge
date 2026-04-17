@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * Agent runner utility for the Agent SDK.
  * Replaces the repeated pattern of client.messages.create() + manual tool
@@ -21,7 +22,8 @@ import { generateTraceId } from "@/lib/observability/trace-context";
 
 // Allow the Agent SDK to spawn Claude subprocesses even when running
 // inside a Claude Code session (which sets CLAUDECODE env var).
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 type McpServer = ReturnType<typeof import("@anthropic-ai/claude-agent-sdk").createSdkMcpServer>;
 
@@ -47,6 +49,12 @@ export interface AgentRunOptions {
   allowedTools?: string[];
   /** Trace ID for observability correlation. Auto-generated if absent. */
   traceId?: string;
+  /**
+   * AbortSignal forwarded from the HTTP request. When the client disconnects
+   * mid-stream, the for-await loop exits early, halting further Claude token
+   * consumption and marking the agent run as failed with errorMessage="aborted".
+   */
+  abortSignal?: AbortSignal;
 }
 
 /** Result from a non-streaming agent run. */
@@ -75,7 +83,19 @@ async function createAgentRunRecord(
       })
       .returning();
     return run.id;
-  } catch {
+  } catch (err) {
+    // Best-effort observability: run tracking failure should NOT block agent
+    // execution, but the failure itself must be visible in logs (H11).
+    console.error(
+      JSON.stringify({
+        level: "error",
+        timestamp: new Date().toISOString(),
+        source: "agent-runner.createAgentRunRecord",
+        workspaceId,
+        agentType,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    );
     return undefined;
   }
 }
@@ -90,8 +110,18 @@ async function updateAgentRun(
       .update(agentRuns)
       .set({ status, completedAt: new Date(), ...extra })
       .where(eq(agentRuns.id, agentRunId));
-  } catch {
-    // DB update failure should not block agent execution
+  } catch (err) {
+    // Log but do not throw — agent run record is observability, not critical path (H11).
+    console.error(
+      JSON.stringify({
+        level: "error",
+        timestamp: new Date().toISOString(),
+        source: "agent-runner.updateAgentRun",
+        agentRunId,
+        status,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    );
   }
 }
 
@@ -151,6 +181,7 @@ export function runAgentStreaming(
       send("status", { phase: "starting", message: "Initializing agent...", traceId });
 
       let finalText = "";
+      let aborted = false;
 
       for await (const message of query({
         prompt: opts.userMessage,
@@ -162,6 +193,11 @@ export function runAgentStreaming(
           allowedTools: opts.allowedTools ?? ["mcp__tools__*"],
         },
       })) {
+        // Honor client disconnect — halt Claude token consumption (C5).
+        if (opts.abortSignal?.aborted) {
+          aborted = true;
+          break;
+        }
         const msg = message as Record<string, unknown>;
 
         switch (msg.type) {
@@ -208,12 +244,22 @@ export function runAgentStreaming(
         }
       }
 
-      if (agentRunId) {
-        await updateAgentRun(agentRunId, "completed");
-      }
+      if (aborted) {
+        if (agentRunId) {
+          await updateAgentRun(agentRunId, "failed", {
+            errorMessage: "Client aborted request",
+          });
+        }
+        emitObs("agent:error", { error: "aborted", aborted: true });
+        send("error", { message: "Client disconnected", aborted: true });
+      } else {
+        if (agentRunId) {
+          await updateAgentRun(agentRunId, "completed");
+        }
 
-      emitObs("agent:complete", { textLength: finalText.length });
-      send("complete", { message: "Agent completed successfully", traceId });
+        emitObs("agent:complete", { textLength: finalText.length });
+        send("complete", { message: "Agent completed successfully", traceId });
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -282,6 +328,15 @@ export async function runAgent(
         allowedTools: opts.allowedTools ?? ["mcp__tools__*"],
       },
     })) {
+      if (opts.abortSignal?.aborted) {
+        if (agentRunId) {
+          await updateAgentRun(agentRunId, "failed", {
+            errorMessage: "Client aborted request",
+          });
+        }
+        emitObs("agent:error", { error: "aborted", aborted: true });
+        throw new Error("Client aborted request");
+      }
       const msg = message as Record<string, unknown>;
 
       if (msg.type === "assistant") {

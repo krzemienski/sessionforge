@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * Source assembler.
  * Combines user brief, extracted URLs, repo analyses, and session evidence
@@ -7,7 +8,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
 // Allow Claude SDK subprocess spawning even when running inside a Claude Code session
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 import type { ContentBrief } from "./text-processor";
 import type { ParsedURL } from "./url-extractor";

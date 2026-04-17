@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * Voice calibration wizard agent that analyzes raw writing samples (not AI draft diffs)
  * to build a baseline voice profile. Uses the Agent SDK for text generation
@@ -7,7 +8,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { instrumentQuery } from "@/lib/observability/instrument-query";
 
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 import { db } from "@/lib/db";
 import { writingStyleProfiles } from "@sessionforge/db";

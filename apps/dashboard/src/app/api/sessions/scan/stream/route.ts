@@ -101,6 +101,17 @@ export async function GET(req: NextRequest) {
         obs.stage("parsing-sessions", { total });
         const normalized = [];
         for (let i = 0; i < files.length; i++) {
+          // Honor client disconnect: stop scanning, skip indexing, close stream.
+          if (req.signal.aborted) {
+            obs.error(new Error("Client aborted scan"));
+            enqueue({
+              type: "aborted",
+              message: "Client disconnected",
+              scanned: i,
+              total,
+            });
+            return;
+          }
           const meta = files[i];
           obs.progress(i + 1, total, { sessionId: meta.sessionId });
           enqueue({

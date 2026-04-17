@@ -1,3 +1,4 @@
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 /**
  * Text processor.
  * Uses Claude to extract structured content brief from free-form user text.
@@ -6,7 +7,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
 // Allow Claude SDK subprocess spawning even when running inside a Claude Code session
-delete process.env.CLAUDECODE;
+
+ensureCliAuth();
 
 export interface ContentBrief {
   thesis: string;

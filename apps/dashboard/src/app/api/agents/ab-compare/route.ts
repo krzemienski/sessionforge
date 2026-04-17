@@ -10,8 +10,9 @@ import { checkQuota, recordUsage } from "@/lib/billing/usage";
 import { getStyleProfileContext } from "@/lib/style/profile-injector";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
+import { ensureCliAuth } from "@/lib/ai/ensure-cli-auth";
 
-delete process.env.CLAUDECODE;
+ensureCliAuth();
 
 export const dynamic = "force-dynamic";
 
