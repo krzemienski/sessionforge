@@ -298,7 +298,14 @@ export async function GET(
     );
     return new Response(xml, {
       status: 200,
-      headers: { "Content-Type": "application/atom+xml; charset=utf-8" },
+      headers: {
+        "Content-Type": "application/atom+xml; charset=utf-8",
+        // Cache at CDN for 5 minutes, serve stale for 1 hour while revalidating.
+        // Feed consumers (readers) poll every few minutes; this collapses the
+        // Promise.all(.map(async => marked())) cost to once per 5-minute window.
+        "Cache-Control":
+          "public, s-maxage=300, stale-while-revalidate=3600",
+      },
     });
   }
 
@@ -314,6 +321,10 @@ export async function GET(
   );
   return new Response(xml, {
     status: 200,
-    headers: { "Content-Type": "application/rss+xml; charset=utf-8" },
+    headers: {
+      "Content-Type": "application/rss+xml; charset=utf-8",
+      "Cache-Control":
+        "public, s-maxage=300, stale-while-revalidate=3600",
+    },
   });
 }

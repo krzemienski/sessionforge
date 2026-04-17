@@ -20,6 +20,9 @@
  *   - `send(event, data)` — enqueues an SSE frame for the given event name and payload.
  *   - `close()` — emits a final `done` event and closes the stream.
  */
+/** Interval in milliseconds between SSE keep-alive (comment) frames. */
+const SSE_HEARTBEAT_MS = 15_000;
+
 export function createSSEStream(): {
   stream: ReadableStream;
   writer: WritableStreamDefaultWriter<string>;
@@ -29,10 +32,29 @@ export function createSSEStream(): {
 } {
   const encoder = new TextEncoder();
   let controller: ReadableStreamDefaultController<Uint8Array>;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+  const enqueueRaw = (chunk: string) => {
+    try {
+      controller.enqueue(encoder.encode(chunk));
+    } catch {
+      // Stream may already be closed
+    }
+  };
 
   const stream = new ReadableStream<Uint8Array>({
     start(c) {
       controller = c;
+      // Emit an SSE comment every 15s so CDNs / proxies don't idle-close
+      // long-running agent streams. Comment frames are ignored by EventSource
+      // clients and do not trigger message handlers (M7).
+      heartbeat = setInterval(() => enqueueRaw(": ping\n\n"), SSE_HEARTBEAT_MS);
+    },
+    cancel() {
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
     },
   });
 
@@ -47,6 +69,10 @@ export function createSSEStream(): {
 
   const close = () => {
     try {
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
       send("done", "[DONE]");
       controller.close();
     } catch {
