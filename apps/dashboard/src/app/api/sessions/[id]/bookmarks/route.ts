@@ -7,6 +7,7 @@ import { eq, and } from "drizzle-orm/sql";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
+import { withApiHandler } from "@/lib/api-handler";
 import type { Session } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -34,16 +35,13 @@ async function resolveSession(
   return { workspaceId: rows[0].workspaceId };
 }
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withApiHandler(async (_request, ctx) => {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
+  const { id } = (await ctx!.params) as { id: string };
 
-  const resolved = await resolveSession(session, id);
+  await resolveSession(session, id);
 
   const bookmarks = await db
     .select()
@@ -51,24 +49,20 @@ export async function GET(
     .where(eq(sessionBookmarks.sessionId, id))
     .orderBy(sessionBookmarks.messageIndex);
 
-  // Return array directly — consumers (TranscriptViewer) expect Array.isArray check to succeed.
   return NextResponse.json(bookmarks);
-}
+});
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withApiHandler(async (request, ctx) => {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
+  const { id } = (await ctx!.params) as { id: string };
 
   const resolved = await resolveSession(session, id);
 
   let body: { messageIndex?: unknown; label?: unknown; note?: unknown };
   try {
-    body = await request.json();
+    body = await (request as NextRequest).json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -95,16 +89,13 @@ export async function POST(
     .returning();
 
   return NextResponse.json(bookmark, { status: 201 });
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const DELETE = withApiHandler(async (request, ctx) => {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
+  const { id } = (await ctx!.params) as { id: string };
 
   const resolved = await resolveSession(session, id);
 
@@ -131,4 +122,4 @@ export async function DELETE(
   }
 
   return NextResponse.json({ deleted: deleted[0].id });
-}
+});

@@ -33,8 +33,31 @@ export async function GET(
     where: eq(portfolioSettings.workspaceId, workspace.id),
   });
 
+  // Workspace exists but portfolio not yet enabled → return a valid 200 with
+  // a minimal "disabled" payload instead of 404 so UI/SSR can render an
+  // empty state. 404 is reserved for "workspace does not exist".
   if (!portfolio || !portfolio.isEnabled) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+      },
+      portfolio: {
+        isEnabled: false,
+        bio: null,
+        avatarUrl: null,
+        socialLinks: null,
+        theme: portfolio?.theme ?? "minimal",
+        showRss: false,
+        showPoweredBy: true,
+        customDomain: null,
+      },
+      pinnedPosts: [],
+      posts: [],
+      series: [],
+      collections: [],
+    });
   }
 
   // Get published posts for this workspace

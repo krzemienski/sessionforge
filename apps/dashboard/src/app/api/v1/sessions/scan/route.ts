@@ -10,14 +10,29 @@ import { indexSessions } from "@/lib/sessions/indexer";
 import { fireWebhookEvent } from "@/lib/webhooks/events";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const auth = await authenticateApiKey(req);
   if (!auth) return apiError("Unauthorized", 401);
 
   const body = await req.json().catch(() => ({}));
-  const lookbackDays: number =
-    typeof body.lookbackDays === "number" ? body.lookbackDays : 30;
+  const rawLookback = (body as { lookbackDays?: unknown }).lookbackDays;
+
+  // Validate lookbackDays explicitly so callers can't accidentally launch a
+  // full scan by POSTing an empty body. Default 7 days (was 30).
+  let lookbackDays = 7;
+  if (rawLookback !== undefined) {
+    if (
+      typeof rawLookback !== "number" ||
+      !Number.isFinite(rawLookback) ||
+      rawLookback < 1 ||
+      rawLookback > 365
+    ) {
+      return apiError("lookbackDays must be a number between 1 and 365", 400);
+    }
+    lookbackDays = Math.floor(rawLookback);
+  }
 
   const start = Date.now();
 

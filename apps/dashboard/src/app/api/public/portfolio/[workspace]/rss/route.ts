@@ -25,24 +25,22 @@ export async function GET(
     where: eq(portfolioSettings.workspaceId, workspace.id),
   });
 
-  if (!portfolio || !portfolio.isEnabled) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  // When the portfolio is disabled or RSS opt-out, still return a well-formed
+  // but empty RSS feed (not 404) so subscribed feed readers don't choke and so
+  // existing publications that link to /rss don't break.
+  const rssAllowed = !!portfolio && portfolio.isEnabled && portfolio.showRss;
 
-  // Check if RSS is enabled
-  if (!portfolio.showRss) {
-    return NextResponse.json({ error: "RSS feed not enabled" }, { status: 404 });
-  }
-
-  // Get published posts for this workspace
-  const publishedPosts = await db.query.posts.findMany({
-    where: and(
-      eq(posts.workspaceId, workspace.id),
-      eq(posts.status, "published")
-    ),
-    orderBy: (p, { desc }) => [desc(p.publishedAt)],
-    limit: 50, // Limit to most recent 50 posts
-  });
+  // Get published posts for this workspace (empty if RSS disabled)
+  const publishedPosts = rssAllowed
+    ? await db.query.posts.findMany({
+        where: and(
+          eq(posts.workspaceId, workspace.id),
+          eq(posts.status, "published")
+        ),
+        orderBy: (p, { desc }) => [desc(p.publishedAt)],
+        limit: 50, // Limit to most recent 50 posts
+      })
+    : [];
 
   // Build RSS feed XML
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";

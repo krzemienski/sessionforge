@@ -62,10 +62,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Authentication failed" }, { status: 401 });
   }
 
-  try {
+  // Reject upfront if request has no body or wrong content-type so we don't 500
+  // on formData() parse errors.
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!contentType.startsWith("multipart/form-data")) {
+    return NextResponse.json(
+      { error: "Content-Type must be multipart/form-data with a 'file' field" },
+      { status: 400 }
+    );
+  }
 
+  try {
     // Extract files from multipart form data
-    const formData = await req.formData();
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: "Invalid multipart body",
+          details: err instanceof Error ? err.message : String(err),
+        },
+        { status: 400 }
+      );
+    }
     const files = formData.getAll("file");
 
     if (files.length === 0) {

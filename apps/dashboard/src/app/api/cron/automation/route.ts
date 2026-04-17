@@ -40,11 +40,20 @@ function isTriggerDue(cronExpression: string, lastRunAt: Date | null): boolean {
 }
 
 export async function GET(request: Request) {
-  // Verify cron secret in production (Vercel sends this header)
+  // Verify cron secret. In production a missing CRON_SECRET is a misconfiguration
+  // and the endpoint must refuse to run (fail-safe). In dev it is allowed but logged.
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { error: "CRON_SECRET not configured" },
+        { status: 503 },
+      );
+    }
+    console.warn("[cron] CRON_SECRET not set — allowing in dev only");
+  } else if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

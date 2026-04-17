@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { workspaces, workspaceMembers } from "@sessionforge/db";
+import { workspaces, workspaceMembers, portfolioSettings } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, workspaceCreateSchema } from "@/lib/validation";
@@ -75,6 +75,16 @@ export async function POST(req: Request) {
         sessionBasePath: sessionBasePath ?? "~/.claude",
       })
       .returning();
+
+    // Seed a disabled portfolio row so /p/[slug] returns a valid empty-state
+    // rather than 404. User can enable/customize via settings.
+    await db
+      .insert(portfolioSettings)
+      .values({
+        workspaceId: created.id,
+        isEnabled: false,
+      })
+      .onConflictDoNothing();
 
     return NextResponse.json(created, { status: 201 });
   })(req);

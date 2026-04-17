@@ -7,6 +7,7 @@ import { eq, and } from "drizzle-orm/sql";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 import { getAuthorizedWorkspaceById } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
+import { withApiHandler } from "@/lib/api-handler";
 import type { Session } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -38,14 +39,11 @@ async function resolveSession(
  * DELETE /api/sessions/[id]/bookmarks/[bookmarkId]
  * Deletes a specific bookmark by its ID.
  */
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string; bookmarkId: string }> }
-) {
+export const DELETE = withApiHandler(async (_request, ctx) => {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id, bookmarkId } = await params;
+  const { id, bookmarkId } = (await ctx!.params) as { id: string; bookmarkId: string };
 
   const resolved = await resolveSession(session, id);
 
@@ -65,4 +63,4 @@ export async function DELETE(
   }
 
   return NextResponse.json({ deleted: deleted[0].id });
-}
+});
