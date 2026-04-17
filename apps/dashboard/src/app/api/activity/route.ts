@@ -7,23 +7,11 @@ import { eq, desc } from "drizzle-orm/sql";
 import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import type { ActivityEvent } from "@/lib/activity/types";
 
 export const dynamic = "force-dynamic";
 
-export type ActivityEvent = {
-  id: string;
-  type:
-    | "pipeline_complete"
-    | "pipeline_failed"
-    | "pipeline_running"
-    | "agent_complete"
-    | "agent_failed"
-    | "agent_running";
-  title: string;
-  description: string;
-  timestamp: string;
-  metadata: Record<string, unknown>;
-};
+export type { ActivityEvent };
 
 function formatDuration(ms: number | null): string {
   if (!ms) return "";

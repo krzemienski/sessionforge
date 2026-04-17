@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { timeAgo } from "@/lib/utils";
-import type { ActivityEvent } from "@/app/api/activity/route";
+import type { ActivityEvent } from "@/lib/activity/types";
 import {
   CheckCircle2,
   XCircle,

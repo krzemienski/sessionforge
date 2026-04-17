@@ -107,7 +107,11 @@ const AGENT_TOOL_GROUPS: Record<AgentType, string[]> = {
   "newsletter-writer": ["session", "insight", "post"],
   "evidence-writer": ["session", "insight", "post", "evidence", "ingestion", "research"],
   "supplementary-writer": ["post"],
-  "content-strategist": ["insight", "analytics", "recommendation"],
+  // content-strategist originally referenced "analytics" + "recommendation" tool
+  // groups that have no handlers registered in TOOL_HANDLERS. Removed to avoid
+  // dispatching to non-existent tools at runtime (M13). Future work: implement
+  // analytics + recommendation handlers if/when content-strategist feature ships.
+  "content-strategist": ["insight"],
   "claim-verifier": ["session", "insight", "post", "verification"],
 };
 
