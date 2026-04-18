@@ -30,6 +30,7 @@
         "clsx": "^2.1.1",
         "cron-parser": "^5.5.0",
         "diff": "^7.0.0",
+        "dompurify": "^3.3.1",
         "drizzle-orm": "^0.39",
         "ioredis": "^5",
         "jszip": "^3.10.1",
@@ -59,6 +60,7 @@
         "@sessionforge/tsconfig": "workspace:*",
         "@tailwindcss/postcss": "^4",
         "@types/diff": "^7.0.0",
+        "@types/dompurify": "^3.2.0",
         "@types/node": "^22",
         "@types/prismjs": "^1.26.0",
         "@types/react": "^19",
@@ -595,6 +597,8 @@
     "@types/deep-eql": ["@types/deep-eql@4.0.2", "", {}, "sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw=="],
 
     "@types/diff": ["@types/diff@7.0.2", "", {}, "sha512-JSWRMozjFKsGlEjiiKajUjIJVKuKdE3oVy2DNtK+fUo8q82nhFZ2CPQwicAIkXrofahDXrWJ7mjelvZphMS98Q=="],
+
+    "@types/dompurify": ["@types/dompurify@3.2.0", "", { "dependencies": { "dompurify": "*" } }, "sha512-Fgg31wv9QbLDA0SpTOXO3MaxySc4DKGLi8sna4/Utjo4r3ZRPdCt4UQee8BWr+Q5z21yifghREPJGYaEOEIACg=="],
 
     "@types/estree": ["@types/estree@1.0.8", "", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
 
