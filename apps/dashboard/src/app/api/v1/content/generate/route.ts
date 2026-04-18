@@ -117,8 +117,21 @@ export const POST = withV1ApiHandler(async (req) => {
     if (latest) {
       createdPost = latest;
     }
-  } catch {
-    // DB query failure — fall through to not-found error below
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        timestamp: new Date().toISOString(),
+        source: "v1.content.generate.post-lookup",
+        workspaceId: wsId,
+        agentType: config.agentType,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    throw new AppError(
+      "Post lookup failed after content generation",
+      ERROR_CODES.INTERNAL_ERROR,
+    );
   }
 
   if (!createdPost) {

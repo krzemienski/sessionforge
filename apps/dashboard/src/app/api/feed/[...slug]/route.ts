@@ -3,6 +3,18 @@ import { posts, workspaces, series, seriesPosts, collections, collectionPosts } 
 import { eq, desc, asc, and, inArray } from "drizzle-orm";
 import { marked } from "marked";
 
+/**
+ * Feed route caching strategy (review finding M8):
+ * - Next.js segment config: `force-dynamic` prevents build-time prerender of
+ *   the catch-all slug (individual workspace/series/collection feeds differ).
+ * - HTTP response: `Cache-Control: public, s-maxage=300, stale-while-revalidate=3600`
+ *   instructs the CDN to serve a cached response for 5 minutes and keep it
+ *   warm for up to an hour while revalidating. Browsers treat this as public
+ *   and cache accordingly.
+ * - When a post publishes, cache invalidation is handled by the CDN via
+ *   surrogate keys or by the feed's natural 5-minute TTL (feed readers poll
+ *   every few minutes so the extra freshness is not visible).
+ */
 export const dynamic = "force-dynamic";
 
 function escapeXml(str: string): string {

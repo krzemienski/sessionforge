@@ -4,7 +4,24 @@ import { db } from "@/lib/db";
 import { apiKeys } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { AppError, ERROR_CODES } from "@/lib/errors";
+import { getRedis } from "@/lib/redis";
 import type { ZodSchema } from "zod";
+
+const LAST_USED_DEBOUNCE_SECONDS = 60;
+
+async function touchLastUsedDebounced(apiKeyId: string): Promise<void> {
+  const redis = await getRedis();
+  if (redis) {
+    const key = `api-key:last-used:${apiKeyId}`;
+    const recent = await redis.get<string>(key);
+    if (recent) return;
+    await redis.set(key, "1", { ex: LAST_USED_DEBOUNCE_SECONDS });
+  }
+  await db
+    .update(apiKeys)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(apiKeys.id, apiKeyId));
+}
 
 export async function authenticateApiKey(request: Request) {
   const authorization = request.headers.get("authorization");
@@ -22,10 +39,9 @@ export async function authenticateApiKey(request: Request) {
 
   if (!apiKey) return null;
 
-  await db
-    .update(apiKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(apiKeys.id, apiKey.id));
+  void touchLastUsedDebounced(apiKey.id).catch((err) => {
+    console.warn("[api-key] lastUsedAt update failed:", err);
+  });
 
   return { workspace: apiKey.workspace, apiKeyId: apiKey.id };
 }

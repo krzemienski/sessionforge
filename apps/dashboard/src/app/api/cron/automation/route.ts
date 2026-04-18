@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    if (process.env.NODE_ENV === "production") {
+    if (process.env.NODE_ENV !== "development") {
       return NextResponse.json(
         { error: "CRON_SECRET not configured" },
         { status: 503 },

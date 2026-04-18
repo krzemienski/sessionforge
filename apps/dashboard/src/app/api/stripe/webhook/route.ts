@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { stripe, STRIPE_PRICE_IDS } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { subscriptions } from "@sessionforge/db";
+import { subscriptions, stripeWebhookEvents } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import type { PlanTier } from "@/lib/billing/plans";
 import { ERROR_CODES } from "@/lib/errors";
@@ -96,6 +96,30 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const claimed = await db
+    .insert(stripeWebhookEvents)
+    .values({ eventId: event.id, eventType: event.type })
+    .onConflictDoNothing({ target: stripeWebhookEvents.eventId })
+    .returning({ eventId: stripeWebhookEvents.eventId });
+
+  if (claimed.length === 0) {
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
+  function warnNoSubscriptionRow(customerId: string, eventType: string) {
+    console.error(
+      JSON.stringify({
+        level: "warn",
+        timestamp: new Date().toISOString(),
+        source: "stripe.webhook",
+        eventId: event.id,
+        eventType,
+        stripeCustomerId: customerId,
+        error: "No subscription row matched stripeCustomerId — event ignored",
+      }),
+    );
+  }
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -104,14 +128,13 @@ export async function POST(req: NextRequest) {
 
       if (!customerId || !subscriptionId) break;
 
-      // Retrieve the full subscription to obtain price and billing period details.
       const stripeSub = await stripe.subscriptions.retrieve(subscriptionId);
       const priceId = stripeSub.items.data[0]?.price.id ?? "";
       const planTier = planTierFromPriceId(priceId);
       const currentPeriodStart = new Date(stripeSub.current_period_start * 1000);
       const currentPeriodEnd = new Date(stripeSub.current_period_end * 1000);
 
-      await db
+      const result = await db
         .update(subscriptions)
         .set({
           stripeSubscriptionId: subscriptionId,
@@ -120,7 +143,10 @@ export async function POST(req: NextRequest) {
           currentPeriodEnd,
           status: "active",
         })
-        .where(eq(subscriptions.stripeCustomerId, customerId));
+        .where(eq(subscriptions.stripeCustomerId, customerId))
+        .returning({ id: subscriptions.id });
+
+      if (result.length === 0) warnNoSubscriptionRow(customerId, event.type);
       break;
     }
 
@@ -135,7 +161,7 @@ export async function POST(req: NextRequest) {
       const currentPeriodStart = new Date(stripeSub.current_period_start * 1000);
       const currentPeriodEnd = new Date(stripeSub.current_period_end * 1000);
 
-      await db
+      const result = await db
         .update(subscriptions)
         .set({
           planTier,
@@ -143,7 +169,10 @@ export async function POST(req: NextRequest) {
           currentPeriodEnd,
           status: coerceStatus(stripeSub.status),
         })
-        .where(eq(subscriptions.stripeCustomerId, customerId));
+        .where(eq(subscriptions.stripeCustomerId, customerId))
+        .returning({ id: subscriptions.id });
+
+      if (result.length === 0) warnNoSubscriptionRow(customerId, event.type);
       break;
     }
 
@@ -153,7 +182,7 @@ export async function POST(req: NextRequest) {
 
       if (!customerId) break;
 
-      await db
+      const result = await db
         .update(subscriptions)
         .set({
           planTier: "free",
@@ -162,12 +191,14 @@ export async function POST(req: NextRequest) {
           currentPeriodStart: null,
           currentPeriodEnd: null,
         })
-        .where(eq(subscriptions.stripeCustomerId, customerId));
+        .where(eq(subscriptions.stripeCustomerId, customerId))
+        .returning({ id: subscriptions.id });
+
+      if (result.length === 0) warnNoSubscriptionRow(customerId, event.type);
       break;
     }
 
     default:
-      // Unhandled event type — acknowledge receipt and move on.
       break;
   }
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { diffLines } from "diff";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sanitizeInlineHtml } from "@/lib/sanitize-html";
 
 interface DiffViewerProps {
   fromContent: string;
@@ -259,7 +260,7 @@ export function DiffViewer({
       return (
         <span
           className="whitespace-pre-wrap break-all flex-1"
-          dangerouslySetInnerHTML={{ __html: html || "\u00a0" }}
+          dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(html || "\u00a0") }}
         />
       );
     }

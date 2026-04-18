@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { getPostAttribution } from "@/lib/attribution";
+import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
+
+const RATE_LIMIT = {
+  bucket: "badge",
+  limit: 120,
+  windowSeconds: 60,
+};
 
 /** Badge dimensions */
 const BADGE_WIDTH = 240;
@@ -65,9 +72,17 @@ function buildBadgeSvg(scoreLabel: string | null): string {
  * Cached for 1 hour since badge content rarely changes.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ postId: string }> }
 ) {
+  const limit = await checkRateLimit(request, RATE_LIMIT);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: rateLimitHeaders(limit, RATE_LIMIT) },
+    );
+  }
+
   const { postId } = await params;
 
   const attribution = await getPostAttribution(postId);
@@ -82,6 +97,7 @@ export async function GET(
     headers: {
       "Content-Type": "image/svg+xml",
       "Cache-Control": "public, max-age=3600, stale-while-revalidate=300",
+      ...rateLimitHeaders(limit, RATE_LIMIT),
     },
   });
 }

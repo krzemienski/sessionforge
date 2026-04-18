@@ -1,5 +1,3 @@
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
@@ -12,9 +10,7 @@ import {
   wordpressConnections,
 } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
-import { withApiHandler } from "@/lib/api-handler";
-import { AppError, ERROR_CODES } from "@/lib/errors";
-import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
+import { withWorkspaceAuth } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
@@ -71,20 +67,9 @@ const integrationQueries = {
   },
 } as const;
 
-export async function GET(request: Request) {
-  return withApiHandler(async () => {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) throw new AppError("Unauthorized", ERROR_CODES.UNAUTHORIZED);
-
-    const { searchParams } = new URL(request.url);
-    const workspaceSlug = searchParams.get("workspace");
-
-    if (!workspaceSlug)
-      throw new AppError("workspace query param required", ERROR_CODES.BAD_REQUEST);
-
-    const { workspace } = await getAuthorizedWorkspace(session, workspaceSlug, PERMISSIONS.INTEGRATIONS_READ);
-
-    // Fetch health check records for this workspace
+export const GET = withWorkspaceAuth(
+  PERMISSIONS.INTEGRATIONS_READ,
+  async (_req, { auth: { workspace } }) => {
     const healthChecks = await db.query.integrationHealthChecks.findMany({
       where: eq(integrationHealthChecks.workspaceId, workspace.id),
     });
@@ -93,7 +78,6 @@ export async function GET(request: Request) {
       healthChecks.map((hc) => [hc.platform, hc])
     );
 
-    // Query each connected integration for enabled/connectedAt status
     const results: IntegrationHealth[] = [];
 
     for (const [platform, config] of Object.entries(integrationQueries) as [Platform, (typeof integrationQueries)[Platform]][]) {
@@ -124,5 +108,5 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({ integrations: results });
-  })(request);
-}
+  }
+);

@@ -6,10 +6,68 @@ import {
   githubPullRequests,
   githubIssues,
 } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import crypto from "crypto";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
+
+const repoSchema = z.object({
+  id: z.number(),
+});
+
+const pushPayloadSchema = z.object({
+  repository: repoSchema,
+  commits: z
+    .array(
+      z.object({
+        id: z.string(),
+        message: z.string(),
+        author: z.object({
+          name: z.string(),
+          email: z.string(),
+        }),
+        timestamp: z.string(),
+        url: z.string(),
+      }),
+    )
+    .default([]),
+});
+
+const pullRequestPayloadSchema = z.object({
+  repository: repoSchema,
+  action: z.string().optional(),
+  pull_request: z.object({
+    number: z.number(),
+    title: z.string(),
+    body: z.string().nullable().optional(),
+    state: z.string(),
+    user: z.object({ login: z.string() }),
+    html_url: z.string(),
+    merged_at: z.string().nullable().optional(),
+    created_at: z.string(),
+  }),
+});
+
+const issuesPayloadSchema = z.object({
+  repository: repoSchema,
+  action: z.string().optional(),
+  issue: z.object({
+    number: z.number(),
+    title: z.string(),
+    body: z.string().nullable().optional(),
+    state: z.string(),
+    user: z.object({ login: z.string() }),
+    html_url: z.string(),
+    created_at: z.string(),
+    closed_at: z.string().nullable().optional(),
+    pull_request: z.unknown().optional(),
+  }),
+});
+
+const repoOnlyPayloadSchema = z.object({
+  repository: repoSchema,
+});
 
 /**
  * Verify GitHub webhook signature
@@ -67,11 +125,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // Parse the payload after verification
-  let payload: any;
+  let rawPayload: unknown;
   try {
-    payload = JSON.parse(rawBody);
-  } catch (error) {
+    rawPayload = JSON.parse(rawBody);
+  } catch {
     return NextResponse.json(
       { error: "Invalid JSON payload" },
       { status: 400 }
@@ -87,35 +144,37 @@ export async function POST(request: Request) {
     );
   }
 
+  const repoOnly = repoOnlyPayloadSchema.safeParse(rawPayload);
+  if (!repoOnly.success) {
+    return NextResponse.json(
+      { error: "Missing or invalid repository in payload" },
+      { status: 400 }
+    );
+  }
+
+  const repo = await db.query.githubRepositories.findFirst({
+    where: eq(githubRepositories.githubRepoId, repoOnly.data.repository.id),
+  });
+
+  if (!repo) {
+    return NextResponse.json(
+      { message: "Repository not connected, ignoring event" },
+      { status: 200 }
+    );
+  }
+
   try {
-    // Find the repository in our database
-    const repository = payload.repository;
-    if (!repository) {
-      return NextResponse.json(
-        { error: "Missing repository in payload" },
-        { status: 400 }
-      );
-    }
-
-    const repo = await db.query.githubRepositories.findFirst({
-      where: eq(githubRepositories.githubRepoId, repository.id),
-    });
-
-    if (!repo) {
-      // Repository not connected to any workspace, ignore
-      return NextResponse.json(
-        { message: "Repository not connected, ignoring event" },
-        { status: 200 }
-      );
-    }
-
-    // Handle different event types
     switch (event) {
       case "push": {
-        // Process commits from push event
-        const commits = payload.commits || [];
+        const parsed = pushPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          return NextResponse.json(
+            { error: "Invalid push payload", details: parsed.error.flatten() },
+            { status: 400 }
+          );
+        }
+        const { commits } = parsed.data;
         let processed = 0;
-
         for (const commit of commits) {
           await db
             .insert(githubCommits)
@@ -131,7 +190,6 @@ export async function POST(request: Request) {
             .onConflictDoNothing();
           processed++;
         }
-
         return NextResponse.json({
           event: "push",
           processed,
@@ -140,22 +198,21 @@ export async function POST(request: Request) {
       }
 
       case "pull_request": {
-        // Process pull request event
-        const pr = payload.pull_request;
-        if (!pr) {
+        const parsed = pullRequestPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
           return NextResponse.json(
-            { error: "Missing pull_request in payload" },
+            { error: "Invalid pull_request payload", details: parsed.error.flatten() },
             { status: 400 }
           );
         }
-
+        const { pull_request: pr, action } = parsed.data;
         await db
           .insert(githubPullRequests)
           .values({
             repositoryId: repo.id,
             prNumber: pr.number,
             title: pr.title,
-            body: pr.body,
+            body: pr.body ?? null,
             state: pr.state,
             authorName: pr.user.login,
             prUrl: pr.html_url,
@@ -166,7 +223,7 @@ export async function POST(request: Request) {
             target: [githubPullRequests.repositoryId, githubPullRequests.prNumber],
             set: {
               title: pr.title,
-              body: pr.body,
+              body: pr.body ?? null,
               state: pr.state,
               mergedAt: pr.merged_at ? new Date(pr.merged_at) : null,
               updatedAt: new Date(),
@@ -175,24 +232,22 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           event: "pull_request",
-          action: payload.action,
+          action,
           prNumber: pr.number,
           message: `Processed pull request #${pr.number}`,
         });
       }
 
       case "issues": {
-        // Process issues event
-        const issue = payload.issue;
-        if (!issue) {
+        const parsed = issuesPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
           return NextResponse.json(
-            { error: "Missing issue in payload" },
+            { error: "Invalid issues payload", details: parsed.error.flatten() },
             { status: 400 }
           );
         }
+        const { issue, action } = parsed.data;
 
-        // GitHub API returns PRs as issues, but webhooks have a pull_request field
-        // Skip if this is actually a pull request
         if (issue.pull_request) {
           return NextResponse.json({
             event: "issues",
@@ -206,7 +261,7 @@ export async function POST(request: Request) {
             repositoryId: repo.id,
             issueNumber: issue.number,
             title: issue.title,
-            body: issue.body,
+            body: issue.body ?? null,
             state: issue.state,
             authorName: issue.user.login,
             issueUrl: issue.html_url,
@@ -217,7 +272,7 @@ export async function POST(request: Request) {
             target: [githubIssues.repositoryId, githubIssues.issueNumber],
             set: {
               title: issue.title,
-              body: issue.body,
+              body: issue.body ?? null,
               state: issue.state,
               closedAt: issue.closed_at ? new Date(issue.closed_at) : null,
               updatedAt: new Date(),
@@ -226,14 +281,13 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           event: "issues",
-          action: payload.action,
+          action,
           issueNumber: issue.number,
           message: `Processed issue #${issue.number}`,
         });
       }
 
       default: {
-        // Unsupported event type, but return 200 to acknowledge receipt
         return NextResponse.json({
           event,
           message: `Event type '${event}' not supported, ignoring`,

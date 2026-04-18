@@ -6,11 +6,21 @@
  */
 
 import path from "path";
-import JSZip from "jszip";
 import { parseSessionBuffer } from "./parser";
 import { normalizeSession } from "./normalizer";
 import { indexSessions } from "./indexer";
 import type { SessionFileMeta } from "./scanner";
+import {
+  safeLoadZip,
+  safeReadEntryArrayBuffer,
+  ZipLimitExceededError,
+} from "@/lib/safe-unzip";
+
+const UPLOAD_ZIP_LIMITS = {
+  maxEntries: 1000,
+  maxEntrySize: 100 * 1024 * 1024,
+  maxTotalSize: 500 * 1024 * 1024,
+};
 
 /** Result of processing a single uploaded session file. */
 export interface UploadedFileResult {
@@ -119,62 +129,39 @@ export async function processZipFile(
   const results: UploadedFileResult[] = [];
 
   try {
-    // Convert File to ArrayBuffer
     const arrayBuffer = await zipFile.arrayBuffer();
+    const loaded = await safeLoadZip(arrayBuffer, UPLOAD_ZIP_LIMITS);
 
-    // Load zip contents
-    const zip = await JSZip.loadAsync(arrayBuffer);
+    const jsonlEntryNames = loaded.entryNames.filter((name) =>
+      name.endsWith(".jsonl"),
+    );
 
-    // Extract all .jsonl files from the zip
-    const jsonlFiles: Array<{ name: string; content: ArrayBuffer }> = [];
-
-    for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
-      // Skip directories
-      if (zipEntry.dir) {
-        continue;
-      }
-
-      // Only process .jsonl files
-      if (!relativePath.endsWith(".jsonl")) {
-        continue;
-      }
-
-      // Extract file content
-      const content = await zipEntry.async("arraybuffer");
-
-      // Get just the filename (strip directory path)
+    for (const relativePath of jsonlEntryNames) {
+      const content = await safeReadEntryArrayBuffer(loaded, relativePath);
       const filename = path.basename(relativePath);
 
-      jsonlFiles.push({
-        name: filename,
-        content,
-      });
-    }
-
-    // Process each extracted .jsonl file
-    for (const { name, content } of jsonlFiles) {
-      // Create a synthetic File object from the extracted content
-      const file = new File([content], name, {
+      const file = new File([content], filename, {
         type: "application/jsonl",
-        lastModified: zipFile.lastModified, // Use zip's mtime as fallback
+        lastModified: zipFile.lastModified,
       });
 
-      // Process using the existing single-file processor
       const result = await processUploadedFile(file, workspaceId);
       results.push(result);
     }
 
     return results;
   } catch (err) {
-    // If zip extraction fails entirely, return a single error result
+    const msg =
+      err instanceof ZipLimitExceededError
+        ? `Zip rejected: ${err.message}`
+        : err instanceof Error
+          ? `Zip extraction failed: ${err.message}`
+          : "Zip extraction failed";
     return [
       {
         sessionId: zipFile.name,
         status: "error",
-        error:
-          err instanceof Error
-            ? `Zip extraction failed: ${err.message}`
-            : "Zip extraction failed",
+        error: msg,
       },
     ];
   }

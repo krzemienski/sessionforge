@@ -8,12 +8,15 @@ import {
   linkedinPublications,
   socialAnalytics,
 } from "@sessionforge/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { verifyQStashRequest } from "@/lib/qstash";
 import { getTweetAnalytics } from "@/lib/integrations/twitter";
 import { getLinkedInPostAnalytics } from "@/lib/integrations/linkedin";
+import { logAndIgnore } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
+
+type SocialAnalyticsInsert = typeof socialAnalytics.$inferInsert;
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -63,58 +66,67 @@ export async function POST(request: Request) {
         { maxResults: 100 }
       );
 
-      for (const tweet of result.tweets) {
-        try {
-          const publication = await db.query.twitterPublications.findFirst({
+      const tweetIds = result.tweets.map((t) => t.tweetId);
+      const publications = tweetIds.length
+        ? await db.query.twitterPublications.findMany({
             where: and(
               eq(twitterPublications.workspaceId, workspace.id),
-              eq(twitterPublications.tweetId, tweet.tweetId)
+              inArray(twitterPublications.tweetId, tweetIds),
             ),
-          });
+          })
+        : [];
+      const tweetIdToPostId = new Map(
+        publications.map((p) => [p.tweetId, p.postId]),
+      );
 
-          if (!publication) continue;
+      const rows: SocialAnalyticsInsert[] = [];
+      for (const tweet of result.tweets) {
+        const postId = tweetIdToPostId.get(tweet.tweetId);
+        if (!postId) continue;
+        rows.push({
+          workspaceId: workspace.id,
+          postId,
+          platform: "twitter",
+          impressions: tweet.impressions,
+          likes: tweet.likes,
+          shares: tweet.retweets,
+          comments: tweet.replies,
+          clicks: tweet.clicks,
+          rawMetrics: {
+            tweetId: tweet.tweetId,
+            quotes: tweet.quotes,
+            text: tweet.text,
+            createdAt: tweet.createdAt,
+          },
+          syncedAt,
+        });
+      }
 
+      if (rows.length) {
+        try {
           await db
             .insert(socialAnalytics)
-            .values({
-              workspaceId: workspace.id,
-              postId: publication.postId,
-              platform: "twitter",
-              impressions: tweet.impressions,
-              likes: tweet.likes,
-              shares: tweet.retweets,
-              comments: tweet.replies,
-              clicks: tweet.clicks,
-              rawMetrics: {
-                tweetId: tweet.tweetId,
-                quotes: tweet.quotes,
-                text: tweet.text,
-                createdAt: tweet.createdAt,
-              },
-              syncedAt,
-            })
+            .values(rows)
             .onConflictDoUpdate({
               target: [socialAnalytics.postId, socialAnalytics.platform],
               set: {
-                impressions: tweet.impressions,
-                likes: tweet.likes,
-                shares: tweet.retweets,
-                comments: tweet.replies,
-                clicks: tweet.clicks,
-                rawMetrics: {
-                  tweetId: tweet.tweetId,
-                  quotes: tweet.quotes,
-                  text: tweet.text,
-                  createdAt: tweet.createdAt,
-                },
-                syncedAt,
+                impressions: sql`excluded.impressions`,
+                likes: sql`excluded.likes`,
+                shares: sql`excluded.shares`,
+                comments: sql`excluded.comments`,
+                clicks: sql`excluded.clicks`,
+                rawMetrics: sql`excluded.raw_metrics`,
+                syncedAt: sql`excluded.synced_at`,
                 updatedAt: syncedAt,
               },
             });
-
-          twitterSynced++;
-        } catch {
-          twitterErrors++;
+          twitterSynced += rows.length;
+        } catch (err) {
+          logAndIgnore("automation.social-sync.twitter.batchUpsert", err, {
+            workspaceId: workspace.id,
+            rows: rows.length,
+          });
+          twitterErrors += rows.length;
         }
       }
 
@@ -122,7 +134,10 @@ export async function POST(request: Request) {
         .update(twitterIntegrations)
         .set({ lastSyncAt: syncedAt })
         .where(eq(twitterIntegrations.id, twitterIntegration.id));
-    } catch {
+    } catch (err) {
+      logAndIgnore("automation.social-sync.twitter.fetch", err, {
+        workspaceId: workspace.id,
+      });
       twitterErrors++;
     }
   }
@@ -144,56 +159,66 @@ export async function POST(request: Request) {
         { count: 20 }
       );
 
-      for (const post of result.posts) {
-        try {
-          const publication = await db.query.linkedinPublications.findFirst({
+      const postIds = result.posts.map((p) => p.postId);
+      const publications = postIds.length
+        ? await db.query.linkedinPublications.findMany({
             where: and(
               eq(linkedinPublications.workspaceId, workspace.id),
-              eq(linkedinPublications.linkedinPostId, post.postId)
+              inArray(linkedinPublications.linkedinPostId, postIds),
             ),
-          });
+          })
+        : [];
+      const linkedinPostIdToPostId = new Map(
+        publications.map((p) => [p.linkedinPostId, p.postId]),
+      );
 
-          if (!publication) continue;
+      const rows: SocialAnalyticsInsert[] = [];
+      for (const post of result.posts) {
+        const postId = linkedinPostIdToPostId.get(post.postId);
+        if (!postId) continue;
+        rows.push({
+          workspaceId: workspace.id,
+          postId,
+          platform: "linkedin",
+          impressions: post.impressions,
+          likes: post.likes,
+          shares: post.reposts,
+          comments: post.comments,
+          clicks: post.clicks,
+          rawMetrics: {
+            linkedinPostId: post.postId,
+            text: post.text,
+            createdAt: post.createdAt,
+          },
+          syncedAt,
+        });
+      }
 
+      if (rows.length) {
+        try {
           await db
             .insert(socialAnalytics)
-            .values({
-              workspaceId: workspace.id,
-              postId: publication.postId,
-              platform: "linkedin",
-              impressions: post.impressions,
-              likes: post.likes,
-              shares: post.reposts,
-              comments: post.comments,
-              clicks: post.clicks,
-              rawMetrics: {
-                linkedinPostId: post.postId,
-                text: post.text,
-                createdAt: post.createdAt,
-              },
-              syncedAt,
-            })
+            .values(rows)
             .onConflictDoUpdate({
               target: [socialAnalytics.postId, socialAnalytics.platform],
               set: {
-                impressions: post.impressions,
-                likes: post.likes,
-                shares: post.reposts,
-                comments: post.comments,
-                clicks: post.clicks,
-                rawMetrics: {
-                  linkedinPostId: post.postId,
-                  text: post.text,
-                  createdAt: post.createdAt,
-                },
-                syncedAt,
+                impressions: sql`excluded.impressions`,
+                likes: sql`excluded.likes`,
+                shares: sql`excluded.shares`,
+                comments: sql`excluded.comments`,
+                clicks: sql`excluded.clicks`,
+                rawMetrics: sql`excluded.raw_metrics`,
+                syncedAt: sql`excluded.synced_at`,
                 updatedAt: syncedAt,
               },
             });
-
-          linkedinSynced++;
-        } catch {
-          linkedinErrors++;
+          linkedinSynced += rows.length;
+        } catch (err) {
+          logAndIgnore("automation.social-sync.linkedin.batchUpsert", err, {
+            workspaceId: workspace.id,
+            rows: rows.length,
+          });
+          linkedinErrors += rows.length;
         }
       }
 
@@ -201,7 +226,10 @@ export async function POST(request: Request) {
         .update(linkedinIntegrations)
         .set({ lastSyncAt: syncedAt })
         .where(eq(linkedinIntegrations.id, linkedinIntegration.id));
-    } catch {
+    } catch (err) {
+      logAndIgnore("automation.social-sync.linkedin.fetch", err, {
+        workspaceId: workspace.id,
+      });
       linkedinErrors++;
     }
   }

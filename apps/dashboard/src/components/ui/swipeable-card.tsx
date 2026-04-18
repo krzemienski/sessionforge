@@ -200,7 +200,9 @@ export function SwipeableCard({
         </div>
       )}
 
-      {/* Card content */}
+      {/* Card content. Keyboard alternative to swipe (WCAG 2.5.1 Pointer Gestures):
+          Alt+ArrowRight fires leftAction, Alt+ArrowLeft fires rightAction. Arrow
+          keys alone stay free for focus traversal. */}
       <div
         className={cn(
           "relative bg-sf-bg-secondary touch-pan-y",
@@ -212,6 +214,27 @@ export function SwipeableCard({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (e.altKey && e.key === "ArrowRight" && leftAction) {
+            e.preventDefault();
+            leftAction.onAction();
+          } else if (e.altKey && e.key === "ArrowLeft" && rightAction) {
+            e.preventDefault();
+            rightAction.onAction();
+          }
+        }}
+        tabIndex={disabled || (!leftAction && !rightAction) ? -1 : 0}
+        role={leftAction || rightAction ? "button" : undefined}
+        aria-label={
+          leftAction && rightAction
+            ? `Swipe card. Alt+Right: ${leftAction.label}. Alt+Left: ${rightAction.label}.`
+            : leftAction
+              ? `Swipe card. Alt+Right: ${leftAction.label}.`
+              : rightAction
+                ? `Swipe card. Alt+Left: ${rightAction.label}.`
+                : undefined
+        }
       >
         {children}
       </div>

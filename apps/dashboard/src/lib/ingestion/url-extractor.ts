@@ -2,9 +2,17 @@
  * URL content extractor.
  * Fetches a URL, parses the HTML with cheerio, and extracts clean article
  * content. Falls back to a raw HTML summary on failure.
+ *
+ * SSRF protection (review finding C3): every outbound fetch is gated by
+ * `assertPublicUrl`, which requires an https scheme and rejects any hostname
+ * that resolves to a loopback, link-local, private (RFC1918), cloud metadata,
+ * or otherwise non-globally-routable address. Redirects are followed manually
+ * so each hop is re-validated before a second fetch is issued.
  */
 
 import * as cheerio from "cheerio";
+import { lookup as dnsLookup } from "node:dns/promises";
+import { isIP } from "node:net";
 
 export interface ParsedURL {
   url: string;
@@ -179,6 +187,101 @@ function extractMeta($: cheerio.CheerioAPI): { title: string; author: string | n
   };
 }
 
+const MAX_REDIRECTS = 5;
+
+function ipv4IsPrivate(ip: string): boolean {
+  const parts = ip.split(".").map((p) => Number(p));
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
+    return true;
+  }
+  const [a, b] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    a >= 224
+  );
+}
+
+function ipv6IsPrivate(ip: string): boolean {
+  const lower = ip.toLowerCase();
+  if (lower === "::" || lower === "::1") return true;
+  if (lower.startsWith("fe80:") || lower.startsWith("fc") || lower.startsWith("fd")) return true;
+  if (lower.startsWith("ff")) return true;
+  if (lower.startsWith("::ffff:")) {
+    const embedded = lower.slice("::ffff:".length);
+    if (isIP(embedded) === 4) return ipv4IsPrivate(embedded);
+  }
+  return false;
+}
+
+async function assertPublicUrl(rawUrl: string): Promise<URL> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(`Invalid URL: ${rawUrl}`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`Blocked scheme: ${parsed.protocol}`);
+  }
+  const hostname = parsed.hostname;
+  if (!hostname) throw new Error("URL has no hostname");
+
+  const literal = isIP(hostname);
+  if (literal === 4 && ipv4IsPrivate(hostname)) {
+    throw new Error(`Blocked private address: ${hostname}`);
+  }
+  if (literal === 6 && ipv6IsPrivate(hostname)) {
+    throw new Error(`Blocked private address: ${hostname}`);
+  }
+
+  if (literal === 0) {
+    const resolved = await dnsLookup(hostname, { all: true });
+    for (const { address, family } of resolved) {
+      if (family === 4 && ipv4IsPrivate(address)) {
+        throw new Error(`Hostname ${hostname} resolves to private address ${address}`);
+      }
+      if (family === 6 && ipv6IsPrivate(address)) {
+        throw new Error(`Hostname ${hostname} resolves to private address ${address}`);
+      }
+    }
+  }
+
+  return parsed;
+}
+
+async function safeFetch(initialUrl: string, signal: AbortSignal): Promise<Response> {
+  let nextUrl = initialUrl;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertPublicUrl(nextUrl);
+    const response = await fetch(nextUrl, {
+      signal,
+      redirect: "manual",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; SessionForge/1.0; +https://sessionforge.dev/bot)",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) {
+        throw new Error(`Redirect ${response.status} without location header`);
+      }
+      nextUrl = new URL(location, nextUrl).toString();
+      continue;
+    }
+    return response;
+  }
+  throw new Error(`Exceeded ${MAX_REDIRECTS} redirect hops`);
+}
+
 /** Fetch and parse a URL, returning structured content. */
 export async function extractURL(url: string): Promise<ParsedURL> {
   try {
@@ -187,15 +290,7 @@ export async function extractURL(url: string): Promise<ParsedURL> {
 
     let html: string;
     try {
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (compatible; SessionForge/1.0; +https://sessionforge.dev/bot)",
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-      });
+      const response = await safeFetch(url, controller.signal);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} fetching ${url}`);

@@ -1,3 +1,6 @@
+import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { workspaces, workspaceMembers, workspaceActivity } from "@sessionforge/db";
 import { eq, and } from "drizzle-orm/sql";
@@ -135,4 +138,64 @@ export async function logWorkspaceActivity(
     resourceId: resourceId ?? null,
     metadata: metadata ?? null,
   });
+}
+
+/**
+ * Route wrapper that bundles the three checks every dashboard (non-v1) route
+ * duplicates: session lookup, workspace resolution by slug, and permission
+ * enforcement. Eliminates the 267+ inline `auth.api.getSession` copies flagged
+ * in review finding M7.
+ *
+ * The wrapped handler receives the session and AuthorizedWorkspaceResult as
+ * second and third arguments, leaving it free to focus on business logic.
+ * Errors thrown by the permission/session layers are converted to JSON
+ * responses with matching status codes; unknown errors propagate to the
+ * caller's framework layer (don't wrap if you want your own catch-all).
+ *
+ * The workspace slug is taken from the `workspace` query param; routes with
+ * a slug path segment should call getAuthorizedWorkspace directly so the
+ * segment is the source of truth.
+ */
+export function withWorkspaceAuth(
+  requiredPermission: Permission,
+  handler: (
+    req: Request,
+    ctx: { session: Session; auth: AuthorizedWorkspaceResult }
+  ) => Promise<Response>
+): (req: Request) => Promise<Response> {
+  return async (req: Request): Promise<Response> => {
+    try {
+      const session = await auth.api.getSession({ headers: await headers() });
+      if (!session) {
+        return NextResponse.json(
+          { error: "Unauthorized", code: ERROR_CODES.UNAUTHORIZED },
+          { status: 401 },
+        );
+      }
+
+      const url = new URL(req.url);
+      const slug = url.searchParams.get("workspace");
+      if (!slug) {
+        return NextResponse.json(
+          { error: "workspace query param required", code: ERROR_CODES.BAD_REQUEST },
+          { status: 400 },
+        );
+      }
+
+      const authorized = await getAuthorizedWorkspace(
+        session,
+        slug,
+        requiredPermission,
+      );
+      return await handler(req, { session, auth: authorized });
+    } catch (err) {
+      if (err instanceof AppError) {
+        return NextResponse.json(
+          { error: err.message, code: err.code },
+          { status: err.statusCode },
+        );
+      }
+      throw err;
+    }
+  };
 }

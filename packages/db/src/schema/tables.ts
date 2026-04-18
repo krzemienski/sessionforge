@@ -49,7 +49,12 @@ import {
   versionTypeEnum,
   workspaceMemberRoleEnum,
 } from "./enums";
-import type { AiPatternMatch, RiskFlag } from "./types";
+import type {
+  AiPatternMatch,
+  RiskFlag,
+  SeoMetadata,
+  StructuredDataJson,
+} from "./types";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -299,18 +304,18 @@ export const posts = pgTable(
     hashnodeUrl: text("hashnode_url"),
     wordpressPublishedUrl: text("wordpress_published_url"),
     wordpressPostId: text("wordpress_post_id"),
-    seoMetadata: jsonb("seo_metadata"),
+    seoMetadata: jsonb("seo_metadata").$type<SeoMetadata>(),
     metaTitle: text("meta_title"),
     metaDescription: text("meta_description"),
     ogImage: text("og_image"),
     keywords: jsonb("keywords").$type<string[]>(),
-    structuredData: jsonb("structured_data"),
+    structuredData: jsonb("structured_data").$type<StructuredDataJson>(),
     readabilityScore: real("readability_score"),
     geoScore: real("geo_score"),
     geoChecklist: jsonb("geo_checklist").$type<
       { id: string; label: string; passed: boolean; suggestion?: string }[]
     >(),
-    seoAnalysis: jsonb("seo_analysis"),
+    seoAnalysis: jsonb("seo_analysis").$type<Record<string, unknown>>(),
     citations: jsonb("citations").$type<
       {
         sessionId: string;
@@ -1688,7 +1693,11 @@ export const postStyleMetrics = pgTable(
     aiPatternMatches: jsonb("ai_pattern_matches").$type<AiPatternMatch[]>(),
     authenticityScore: real("authenticity_score"),
     voiceConsistencyScore: real("voice_consistency_score"),
-    suggestions: jsonb("suggestions"),
+    suggestions: jsonb("suggestions").$type<{
+      authenticity?: string[];
+      voiceConsistency?: unknown[];
+      readability?: unknown[];
+    }>(),
     analyzedAt: timestamp("analyzed_at").defaultNow(),
   },
   (table) => [
@@ -1842,5 +1851,25 @@ export const experimentResults = pgTable(
   (table) => [
     index("experiment_results_variantId_idx").on(table.variantId),
     index("experiment_results_recordedAt_idx").on(table.recordedAt),
+  ]
+);
+
+/**
+ * Idempotency ledger for incoming Stripe webhook events.
+ * Stripe retries events aggressively; persisting `eventId` with a UNIQUE
+ * constraint lets the webhook handler short-circuit on replays instead of
+ * re-applying subscription updates. See `app/api/stripe/webhook/route.ts` (C1).
+ */
+export const stripeWebhookEvents = pgTable(
+  "stripe_webhook_events",
+  {
+    // Stripe's event.id (e.g. "evt_1Abc...") — PK gives us O(1) existence checks
+    // and prevents ever inserting the same event twice even under race.
+    eventId: text("event_id").primaryKey(),
+    eventType: text("event_type").notNull(),
+    processedAt: timestamp("processed_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("stripeWebhookEvents_processedAt_idx").on(table.processedAt),
   ]
 );

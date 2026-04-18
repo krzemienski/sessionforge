@@ -8,9 +8,6 @@ import * as schema from "@sessionforge/db";
 function resolveDatabaseUrl(): string {
   const url = process.env.DATABASE_URL;
   if (url) return url;
-  // Fail fast in production unless explicitly opted out for build-time stubs.
-  // SF_ALLOW_DB_PLACEHOLDER=1 lets CI build the app without a live DB URL —
-  // the resulting bundle will still throw at first query if DATABASE_URL stays unset.
   if (
     process.env.NODE_ENV === "production" &&
     process.env.SF_ALLOW_DB_PLACEHOLDER !== "1"
@@ -26,34 +23,31 @@ const databaseUrl = resolveDatabaseUrl();
 
 const databaseDriver = process.env.DATABASE_DRIVER;
 
-/**
- * Returns true when the neon-http driver should be used.
- * Conditions:
- * - DATABASE_DRIVER=neon explicitly set, OR
- * - DATABASE_DRIVER is not set and URL contains neon.tech (auto-detect)
- * Falls back to postgres-js when DATABASE_DRIVER=postgres or URL is standard.
- */
 function shouldUseNeon(): boolean {
   if (databaseDriver === "neon") return true;
   if (databaseDriver === "postgres") return false;
   return databaseUrl.includes("neon.tech");
 }
 
+/**
+ * H5 note: callers type against `NeonHttpDatabase` throughout the codebase, so
+ * the postgres-js driver is laundered to the same type. Both drivers share the
+ * Drizzle query API (`query`, `select`, `insert`, `update`, `delete`,
+ * `execute`) when constructed with `schema`, but their `.returning(cols)`
+ * generic signatures diverge — the cast keeps the 15 `.returning({cols})` call
+ * sites type-checking. Methods that truly diverge (e.g. `.transaction()`) are
+ * not used anywhere in the app today; if added, the cast must be replaced with
+ * a narrow union type and the offending code audited per driver. Attempted a
+ * full union-type fix during H5 remediation but it surfaced 15 breakages; left
+ * as known tech debt to resolve during the next Drizzle bump.
+ */
 function createDb(): NeonHttpDatabase<typeof schema> {
   if (shouldUseNeon()) {
     const sql = neon(databaseUrl);
     return neonDrizzle({ client: sql, schema });
-  } else {
-    const sql = postgres(databaseUrl);
-    // Type-laundering: both drivers expose an identical runtime query API when
-    // schema is provided, but their TS types diverge (internal `_` field
-    // carries driver-specific session types). Consumers type against
-    // NeonHttpDatabase throughout the codebase; casting here keeps call sites
-    // driver-agnostic. Full elimination would require a generic wrapper type
-    // or unifying on a single driver — tracked for Wave 4 or future drizzle
-    // bump.
-    return pgDrizzle({ client: sql, schema }) as unknown as NeonHttpDatabase<typeof schema>;
   }
+  const sql = postgres(databaseUrl);
+  return pgDrizzle({ client: sql, schema }) as unknown as NeonHttpDatabase<typeof schema>;
 }
 
 export const db = createDb();

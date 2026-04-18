@@ -5,35 +5,30 @@ import { db } from "@/lib/db";
 import { workspaces, workspaceActivity } from "@sessionforge/db";
 import { eq } from "drizzle-orm";
 import { processUploadedFile, processZipFile } from "@/lib/sessions/upload-processor";
-import { validateApiKey } from "@/lib/auth/api-key";
 import { getAuthorizedWorkspace } from "@/lib/workspace-auth";
 import { PERMISSIONS } from "@/lib/permissions";
-import { apiResponse, withV1ApiHandler } from "@/lib/api-auth";
+import { apiResponse, authenticateApiKey, withV1ApiHandler } from "@/lib/api-auth";
 import { AppError, ERROR_CODES } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
 
 export const POST = withV1ApiHandler(async (req) => {
   const next = req as NextRequest;
-  const authHeader = next.headers.get("Authorization");
+  const authHeader = next.headers.get("authorization");
   let workspaceId: string | undefined;
   let userId: string | undefined;
 
   if (authHeader) {
-    const apiKeyResult = await validateApiKey(authHeader);
-    if (apiKeyResult.valid) {
-      workspaceId = apiKeyResult.workspaceId;
-      const workspace = await db.query.workspaces.findFirst({
-        where: eq(workspaces.id, workspaceId!),
-        columns: { ownerId: true },
-      });
-      userId = workspace?.ownerId;
-    } else {
-      throw new AppError(
-        apiKeyResult.error ?? "Invalid API key",
-        ERROR_CODES.UNAUTHORIZED,
-      );
+    const apiAuth = await authenticateApiKey(next);
+    if (!apiAuth) {
+      throw new AppError("Invalid API key", ERROR_CODES.UNAUTHORIZED);
     }
+    workspaceId = apiAuth.workspace.id;
+    const ownerRow = await db.query.workspaces.findFirst({
+      where: eq(workspaces.id, workspaceId),
+      columns: { ownerId: true },
+    });
+    userId = ownerRow?.ownerId;
   } else {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session) {
@@ -113,18 +108,26 @@ export const POST = withV1ApiHandler(async (req) => {
     validatedFiles.push(file);
   }
 
-  const allResults = [];
-  for (const file of validatedFiles) {
-    const fileExtension = file.name
-      .toLowerCase()
-      .slice(file.name.lastIndexOf("."));
-
-    if (fileExtension === ".jsonl") {
-      const result = await processUploadedFile(file, workspaceId);
-      allResults.push(result);
-    } else if (fileExtension === ".zip") {
-      const results = await processZipFile(file, workspaceId);
-      allResults.push(...results);
+  const CONCURRENCY = 4;
+  const allResults: Awaited<ReturnType<typeof processUploadedFile>>[] = [];
+  for (let i = 0; i < validatedFiles.length; i += CONCURRENCY) {
+    const batch = validatedFiles.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (file) => {
+        const fileExtension = file.name
+          .toLowerCase()
+          .slice(file.name.lastIndexOf("."));
+        if (fileExtension === ".jsonl") {
+          return [await processUploadedFile(file, workspaceId)];
+        }
+        if (fileExtension === ".zip") {
+          return await processZipFile(file, workspaceId);
+        }
+        return [];
+      }),
+    );
+    for (const perFile of batchResults) {
+      allResults.push(...perFile);
     }
   }
 

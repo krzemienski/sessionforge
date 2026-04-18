@@ -50,7 +50,7 @@ export async function POST(
   };
 
   // Use inline data if provided, otherwise fall back to the persisted value
-  const dataToValidate = inlineData ?? (post as any).structuredData;
+  const dataToValidate = inlineData ?? post.structuredData;
 
   if (!dataToValidate || typeof dataToValidate !== "object") {
     return NextResponse.json(
@@ -66,7 +66,7 @@ export async function POST(
     );
   }
 
-  const result = validateStructuredData(dataToValidate as StructuredData);
+  const result = validateStructuredData(dataToValidate as unknown as StructuredData);
 
   return NextResponse.json({
     id,

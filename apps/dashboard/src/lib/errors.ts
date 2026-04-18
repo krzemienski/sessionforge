@@ -53,3 +53,24 @@ export function formatErrorResponse(error: AppError): ErrorResponse {
   }
   return response;
 }
+
+/**
+ * Drop-in replacement for `} catch {}` — preserves the control-flow semantics
+ * (error is swallowed, execution continues) while emitting a structured log
+ * line so an operator can trace failures post-facto. Review finding M6.
+ *
+ * Use at sites where a failure is genuinely non-fatal (e.g. best-effort cache
+ * invalidation, fire-and-forget webhook). Do NOT use it to hide errors that
+ * should surface to callers — those need a proper try/catch with rethrow.
+ */
+export function logAndIgnore(source: string, err: unknown, extra?: Record<string, unknown>): void {
+  console.warn(
+    JSON.stringify({
+      level: "warn",
+      timestamp: new Date().toISOString(),
+      source,
+      error: err instanceof Error ? err.message : String(err),
+      ...(extra ?? {}),
+    }),
+  );
+}

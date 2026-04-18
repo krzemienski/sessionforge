@@ -27,7 +27,7 @@ const OPUS_AGENTS: AgentType[] = [
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 
 /** Claude Opus model identifier — used for high-quality creative and analytical work. */
-const OPUS_MODEL = "claude-opus-4-6";
+const OPUS_MODEL = "claude-opus-4-7";
 
 /** Claude Sonnet model identifier — used as the default fallback model. */
 const SONNET_MODEL = "claude-sonnet-4-6";

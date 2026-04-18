@@ -6,7 +6,7 @@ import { contentTriggers } from "@sessionforge/db";
 import { eq } from "drizzle-orm/sql";
 import { withApiHandler } from "@/lib/api-handler";
 import { parseBody, triggerUpdateSchema } from "@/lib/validation";
-import { AppError, ERROR_CODES } from "@/lib/errors";
+import { AppError, ERROR_CODES, logAndIgnore } from "@/lib/errors";
 import {
   createTriggerSchedule,
   createFileWatchSchedule,
@@ -83,12 +83,14 @@ export async function PUT(
     let watchStatus: string | null = existing.watchStatus ?? null;
 
     if (!willBeEnabled) {
-      // Disabling: tear down any existing QStash schedule
       if (existing.qstashScheduleId) {
         try {
           await deleteTriggerSchedule(existing.qstashScheduleId);
-        } catch {
-          // QStash schedule already gone or API down - proceed with DB update
+        } catch (err) {
+          logAndIgnore("automation.triggers.disable.deleteSchedule", err, {
+            triggerId: id,
+            scheduleId: existing.qstashScheduleId,
+          });
         }
         qstashScheduleId = null;
       }
@@ -96,7 +98,6 @@ export async function PUT(
         watchStatus = "paused";
       }
     } else if (willBeEnabled && effectiveCron) {
-      // Enabling or updating scheduled trigger
       const cronChanged =
         cronExpression !== undefined &&
         cronExpression !== existing.cronExpression;
@@ -107,18 +108,24 @@ export async function PUT(
         if (existing.qstashScheduleId) {
           try {
             await deleteTriggerSchedule(existing.qstashScheduleId);
-          } catch {
-            // Proceed even if old schedule cleanup fails
+          } catch (err) {
+            logAndIgnore("automation.triggers.update.deleteOldSchedule", err, {
+              triggerId: id,
+              scheduleId: existing.qstashScheduleId,
+            });
           }
         }
         try {
           qstashScheduleId = await createTriggerSchedule(id, effectiveCron);
-        } catch {
+        } catch (err) {
+          logAndIgnore("automation.triggers.update.createSchedule", err, {
+            triggerId: id,
+            cron: effectiveCron,
+          });
           qstashScheduleId = null;
         }
       }
     } else if (willBeEnabled && effectiveTriggerType === "file_watch") {
-      // Enabling file_watch trigger: create or restore the poll schedule
       const justEnabled = enabled === true && !existing.enabled;
       const noScheduleYet = !existing.qstashScheduleId;
 
@@ -126,14 +133,20 @@ export async function PUT(
         if (existing.qstashScheduleId) {
           try {
             await deleteTriggerSchedule(existing.qstashScheduleId);
-          } catch {
-            // Proceed even if old schedule cleanup fails
+          } catch (err) {
+            logAndIgnore("automation.triggers.fileWatch.deleteOldSchedule", err, {
+              triggerId: id,
+              scheduleId: existing.qstashScheduleId,
+            });
           }
         }
         try {
           qstashScheduleId = await createFileWatchSchedule(id);
           watchStatus = "watching";
-        } catch {
+        } catch (err) {
+          logAndIgnore("automation.triggers.fileWatch.createSchedule", err, {
+            triggerId: id,
+          });
           qstashScheduleId = null;
         }
       }
@@ -187,8 +200,11 @@ export async function DELETE(
     if (existing.qstashScheduleId) {
       try {
         await deleteTriggerSchedule(existing.qstashScheduleId);
-      } catch {
-        // Schedule already gone or API down - proceed with DB deletion
+      } catch (err) {
+        logAndIgnore("automation.triggers.delete.deleteSchedule", err, {
+          triggerId: id,
+          scheduleId: existing.qstashScheduleId,
+        });
       }
     }
 

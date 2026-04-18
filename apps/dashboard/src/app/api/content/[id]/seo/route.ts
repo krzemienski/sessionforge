@@ -98,7 +98,7 @@ export async function POST(
 
     const [updated] = await db
       .update(posts)
-      .set({ seoMetadata: generated } as any)
+      .set({ seoMetadata: generated })
       .where(eq(posts.id, id))
       .returning();
 
@@ -127,7 +127,7 @@ export async function PATCH(
 
     await db
       .update(posts)
-      .set({ seoMetadata: merged } as any)
+      .set({ seoMetadata: merged })
       .where(eq(posts.id, id));
 
     return NextResponse.json({ seoMetadata: merged });

@@ -4,20 +4,50 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Prism is loaded as a client-side effect to avoid SSR issues.
-// The import is deferred so that the prism.js globals are set up
-// after the window/document are available.
-import Prism from "prismjs";
-import "prismjs/components/prism-typescript";
-import "prismjs/components/prism-jsx";
-import "prismjs/components/prism-tsx";
-import "prismjs/components/prism-bash";
-import "prismjs/components/prism-json";
-import "prismjs/components/prism-python";
-import "prismjs/components/prism-css";
-import "prismjs/components/prism-sql";
-import "prismjs/components/prism-yaml";
-import "prismjs/components/prism-markdown";
+/**
+ * Prism + 10 language grammars are loaded lazily on first highlight so they
+ * don't inflate the initial client bundle (review finding H7). Earlier
+ * revisions imported Prism statically at module scope, which forced the whole
+ * syntax highlighting bundle into any route that transitively depends on
+ * transcript rendering, even when no code block is rendered.
+ *
+ * The dynamic imports are cached in a module-level promise so repeated code
+ * blocks on the same page share a single load. Until the grammars resolve the
+ * code renders as plain <code>; the highlight applies on the first frame after
+ * the import completes.
+ */
+type PrismModule = typeof import("prismjs");
+let prismPromise: Promise<PrismModule> | null = null;
+async function loadPrism(): Promise<PrismModule> {
+  if (prismPromise) return prismPromise;
+  prismPromise = (async () => {
+    const prism = await import("prismjs");
+    await Promise.all([
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-typescript"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-jsx"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-tsx"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-bash"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-json"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-python"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-css"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-sql"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-yaml"),
+      // @ts-expect-error prism language components ship without .d.ts
+      import("prismjs/components/prism-markdown"),
+    ]);
+    return prism;
+  })();
+  return prismPromise;
+}
 
 interface CodeBlockProps {
   code: string;
@@ -25,7 +55,6 @@ interface CodeBlockProps {
   className?: string;
 }
 
-// Map common aliases to Prism language names
 const LANG_ALIASES: Record<string, string> = {
   js: "javascript",
   ts: "typescript",
@@ -39,24 +68,27 @@ const LANG_ALIASES: Record<string, string> = {
   text: "plain",
 };
 
-function resolveLanguage(lang: string): string {
-  const lower = lang.toLowerCase();
-  const mapped = LANG_ALIASES[lower] ?? lower;
-  // Only return a grammar that Prism actually knows about
-  return mapped in Prism.languages ? mapped : "plain";
-}
-
 export function CodeBlock({ code, language = "text", className }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const codeRef = useRef<HTMLElement>(null);
-  const resolvedLang = resolveLanguage(language);
+  const [resolvedLang, setResolvedLang] = useState<string>("plain");
 
-  // Highlight after render / when code changes
   useEffect(() => {
-    if (codeRef.current) {
-      Prism.highlightElement(codeRef.current);
-    }
-  }, [code, resolvedLang]);
+    let cancelled = false;
+    loadPrism().then((Prism) => {
+      if (cancelled) return;
+      const lower = language.toLowerCase();
+      const mapped = LANG_ALIASES[lower] ?? lower;
+      const finalLang = mapped in Prism.languages ? mapped : "plain";
+      setResolvedLang(finalLang);
+      if (codeRef.current) {
+        Prism.highlightElement(codeRef.current);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language]);
 
   const handleCopy = async () => {
     try {

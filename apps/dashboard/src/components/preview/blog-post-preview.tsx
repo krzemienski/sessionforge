@@ -32,7 +32,10 @@ function MermaidDiagram({ chart }: MermaidDiagramProps) {
 
     async function render() {
       try {
-        const mermaid = (await import("mermaid")).default;
+        const [{ default: mermaid }, { sanitizeSvg }] = await Promise.all([
+          import("mermaid"),
+          import("@/lib/sanitize-html"),
+        ]);
         mermaid.initialize({
           startOnLoad: false,
           theme: "dark",
@@ -47,10 +50,9 @@ function MermaidDiagram({ chart }: MermaidDiagramProps) {
           },
         });
 
-        // Unique ID per render to avoid mermaid conflicts
         const renderId = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const { svg: rendered } = await mermaid.render(renderId, chart.trim());
-        if (!cancelled) setSvg(rendered);
+        if (!cancelled) setSvg(sanitizeSvg(rendered));
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to render diagram");

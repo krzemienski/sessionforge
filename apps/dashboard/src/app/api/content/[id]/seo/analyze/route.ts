@@ -139,13 +139,13 @@ export async function POST(
       .update(posts)
       .set({
         keywords: keywords.map((k) => k.keyword),
-        structuredData: structuredDataResult.schema,
+        structuredData: structuredDataResult.schema as unknown as Record<string, unknown>,
         readabilityScore: readability.score,
         geoScore: geoResult.score,
         geoChecklist,
         seoAnalysis,
         seoMetadata: mergedSeoMetadata,
-      } as any)
+      })
       .where(eq(posts.id, id));
 
     return NextResponse.json({

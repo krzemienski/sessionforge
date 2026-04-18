@@ -66,7 +66,7 @@ export async function GET(
       aiPatternMatches: metrics.aiPatternMatches ?? [],
       authenticityScore: metrics.authenticityScore ?? 0,
       authenticityGrade: calculateGrade(metrics.authenticityScore ?? 0),
-      authenticityImprovements: ((metrics.suggestions as any)?.authenticity ?? []) as string[],
+      authenticityImprovements: metrics.suggestions?.authenticity ?? [],
       voiceConsistencyScore: metrics.voiceConsistencyScore,
       voiceConsistencyResult: null, // Not implemented in current schema
       analyzedAt: metrics.analyzedAt ?? new Date(),
