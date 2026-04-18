@@ -8,18 +8,23 @@ import { STATUS_COLORS, TYPE_LABELS, STATUS_TABS, SeoScoreBadge } from "@/lib/co
 import { ExportDropdown } from "@/components/content/export-dropdown";
 import { SwipeableCard } from "@/components/ui/swipeable-card";
 import { useUpdatePost } from "@/hooks/use-content";
+import type {
+  ContentListItem,
+  SeriesListItem,
+  CollectionListItem,
+} from "@/types/content";
 
 interface ContentListViewProps {
   workspace: string;
-  contentList: any[];
+  contentList: ContentListItem[];
   statusFilter: string;
   setStatusFilter: (v: string) => void;
   seriesFilter: string;
   setSeriesFilter: (v: string) => void;
   collectionFilter: string;
   setCollectionFilter: (v: string) => void;
-  seriesList: any[];
-  collectionsList: any[];
+  seriesList: SeriesListItem[];
+  collectionsList: CollectionListItem[];
   onManageSeries: () => void;
   onManageCollections: () => void;
   isLoading: boolean;
@@ -135,7 +140,7 @@ export function ContentListView({
             className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px] flex-1 md:flex-none min-h-[44px] md:min-h-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <option value="">All Series</option>
-            {seriesList.map((s: any) => (
+            {seriesList.map((s) => (
               <option key={s.id} value={s.id}>{s.title} ({s.postCount})</option>
             ))}
           </select>
@@ -156,7 +161,7 @@ export function ContentListView({
             className="bg-sf-bg-tertiary border border-sf-border rounded-sf px-2.5 py-1.5 text-sm text-sf-text-primary min-w-[140px] flex-1 md:flex-none min-h-[44px] md:min-h-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent"
           >
             <option value="">All Collections</option>
-            {collectionsList.map((c: any) => (
+            {collectionsList.map((c) => (
               <option key={c.id} value={c.id}>{c.title} ({c.postCount})</option>
             ))}
           </select>
@@ -179,7 +184,7 @@ export function ContentListView({
       </div>
 
       <div className="space-y-3">
-        {contentList.map((post: any) => {
+        {contentList.map((post) => {
           const cardContent = (
             <div
               role="button"
@@ -194,7 +199,7 @@ export function ContentListView({
               className="bg-sf-bg-secondary border border-sf-border hover:border-sf-border-focus rounded-sf-lg p-4 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sf-bg-primary"
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status] || "")}>
+                <span className={cn("px-2 py-0.5 rounded-sf-full text-xs font-medium capitalize", STATUS_COLORS[post.status ?? ""] || "")}>
                   {post.status}
                 </span>
                 <span className="px-2 py-0.5 bg-sf-bg-tertiary rounded-sf-full text-xs text-sf-text-secondary">
@@ -202,7 +207,7 @@ export function ContentListView({
                 </span>
                 <SeoScoreBadge post={post} />
                 {/* Derivative count badge */}
-                {post.derivativeCount > 0 && (
+                {post.derivativeCount !== undefined && post.derivativeCount > 0 && (
                   <div className="flex items-center gap-1 px-2 py-0.5 bg-sf-accent/10 border border-sf-accent/20 rounded-sf-full text-xs text-sf-accent" title={`${post.derivativeCount} repurposed variant${post.derivativeCount > 1 ? 's' : ''}`}>
                     <GitBranch size={12} />
                     <span>{post.derivativeCount}</span>

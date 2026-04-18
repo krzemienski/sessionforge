@@ -16,6 +16,7 @@ import {
   type CalendarSlot,
   type DayCell,
 } from "@/components/content/calendar-utils";
+import type { ContentListItem, RecommendationRow } from "@/types/content";
 
 interface CalendarViewProps {
   workspace: string;
@@ -40,24 +41,30 @@ export function CalendarView({ workspace, className }: CalendarViewProps) {
   const dismissRecommendation = useDismissRecommendation();
 
   const posts: CalendarPost[] = useMemo(() => {
-    const raw: any[] = content.data?.posts ?? [];
+    const raw = (content.data?.posts ?? []) as ContentListItem[];
     return raw
       .map((p) => {
         const dateVal = p.publishedAt ?? p.updatedAt ?? p.createdAt;
         if (!dateVal) return null;
         const date = new Date(dateVal);
         if (isNaN(date.getTime())) return null;
-        return { id: p.id, title: p.title, status: p.status, contentType: p.contentType, date };
+        return {
+          id: p.id,
+          title: p.title ?? "",
+          status: p.status ?? "",
+          contentType: p.contentType,
+          date,
+        };
       })
       .filter(Boolean) as CalendarPost[];
   }, [content.data]);
 
   const slots: CalendarSlot[] = useMemo(() => {
-    const raw: any[] = recommendations.data?.recommendations ?? [];
+    const raw = (recommendations.data?.recommendations ?? []) as RecommendationRow[];
     return raw
       .filter((r) => r.suggestedPublishTime)
       .map((r) => {
-        const date = new Date(r.suggestedPublishTime);
+        const date = new Date(r.suggestedPublishTime!);
         if (isNaN(date.getTime())) return null;
         const numericPriority: number = typeof r.priority === "number" ? r.priority : 0;
         const priority: Recommendation["priority"] =
@@ -66,9 +73,9 @@ export function CalendarView({ workspace, className }: CalendarViewProps) {
           id: r.id,
           title: r.title,
           reasoning: r.reasoning,
-          suggestedPublishTime: r.suggestedPublishTime,
-          contentType: r.suggestedContentType ?? r.contentType,
-          insightScore: r.insightScore,
+          suggestedPublishTime: r.suggestedPublishTime!,
+          contentType: (r.suggestedContentType ?? r.contentType) ?? "",
+          insightScore: r.insightScore ?? undefined,
           priority,
         };
         return { recommendation, date };

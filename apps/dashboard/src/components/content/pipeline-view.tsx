@@ -5,6 +5,7 @@ import { FileText } from "lucide-react";
 import { cn, timeAgo } from "@/lib/utils";
 import { useContent, useUpdatePost } from "@/hooks/use-content";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
+import type { ContentListItem } from "@/types/content";
 
 const TYPE_LABELS: Record<string, string> = {
   blog_post: "Blog Post",
@@ -83,15 +84,20 @@ export function PipelineView({ workspace, onNavigateToPost }: PipelineViewProps)
     return () => container.removeEventListener("scroll", handleScroll);
   }, [isMobile]);
 
-  const posts = useMemo(() => {
-    const list = content.data?.posts ?? [];
-    return list.filter((p: any) => p.status !== "archived");
+  const posts = useMemo<ContentListItem[]>(() => {
+    const list = (content.data?.posts ?? []) as ContentListItem[];
+    return list.filter((p) => p.status !== "archived");
   }, [content.data]);
 
   const byStatus = useMemo(() => {
-    const groups: Record<string, any[]> = { idea: [], draft: [], in_review: [], published: [] };
+    const groups: Record<string, ContentListItem[]> = {
+      idea: [],
+      draft: [],
+      in_review: [],
+      published: [],
+    };
     for (const post of posts) {
-      if (post.status in groups) {
+      if (post.status && post.status in groups) {
         groups[post.status].push(post);
       }
     }
@@ -185,7 +191,7 @@ export function PipelineView({ workspace, onNavigateToPost }: PipelineViewProps)
   }
 
   // --- Shared post card content ---
-  function renderCardContent(post: any) {
+  function renderCardContent(post: ContentListItem) {
     return (
       <>
         <div className="flex items-center gap-2 mb-2">
@@ -250,10 +256,16 @@ export function PipelineView({ workspace, onNavigateToPost }: PipelineViewProps)
 
                   {/* Column content */}
                   <div className="flex-1 min-h-[200px] rounded-sf-lg p-2 space-y-2 bg-sf-bg-tertiary/40 border border-transparent">
-                    {colPosts.map((post: any) => (
+                    {colPosts.map((post) => (
                       <div
                         key={post.id}
-                        onTouchStart={() => handleLongPressStart(post)}
+                        onTouchStart={() =>
+                          handleLongPressStart({
+                            id: post.id,
+                            title: post.title ?? "",
+                            status: post.status ?? "",
+                          })
+                        }
                         onTouchEnd={handleLongPressEnd}
                         onTouchCancel={handleLongPressEnd}
                         onClick={() => handleCardClick(post.id)}
@@ -358,7 +370,7 @@ export function PipelineView({ workspace, onNavigateToPost }: PipelineViewProps)
                   : "bg-sf-bg-tertiary/40 border border-transparent"
               )}
             >
-              {colPosts.map((post: any) => (
+              {colPosts.map((post) => (
                 <div
                   key={post.id}
                   draggable

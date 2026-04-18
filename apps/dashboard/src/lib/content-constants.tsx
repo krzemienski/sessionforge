@@ -35,8 +35,13 @@ export function getSeoScoreColor(score: number): string {
   return "text-sf-error bg-sf-error/10";
 }
 
-export function SeoScoreBadge({ post }: { post: any }) {
-  const score: number | undefined = post.seoAnalysis?.compositeScore ?? post.geoScore ?? undefined;
+export interface SeoScoreBadgePost {
+  seoAnalysis?: { compositeScore?: number | null } | null;
+  geoScore?: number | null;
+}
+
+export function SeoScoreBadge({ post }: { post: SeoScoreBadgePost }) {
+  const score = post.seoAnalysis?.compositeScore ?? post.geoScore ?? undefined;
   if (score === undefined || score === null) return null;
   const rounded = Math.round(score);
   return (
