@@ -35,7 +35,7 @@ This deployment mode is designed for teams and individuals who want:
 |---|---|---|
 | Docker + Docker Compose | Docker 24+, Compose v2 | For Docker deployment |
 | PostgreSQL | 14+ | 16 recommended; included in compose template |
-| Node.js or Bun | Node 20+ / Bun 1.2+ | For manual (non-Docker) installation |
+| Bun | **1.2.4+** | Package manager (required for manual installation; Next.js runs on Node-compatible runtime) |
 
 ### Optional
 
@@ -226,15 +226,19 @@ curl http://localhost:3000/api/deployment/validate | jq
 |---|---|---|---|
 | `DATABASE_DRIVER` | No | `postgres` | Database driver. Set to `postgres` for standard PostgreSQL |
 
-### Redis / Cache
+### Redis / Cache (Auto-Selected)
+
+The app auto-selects a Redis client based on available env vars:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `REDIS_URL` | No | — | Standard Redis connection URL (`redis://host:6379`). Used for self-hosted Redis |
-| `UPSTASH_REDIS_URL` | No | — | Upstash Redis REST URL. Alternative to `REDIS_URL` |
-| `UPSTASH_REDIS_TOKEN` | No | — | Upstash Redis REST token. Required if using `UPSTASH_REDIS_URL` |
+| `UPSTASH_REDIS_URL` | No (unless using Upstash) | — | Upstash Redis REST URL (HTTP, serverless). Requires `UPSTASH_REDIS_TOKEN` |
+| `UPSTASH_REDIS_TOKEN` | No (unless using Upstash) | — | Upstash Redis REST token. Required with `UPSTASH_REDIS_URL` |
+| `REDIS_URL` | No (unless self-hosting) | — | Self-hosted Redis TCP URL (e.g., `redis://host:6379`). Used only if `UPSTASH_REDIS_URL` is NOT set |
 
-> **Note:** If neither `REDIS_URL` nor `UPSTASH_REDIS_URL`/`UPSTASH_REDIS_TOKEN` are set, caching and rate limiting are disabled. The app still runs but with degraded performance under load.
+**Selection logic:** If `UPSTASH_REDIS_URL+UPSTASH_REDIS_TOKEN` are set, use @upstash/redis (HTTP). Else if `REDIS_URL` is set, use ioredis (TCP). Else caching is disabled (app continues with degraded performance).
+
+> **Note:** If all Redis variables are unset, the app still runs but with no caching. Rate limiting and session caching are disabled. This is acceptable for development or low-traffic deployments.
 
 ### Background Jobs / Queue
 
@@ -274,14 +278,14 @@ curl http://localhost:3000/api/deployment/validate | jq
 | `STRIPE_PRICE_TEAM_MONTHLY` | No | — | Stripe Price ID for Team monthly plan |
 | `STRIPE_PRICE_TEAM_ANNUAL` | No | — | Stripe Price ID for Team annual plan |
 
-### Feature Flags
+### Feature Flags & Security
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DISABLE_AI_AGENTS` | No | `false` | Set to `"true"` to disable all AI agent features gracefully |
-| `DISABLE_OBSERVABILITY` | No | `false` | Set to `"true"` to disable the observability event bus |
-| `SCAN_SOURCE_ENCRYPTION_KEY` | No | — | AES key for encrypting SSH scan source credentials |
-| `DEPLOYMENT_VALIDATE_TOKEN` | No | — | Bearer token required to access `/api/deployment/validate`. Leave unset to allow unauthenticated access |
+| `DISABLE_AI_AGENTS` | No | `false` | Set to `"true"` to gracefully disable all AI agent features. Endpoints return user-friendly errors. Use in development or when Claude CLI is unavailable. |
+| `DISABLE_OBSERVABILITY` | No | `false` | Set to `"true"` to disable the observability event bus (run logs, SSE streaming) |
+| `SCAN_SOURCE_ENCRYPTION_KEY` | No | (auto-generated) | AES-256 encryption key for encrypting SSH scan source credentials. Base64-encoded 32-byte key. Generate: `openssl rand -base64 32` |
+| `DEPLOYMENT_VALIDATE_TOKEN` | No | — | Bearer token for `/api/deployment/validate` endpoint access. Leave unset to allow unauthenticated access (useful for health checks) |
 
 ---
 

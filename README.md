@@ -76,7 +76,7 @@ SessionForge ingests JSONL session files from `~/.claude/projects/`, analyzes de
 | Server state | TanStack Query v5 |
 | Client state | Zustand |
 | Auth | better-auth (email + GitHub OAuth) |
-| Database | PostgreSQL via Drizzle ORM (Neon serverless, 59 tables) |
+| Database | PostgreSQL via Drizzle ORM (Neon serverless, 74 tables) |
 | Queue | Upstash QStash (cron + scheduled jobs) |
 | Cache | Upstash Redis |
 | AI | `@anthropic-ai/claude-agent-sdk` (CLI-inherited auth) |
@@ -341,21 +341,33 @@ Copy `.env.example` to `apps/dashboard/.env.local`.
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID (optional) |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret (optional) |
 
-### AI
+### AI (Critical: Zero API Key Configuration)
 
-SessionForge uses `@anthropic-ai/claude-agent-sdk` which inherits authentication directly from the Claude Code CLI session. **No API keys are required.** The SDK spawns a `claude` subprocess that uses the logged-in user's credentials automatically.
+**SessionForge uses `@anthropic-ai/claude-agent-sdk` which inherits authentication directly from the Claude Code CLI session. There are ZERO API keys to configure.**
 
-To use AI features, ensure you are logged into Claude Code (`claude` CLI).
+The SDK spawns a `claude` subprocess that uses the logged-in user's credentials automatically. To enable AI features:
+1. Install Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
+2. Authenticate: `claude auth login`
+3. Ensure `DISABLE_AI_AGENTS` is NOT set to `"true"` (or remove it entirely)
 
-### Cache & Queue (Upstash)
+**Important (Development):** The dev server inherits `CLAUDECODE` from the parent Claude Code session, which blocks agent execution. All 12 agent SDK files include `delete process.env.CLAUDECODE` before spawning agents. This is required for local development.
+
+**Graceful Degradation:** Set `DISABLE_AI_AGENTS=true` to gracefully disable all AI features (endpoints return user-friendly errors). No ANTHROPIC_API_KEY, ANTHROPIC_SDK, or API setup required.
+
+### Cache & Queue
+
+**Redis (auto-selected):**
+- `UPSTASH_REDIS_URL` + `UPSTASH_REDIS_TOKEN` → uses Upstash HTTP client
+- `REDIS_URL` → uses self-hosted Redis (ioredis TCP driver)
+- If neither is set, caching is disabled (app continues with degraded performance)
+
+**QStash (queue scheduling):**
 
 | Variable | Description |
 |----------|-------------|
-| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL |
-| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token |
 | `UPSTASH_QSTASH_TOKEN` | QStash publishing token |
-| `UPSTASH_QSTASH_CURRENT_SIGNING_KEY` | QStash webhook signing key |
-| `UPSTASH_QSTASH_NEXT_SIGNING_KEY` | QStash next signing key |
+| `UPSTASH_QSTASH_CURRENT_SIGNING_KEY` | QStash webhook signing key (current rotation) |
+| `UPSTASH_QSTASH_NEXT_SIGNING_KEY` | QStash webhook signing key (next rotation) |
 
 ### Application
 
@@ -367,7 +379,7 @@ To use AI features, ensure you are logged into Claude Code (`claude` CLI).
 
 ## Database
 
-SessionForge uses Drizzle ORM with PostgreSQL (Neon). The schema has **59 tables** covering:
+SessionForge uses Drizzle ORM with PostgreSQL (Neon). The schema has **74 tables** covering:
 
 | Domain | Key Tables |
 |--------|-----------|
@@ -380,10 +392,12 @@ SessionForge uses Drizzle ORM with PostgreSQL (Neon). The schema has **59 tables
 | Organization | series, series_posts, collections, collection_posts |
 | Publishing | hashnode_integrations, devto_integrations, medium_integrations, ghost_integrations, wordpress_integrations, github_integrations, twitter_integrations, linkedin_integrations |
 | Analytics | social_analytics_snapshots |
-| Automation | content_triggers |
+| Automation | content_triggers, automations |
 | API | api_keys, webhooks |
 | SEO | seo_metadata |
 | Media | post_media, post_diagrams |
+| Billing | subscriptions, stripe_webhook_events (idempotency for C1) |
+| Scan Sources | scan_sources (with AES encryption for SSH credentials) |
 
 ### Commands
 
@@ -402,7 +416,7 @@ bun build        # Production build
 bun lint         # Run ESLint
 ```
 
-**Note:** Use `next dev` (not `next dev --turbopack`) -- Turbopack has known issues with Drizzle ORM relations in bun monorepos.
+**Critical:** Always use `next dev` (NOT `next dev --turbopack`). Turbopack has drizzle-orm relation resolution bugs in bun monorepos that cause `undefined` relation lookups. Restart the dev server after ANY route or schema changes to clear stale Turbopack caches.
 
 ---
 

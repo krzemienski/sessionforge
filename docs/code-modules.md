@@ -8,7 +8,8 @@ Comprehensive reference for library modules under `apps/dashboard/src/lib/`.
 
 | Module | Purpose | Key Exports |
 |--------|---------|------------|
-| `ai/agent-runner.ts` | Agent execution engine for Claude Agent SDK. Provides streaming and non-streaming runners with SSE support and observability tracking. | `runAgentStreaming()`, `runAgent()`, `AgentRunOptions`, `AgentRunResult` |
+| `ai/agent-runner.ts` | Agent execution engine for Claude Agent SDK. Provides streaming and non-streaming runners with SSE support and observability tracking. **Critical:** Calls `ensureCliAuth()` before spawning agents. | `runAgentStreaming()`, `runAgent()`, `AgentRunOptions`, `AgentRunResult` |
+| `ai/ensure-cli-auth.ts` | Deletes `process.env.CLAUDECODE` before agent execution to prevent nested session rejection. Used by all agent callers. | `ensureCliAuth()` |
 | `ai/mcp-server-factory.ts` | Creates MCP servers configured with tools for agents. Routes tool calls to handlers and manages tool discovery by agent type. | `createAgentMcpServer()`, `createCustomMcpServer()` |
 | `ai/orchestration/streaming.ts` | SSE streaming utilities for streaming agent responses. | `createSSEStream()`, `sseResponse()` |
 | `ai/orchestration/retry.ts` | Retry logic with exponential backoff. | `withRetry()` |
@@ -21,10 +22,8 @@ Comprehensive reference for library modules under `apps/dashboard/src/lib/`.
 | `ai/agents/social-writer.ts` | Twitter threads and LinkedIn posts from insights. | `generateSocialContent()` |
 | `ai/agents/changelog-writer.ts` | Changelog generation from session history within timeframe. | `generateChangelog()` |
 | `ai/agents/newsletter-writer.ts` | Newsletter summaries from insights and sessions. | `generateNewsletter()` |
-| `ai/agents/corpus-analyzer.ts` | Analyzes session corpus to extract key insights using Agent SDK. | `analyzeCorpus()` |
-| `ai/agents/repurpose-writer.ts` | Converts blog posts to other formats (TLDR, changelog). | `repurposeContent()` |
-| `ai/agents/recommendations-analyzer.ts` | Generates content recommendations from analytics. | `analyzeRecommendations()` |
-| `ai/agents/evidence-writer.ts` | Mines sessions for evidence and creates evidence-backed content. | `generateEvidenceContent()` |
+| `ai/agents/style-learner.ts` | Learns user's writing style from corpus and updates profile. | `learnWritingStyle()` |
+| `ai/agents/editor-chat.ts` | Real-time AI chat during content editing with markdown tool. | `runEditorChat()` |
 
 ### Prompts & Skills
 
@@ -237,9 +236,10 @@ Comprehensive reference for library modules under `apps/dashboard/src/lib/`.
 ## Key Architecture Patterns
 
 ### Agent SDK Integration
-- All agent execution goes through `agent-runner.ts` which uses `@anthropic-ai/claude-agent-sdk` query()
+- All agent execution goes through `agent-runner.ts` which uses `@anthropic-ai/claude-agent-sdk` `query()`
+- **Critical:** `ensureCliAuth()` (from `ai/ensure-cli-auth.ts`) must be called before every `query()` to delete `process.env.CLAUDECODE` and prevent nested session rejection
 - MCP tools are provided via `mcp-server-factory.ts` which creates SDK-compatible servers
-- Delete `process.env.CLAUDECODE` before spawning agents to avoid nested session rejection
+- Auth inherits from Claude CLI session — no API keys, no env var configuration needed
 
 ### 3-Stage Pipeline
 1. **Scan**: `scanSessionFiles()` + `scanRemoteSessions()` → parse → normalize → index
@@ -260,12 +260,19 @@ Comprehensive reference for library modules under `apps/dashboard/src/lib/`.
 
 ## Dependencies Between Modules
 
-- **agent-runner** depends on: mcp-server-factory, observability, db
+- **agent-runner** depends on: mcp-server-factory, ensure-cli-auth, observability, db
 - **pipeline** depends on: scanner, ssh-scanner, parser, normalizer, indexer, corpus-analyzer, content-generator, webhooks
 - **content-generator** depends on: various agent writers, validation
-- **agents/** depend on: mcp-server-factory, agent-runner, prompts, observability
+- **agents/** depend on: mcp-server-factory, agent-runner, ensure-cli-auth, prompts, observability
 - **publishing/** depends on: validation, errors
-- **ingestion/** depends on: Agent SDK (for text-processor, repo-analyzer)
+- **ingestion/** depends on: Agent SDK (for text-processor, repo-analyzer; both call ensure-cli-auth)
 - **export/** depends on: content processing utilities, seo
 - **qstash** depends on: observability for webhook delivery
 
+---
+
+## Database Schema
+
+**Location:** `packages/db/src/schema/` (split into `tables.ts`, `enums.ts`, `types.ts`, `relations.ts`)  
+**Total tables:** 75 (grown from 59 in early 2026)  
+**For full reference:** See [database-guide.md](./database-guide.md)

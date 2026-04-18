@@ -67,6 +67,15 @@ export interface AgentRunResult {
 
 // ── Helpers ──
 
+/**
+ * Creates a database record for tracking an agent run lifecycle.
+ * Non-fatal: if insertion fails, logs the error and returns undefined.
+ * @param workspaceId - The workspace context for the run.
+ * @param agentType - The agent type being executed.
+ * @param inputMetadata - Input parameters passed to the agent.
+ * @returns The created run ID, or undefined if insertion failed.
+ * @private
+ */
 async function createAgentRunRecord(
   workspaceId: string,
   agentType: string,
@@ -100,6 +109,14 @@ async function createAgentRunRecord(
   }
 }
 
+/**
+ * Updates the status and completion metadata of an agent run record.
+ * Non-fatal: swallows insertion errors and logs instead of throwing.
+ * @param agentRunId - The run ID to update.
+ * @param status - Final status: "completed" or "failed".
+ * @param extra - Additional metadata to merge (e.g., errorMessage).
+ * @private
+ */
 async function updateAgentRun(
   agentRunId: string,
   status: "completed" | "failed",
@@ -125,6 +142,12 @@ async function updateAgentRun(
   }
 }
 
+/**
+ * Resolves the model to use for an agent run, with fallback.
+ * @param opts - Agent run options containing optional model override.
+ * @returns The resolved model name (explicit override or lookup, defaulting to sonnet).
+ * @private
+ */
 function resolveModel(opts: AgentRunOptions): string {
   if (opts.model) return opts.model;
   // Only use getModelForAgent for known AgentType values

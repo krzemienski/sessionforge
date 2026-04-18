@@ -9,15 +9,15 @@ SessionForge extracts technical insights from your Claude Code sessions and auto
 ## Key Features
 
 - **Session Scanning Pipeline** — Index JSONL transcripts from `~/.claude/` (local or SSH remote) into structured database records
-- **6 AI Agents** — Blog writer, social content, newsletter, changelog, content repurpose, and editor chat (powered by Claude Opus + Haiku)
+- **6 AI Agents** — Blog writer, social content, newsletter, changelog, content repurpose, and editor chat (powered by Claude Opus + Haiku, CLI-inherited auth — zero API keys)
 - **7 Content Types** — Blog posts, Twitter threads, LinkedIn posts, Dev.to articles, changelogs, newsletters, and custom formats
-- **Multi-Platform Publishing** — Hashnode, WordPress, Dev.to, Ghost, Medium, Twitter/X, LinkedIn with one-click scheduling
+- **3 Publishing Integrations** — Hashnode (PAT), Dev.to (API key), WordPress (app password), Ghost (Admin API), Medium (OAuth), Twitter/X (OAuth), LinkedIn (OAuth) with scheduled publishing
 - **AI-Powered Editor** — Lexical rich text with streaming AI chat, split view, and revision history
-- **SEO Analysis** — Readability scoring, keyword optimization, and meta tag generation
+- **SEO Analysis** — Readability scoring, keyword optimization, and meta tag generation with 8-item checklist
 - **Unified Pipeline** — QStash-scheduled scanning, extraction, and generation with SSE progress streaming and observable run logs
-- **Start Analysis** — Configurable lookback window for automated content extraction and recommendations
-- **Analytics Dashboard** — Social engagement metrics and publishing streak tracking
-- **Workspace Isolation** — Multiple projects per user with per-workspace configuration
+- **Content Automation** — Configurable lookback window for automated content extraction and recommendations
+- **Analytics Dashboard** — Social engagement metrics and publishing streak tracking across all platforms
+- **Workspace Isolation** — Multiple projects per user with per-workspace configuration, style settings, API keys, and integrations
 
 ## Tech Stack
 
@@ -28,7 +28,7 @@ SessionForge extracts technical insights from your Claude Code sessions and auto
 | **Server State** | TanStack Query v5 |
 | **Client State** | React Context + useState |
 | **Auth** | better-auth (email + GitHub/LinkedIn OAuth) |
-| **Database** | PostgreSQL (Neon serverless) + Drizzle ORM (30 tables) |
+| **Database** | PostgreSQL (Neon serverless) + Drizzle ORM (74 tables) |
 | **Queue/Scheduling** | Upstash QStash |
 | **Cache** | Upstash Redis |
 | **AI** | @anthropic-ai/claude-agent-sdk (zero API keys — inherits from CLI) |
@@ -44,30 +44,37 @@ sessionforge/
 │       ├── src/
 │       │   ├── app/
 │       │   │   ├── (auth)/         # Login / signup pages
-│       │   │   ├── (dashboard)/    # Protected pages
-│       │   │   │   ├── sessions/      # Session browser
-│       │   │   │   ├── insights/      # AI-ranked insights
-│       │   │   │   ├── content/       # Editor + library (list/calendar/pipeline views)
-│       │   │   │   ├── analytics/     # Social media analytics
-│       │   │   │   ├── automation/    # Trigger management
-│       │   │   │   ├── observability/ # Pipeline status + visualization
-│       │   │   │   └── settings/      # General, Style, API Keys, Integrations, Webhooks, Sources
-│       │   │   └── api/            # 149 internal + 10 public v1 routes
-│       │   ├── components/         # React UI components
+│       │   │   ├── (dashboard)/[workspace]/
+│       │   │   │   ├── page.tsx                 # Dashboard
+│       │   │   │   ├── sessions/                # Session browser
+│       │   │   │   ├── insights/                # AI-ranked insights
+│       │   │   │   ├── content/                 # Editor + library (list/calendar/pipeline views)
+│       │   │   │   ├── analytics/               # Social media analytics
+│       │   │   │   ├── automation/              # Trigger management
+│       │   │   │   ├── observability/           # Pipeline status + visualization
+│       │   │   │   └── settings/                # Workspace, Style, API Keys, Integrations, Webhooks, Sources
+│       │   │   └── api/                         # 202 total routes (internal + v1 public)
+│       │   ├── components/
 │       │   └── lib/
-│       │       ├── sessions/       # Scanner → Parser → Normalizer → Indexer + SSH scanner
-│       │       ├── ai/             # 6 agents, tools, prompts, orchestration
-│       │       ├── integrations/   # Platform clients (Dev.to, Ghost, GitHub, etc)
-│       │       ├── automation/     # Pipeline execution engine
-│       │       ├── observability/  # Event bus, instrumentation, SSE broadcaster
-│       │       ├── ingestion/      # URL + repo content ingestion
-│       │       ├── seo/            # SEO/readability analysis
-│       │       ├── crypto/         # Encryption utilities
-│       │       └── media/          # Diagram generation
+│       │       ├── sessions/       # Scanner → Parser → Normalizer → Indexer (local + SSH)
+│       │       ├── ai/             # 6 agents + MCP server factory + tool definitions
+│       │       ├── integrations/   # Publishing clients (Hashnode, Dev.to, Ghost, Medium, WordPress, Twitter, LinkedIn, GitHub)
+│       │       ├── automation/     # Pipeline execution + QStash trigger handler
+│       │       ├── observability/  # Event bus + SSE broadcaster
+│       │       ├── ingestion/      # URL + repo content processor
+│       │       ├── seo/            # Readability + keyword analysis
+│       │       ├── crypto/         # AES encryption (SSH credentials)
+│       │       └── media/          # Diagram generation (Claude SDK)
 │       └── package.json
 └── packages/
-    └── db/                         # Shared Drizzle schema
-        └── src/schema.ts           # 30 tables, enums, relations
+    └── db/                         # Shared Drizzle ORM schema
+        └── src/
+            ├── schema/
+            │   ├── tables.ts       # 74 tables (split Wave 4b)
+            │   ├── enums.ts        # Status, content type, role enums
+            │   ├── relations.ts    # Foreign key relations
+            │   └── types.ts        # TypeScript type exports
+            └── index.ts            # Barrel re-export
 ```
 
 ## Getting Started
@@ -141,7 +148,7 @@ Key concepts:
 
 ## API
 
-SessionForge exposes 149 internal routes and 10 public v1 API routes for programmatic access.
+SessionForge exposes 202 total API routes: internal session-cookie authenticated routes, public v1 REST API (hashed Bearer token), and observability webhooks (QStash, Stripe, GitHub).
 
 ### Public API (v1)
 

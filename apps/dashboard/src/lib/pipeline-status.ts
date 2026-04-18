@@ -1,3 +1,4 @@
+/** Union of all possible run status values. */
 export type RunStatus =
   | "pending"
   | "scanning"
@@ -7,6 +8,7 @@ export type RunStatus =
   | "failed"
   | null;
 
+/** In-flight representation of a pipeline run. */
 export interface PipelineRun {
   id?: string;
   status: string;
@@ -19,6 +21,7 @@ export interface PipelineRun {
   triggerName: string | null;
 }
 
+/** List of statuses indicating an active/in-progress pipeline run. */
 export const ACTIVE_STATUSES: string[] = [
   "pending",
   "scanning",
@@ -26,6 +29,11 @@ export const ACTIVE_STATUSES: string[] = [
   "generating",
 ];
 
+/**
+ * Returns Tailwind CSS classes for styling a pipeline run status badge.
+ * @param status - Run status value.
+ * @returns CSS class string for the badge.
+ */
 export function statusBadgeClass(status: string) {
   const base = "px-2 py-0.5 rounded-sf-full text-xs font-medium";
   switch (status) {
@@ -44,6 +52,11 @@ export function statusBadgeClass(status: string) {
   }
 }
 
+/**
+ * Returns a human-readable label for a pipeline run status.
+ * @param status - Run status value.
+ * @returns Display label for the UI.
+ */
 export function statusLabel(status: string) {
   switch (status) {
     case "scanning":
@@ -65,17 +78,20 @@ export function statusLabel(status: string) {
 
 // --- Metrics types ---
 
+/** Performance metrics for a pipeline stage. */
 export interface StageLatency {
   avgMs: number;
   count: number;
 }
 
+/** Daily pipeline throughput and failure statistics. */
 export interface DailyThroughput {
   date: string;
   runs: number;
   failures: number;
 }
 
+/** Aggregate pipeline metrics for a workspace and time range. */
 export interface PipelineMetrics {
   workspace: string;
   dateRange: { since: string; until: string };
@@ -91,6 +107,7 @@ export interface PipelineMetrics {
 
 // --- Run detail types ---
 
+/** Complete details of a single pipeline run including events and agent executions. */
 export interface RunDetail {
   run: {
     id: string;
@@ -138,6 +155,11 @@ export interface RunDetail {
 
 // --- Helper functions ---
 
+/**
+ * Formats a duration in milliseconds into a human-readable string.
+ * @param ms - Duration in milliseconds.
+ * @returns Formatted string (e.g., "500ms", "2.5s", "5m 30s").
+ */
 export function formatLatency(ms: number): string {
   if (ms < 1_000) return `${Math.round(ms)}ms`;
   if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
@@ -146,6 +168,11 @@ export function formatLatency(ms: number): string {
   return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
+/**
+ * Converts a timeframe string into ISO date range.
+ * @param timeframe - Timeframe code (e.g., "1d", "7d", "30d", "90d").
+ * @returns Date range object with since and until ISO strings.
+ */
 export function dateRangeFromTimeframe(timeframe: string): {
   since: string;
   until: string;

@@ -13,6 +13,10 @@ import type { Session } from "@/lib/auth";
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Result of a successful workspace authorization check.
+ * Includes the workspace, optional membership record, and resolved role.
+ */
 export interface AuthorizedWorkspaceResult {
   workspace: typeof workspaces.$inferSelect;
   member?: typeof workspaceMembers.$inferSelect;
@@ -23,6 +27,14 @@ export interface AuthorizedWorkspaceResult {
 // getAuthorizedWorkspace — look up by slug
 // ---------------------------------------------------------------------------
 
+/**
+ * Looks up a workspace by slug and authorizes the user.
+ * @param session - User session.
+ * @param slug - Workspace slug.
+ * @param requiredPermission - Optional permission to check.
+ * @returns Authorized workspace result.
+ * @throws {AppError} If workspace not found, user unauthorized, or permission denied.
+ */
 export async function getAuthorizedWorkspace(
   session: Session,
   slug: string,
@@ -46,6 +58,14 @@ export async function getAuthorizedWorkspace(
 // getAuthorizedWorkspaceById — look up by ID
 // ---------------------------------------------------------------------------
 
+/**
+ * Looks up a workspace by ID and authorizes the user.
+ * @param session - User session.
+ * @param workspaceId - Workspace ID.
+ * @param requiredPermission - Optional permission to check.
+ * @returns Authorized workspace result.
+ * @throws {AppError} If workspace not found, user unauthorized, or permission denied.
+ */
 export async function getAuthorizedWorkspaceById(
   session: Session,
   workspaceId: string,
@@ -69,6 +89,16 @@ export async function getAuthorizedWorkspaceById(
 // Shared authorization logic
 // ---------------------------------------------------------------------------
 
+/**
+ * Authorizes a user for a specific workspace.
+ * Owner always has full access; others must have membership + permission.
+ * @param session - User session.
+ * @param workspace - Workspace record.
+ * @param requiredPermission - Optional permission to check.
+ * @returns Authorized result with role and member info.
+ * @throws {AppError} If user has no access or insufficient permissions.
+ * @private
+ */
 async function authorizeUser(
   session: Session,
   workspace: typeof workspaces.$inferSelect,
@@ -122,6 +152,15 @@ async function authorizeUser(
 // Audit logging utility
 // ---------------------------------------------------------------------------
 
+/**
+ * Records an audit log entry for workspace activity.
+ * @param workspaceId - Workspace ID.
+ * @param userId - User ID performing the action.
+ * @param action - Action name (e.g., "create_post", "publish").
+ * @param resourceType - Optional resource type (e.g., "post", "workspace").
+ * @param resourceId - Optional resource ID.
+ * @param metadata - Optional additional context.
+ */
 export async function logWorkspaceActivity(
   workspaceId: string,
   userId: string,
@@ -141,20 +180,14 @@ export async function logWorkspaceActivity(
 }
 
 /**
- * Route wrapper that bundles the three checks every dashboard (non-v1) route
- * duplicates: session lookup, workspace resolution by slug, and permission
- * enforcement. Eliminates the 267+ inline `auth.api.getSession` copies flagged
- * in review finding M7.
- *
- * The wrapped handler receives the session and AuthorizedWorkspaceResult as
- * second and third arguments, leaving it free to focus on business logic.
- * Errors thrown by the permission/session layers are converted to JSON
- * responses with matching status codes; unknown errors propagate to the
- * caller's framework layer (don't wrap if you want your own catch-all).
- *
- * The workspace slug is taken from the `workspace` query param; routes with
- * a slug path segment should call getAuthorizedWorkspace directly so the
- * segment is the source of truth.
+ * Route wrapper bundling session lookup, workspace resolution, and permission checks.
+ * Wraps every dashboard route's repetitive auth boilerplate into one decorator.
+ * Handler receives {session, auth: AuthorizedWorkspaceResult} for business logic.
+ * Workspace slug comes from the `workspace` query param.
+ * @param requiredPermission - Permission required for the route.
+ * @param handler - Route handler receiving (req, {session, auth}).
+ * @returns Wrapped handler with normalized auth responses.
+ * @throws {AppError} converted to JSON if auth/permission fails.
  */
 export function withWorkspaceAuth(
   requiredPermission: Permission,

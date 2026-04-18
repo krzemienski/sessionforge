@@ -9,6 +9,12 @@ import type { ZodSchema } from "zod";
 
 const LAST_USED_DEBOUNCE_SECONDS = 60;
 
+/**
+ * Updates the `lastUsedAt` timestamp for an API key with Redis debouncing.
+ * Prevents excessive database writes by caching the update in Redis.
+ * @param apiKeyId - The API key ID to update.
+ * @private
+ */
 async function touchLastUsedDebounced(apiKeyId: string): Promise<void> {
   const redis = await getRedis();
   if (redis) {
@@ -23,6 +29,11 @@ async function touchLastUsedDebounced(apiKeyId: string): Promise<void> {
     .where(eq(apiKeys.id, apiKeyId));
 }
 
+/**
+ * Authenticates a request using a Bearer token API key.
+ * @param request - The HTTP request containing the Authorization header.
+ * @returns Authenticated context {workspace, apiKeyId} or null if key is invalid/missing.
+ */
 export async function authenticateApiKey(request: Request) {
   const authorization = request.headers.get("authorization");
   if (!authorization?.startsWith("Bearer ")) return null;
@@ -58,7 +69,13 @@ export async function requireApiKey(request: Request) {
   return auth;
 }
 
-/** Public v1 envelope for successful responses. */
+/**
+ * Public v1 envelope for successful responses.
+ * @param data - Response payload.
+ * @param meta - Optional metadata (pagination, timestamps, etc.).
+ * @param status - HTTP status code (default: 200).
+ * @returns NextResponse with {data, meta, error: null}.
+ */
 export function apiResponse<T>(
   data: T,
   meta?: object,
@@ -72,7 +89,11 @@ export function apiResponse<T>(
 
 /**
  * Public v1 envelope for error responses.
- * `message` is shown to the API client; `code` is a stable ERROR_CODES slug.
+ * @param message - Human-readable error message shown to the client.
+ * @param status - HTTP status code.
+ * @param code - Machine-readable error code from ERROR_CODES.
+ * @param details - Optional error details (e.g., validation errors).
+ * @returns NextResponse with {data: null, meta: {}, error: {message, code, details?}}.
  */
 export function apiError(
   message: string,
@@ -90,7 +111,13 @@ export function apiError(
   );
 }
 
-/** Parse and validate a JSON request body against a Zod schema. */
+/**
+ * Parse and validate a JSON request body against a Zod schema.
+ * @param req - The HTTP request.
+ * @param schema - Zod schema for validation.
+ * @returns Parsed and validated data.
+ * @throws {AppError} If JSON is invalid or validation fails.
+ */
 export async function parseV1Body<T>(
   req: Request,
   schema: ZodSchema<T>,
@@ -118,12 +145,11 @@ type V1HandlerFn<Ctx = undefined> = Ctx extends undefined
   : (req: Request, ctx: Ctx) => Promise<NextResponse>;
 
 /**
- * Wraps a public v1 route handler so every thrown AppError / unknown error is
- * normalized to the `{data, meta, error: {message, code, details?}}` envelope.
- * Callers stop needing per-route try/catch + per-route error branching.
- *
- * Supports both static routes `(req) => ...` and Next 15 dynamic routes
- * `(req, { params }) => ...` — the context arg (if any) is forwarded verbatim.
+ * Wraps a public v1 route handler with uniform error normalization.
+ * All thrown AppError and unknown errors are converted to {data, meta, error} envelope.
+ * Supports both static routes `(req) => ...` and dynamic routes `(req, ctx) => ...`.
+ * @param handler - Route handler to wrap.
+ * @returns Wrapped handler with normalized error responses.
  */
 export function withV1ApiHandler<Ctx = undefined>(
   handler: V1HandlerFn<Ctx>,

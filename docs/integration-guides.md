@@ -6,20 +6,27 @@
 
 ## Overview
 
-SessionForge supports 7 publishing and analytics integrations across two authentication models:
+SessionForge supports **3 primary publishing integrations** and **5 extended integrations** for analytics and content enrichment.
+
+### Primary Publishing Integrations (Focus)
 
 | Platform | Auth Model | Capabilities |
 |---|---|---|
-| Hashnode | API Token (PAT) | Publish blog posts |
+| Hashnode | API Token (PAT) | Publish blog posts with canonical URLs |
 | Dev.to | API Key | Publish articles, sync updates |
+| WordPress | Application Password (AES-encrypted) | Publish posts to self-hosted or WordPress.com |
+
+### Extended Integrations
+
+| Platform | Auth Model | Capabilities |
+|---|---|---|
 | Ghost | Admin API Key (JWT) | Publish posts (draft/published/scheduled) |
-| Medium | OAuth 2.0 | Publish articles to user profile or publications |
-| WordPress | Application Password | Publish posts |
+| Medium | OAuth 2.0 | Publish to user profile or publications |
 | Twitter / X | OAuth 2.0 (PKCE) | Publish threads, analytics sync |
 | LinkedIn | OAuth 2.0 | Publish posts, analytics sync |
 | GitHub | OAuth 2.0 | Repository sync, commit/PR/issue data, activity feed |
 
-All integrations are configured per-workspace in **Settings > Integrations**.
+All integrations are configured per-workspace in **Settings > Integrations**. Each platform stores its credentials encrypted in the database.
 
 ---
 
@@ -40,6 +47,8 @@ These integrations use API keys or tokens that users paste directly in the setti
 - Posts are published via the Hashnode GraphQL API
 - Supports canonical URL configuration for SEO
 - Published URL is stored on the `posts.hashnode_url` column
+
+**Client:** `src/lib/publishing/hashnode.ts`
 
 **API routes:** `GET/POST/DELETE /api/integrations/hashnode`
 
@@ -119,9 +128,17 @@ updateGhostPost(adminApiKey, ghostUrl, id, post) // Update existing
 2. Generate an Application Password at Users > Profile > Application Passwords
 3. Enter your site URL, username, and app password in Settings > Integrations > WordPress
 
-**Configuration stored in:** `wordpress_connections` table (app password is encrypted via `SCAN_SOURCE_ENCRYPTION_KEY`)
+**Security:** App passwords are encrypted with AES-256 using the `SCAN_SOURCE_ENCRYPTION_KEY` environment variable before storage in the database. Required for all deployments (local Docker, Neon, self-hosted).
+
+**Configuration stored in:** `wordpress_connections` table
 
 **Publishing:** Uses the WordPress REST API (`/wp-json/wp/v2/posts`) with Basic Authentication. Published URL and post ID are stored on the `posts` table.
+
+**Client:** `src/lib/wordpress/client.ts`
+
+**API routes:**
+- `GET/POST/DELETE /api/integrations/wordpress` -- credential management
+- `POST /api/integrations/wordpress/publish` -- publish content
 
 ---
 

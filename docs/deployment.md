@@ -28,17 +28,23 @@ docker compose up
 - `DATABASE_URL`: `postgresql://sessionforge:sessionforge@postgres:5432/sessionforge`
 - `BETTER_AUTH_SECRET`: `dev-secret-change-in-production`
 - `NEXT_PUBLIC_APP_URL`: `http://localhost:3000`
-- `DISABLE_AI_AGENTS`: `true` (disable for local dev without Claude CLI auth)
+- `DISABLE_AI_AGENTS`: `true` (disables AI features gracefully — required for local Docker without Claude CLI mounted)
+- `SCAN_SOURCE_ENCRYPTION_KEY`: Optional, auto-generated if unset (AES encryption key for SSH scan source credentials)
 
 ### Manual Setup
 
+**Requirements:** Bun 1.2.4+ (package manager), Node.js 20+ (Next.js runtime compatibility)
+
 ```bash
-# Install dependencies
+# Install dependencies (Bun is required, not npm)
 bun install
 
 # Setup database
 cp .env.example .env.local
-# Edit .env.local with your DATABASE_URL
+# Edit .env.local with:
+#   DATABASE_URL=postgresql://user:pass@localhost:5432/sessionforge
+#   BETTER_AUTH_SECRET=dev-random-secret
+#   DISABLE_AI_AGENTS=true (optional — disable for local dev)
 
 # Push schema
 bun run db:push
@@ -48,7 +54,7 @@ bun run dev
 # Runs on http://localhost:3000
 ```
 
-**Important:** Use `next dev` (NOT `--turbopack`). Turbopack has drizzle-orm relation resolution bugs. Restart dev server after route/schema changes to clear stale caches.
+**Critical:** Always use `next dev` (NOT `next dev --turbopack`). Turbopack has drizzle-orm relation resolution bugs in bun monorepos. Restart the dev server after ANY route or schema changes to clear stale caches (stale caches cause false 500 errors even after fixes are applied).
 
 ---
 
@@ -133,15 +139,25 @@ This endpoint requires a `CRON_SECRET` environment variable for verification.
 | `BETTER_AUTH_SECRET` | Secret key for Better Auth session encryption |
 | `CRON_SECRET` | Vercel Cron job verification secret |
 
-### Upstash (Queue and Cache)
+### Upstash & Redis (Queue and Cache)
+
+**Redis (auto-selected):**
+
+| Variable | Purpose |
+|---|---|
+| `UPSTASH_REDIS_URL` | Upstash Redis REST URL (HTTP-based, serverless) |
+| `UPSTASH_REDIS_TOKEN` | Upstash Redis REST token (required with `UPSTASH_REDIS_URL`) |
+| `REDIS_URL` | Self-hosted Redis TCP URL (e.g., `redis://localhost:6379`). Used only if `UPSTASH_REDIS_URL` is not set |
+
+The client auto-selects: `UPSTASH_REDIS_URL+UPSTASH_REDIS_TOKEN` → @upstash/redis; else `REDIS_URL` → ioredis; else caching disabled.
+
+**QStash (Scheduled Jobs):**
 
 | Variable | Description |
 |---|---|
 | `UPSTASH_QSTASH_TOKEN` | QStash API token for scheduled job execution |
-| `UPSTASH_QSTASH_CURRENT_SIGNING_KEY` | QStash webhook verification (current key) |
+| `UPSTASH_QSTASH_CURRENT_SIGNING_KEY` | QStash webhook verification (current rotation key) |
 | `UPSTASH_QSTASH_NEXT_SIGNING_KEY` | QStash webhook verification (next rotation key) |
-| `UPSTASH_REDIS_URL` | Upstash Redis REST URL |
-| `UPSTASH_REDIS_TOKEN` | Upstash Redis REST token |
 
 ### Stripe (Billing)
 
@@ -171,19 +187,26 @@ This endpoint requires a `CRON_SECRET` environment variable for verification.
 | `MEDIUM_CLIENT_SECRET` | Medium OAuth client secret |
 | `MEDIUM_REDIRECT_URI` | Medium OAuth callback URL |
 
-### Feature Flags (Optional)
+### Feature Flags & Security (Optional)
 
-| Variable | Description |
-|---|---|
-| `DISABLE_AI_AGENTS` | Set to `"true"` to disable all AI agent features |
-| `DISABLE_OBSERVABILITY` | Set to `"true"` to disable observability event bus |
-| `SCAN_SOURCE_ENCRYPTION_KEY` | AES key for encrypting SSH scan source credentials |
+| Variable | Default | Description |
+|---|---|---|
+| `DISABLE_AI_AGENTS` | `false` | Set to `"true"` to gracefully disable all AI agent features (content generation, insight extraction, chat). Endpoints return user-friendly errors. Used in local Docker dev to avoid requiring Claude CLI. |
+| `DISABLE_OBSERVABILITY` | `false` | Set to `"true"` to disable the observability event bus (run logs, SSE streaming) |
+| `SCAN_SOURCE_ENCRYPTION_KEY` | (auto-generated) | AES-256 encryption key for encrypting SSH scan source credentials (Neon database, self-hosted, or Docker). Format: base64-encoded 32-byte key. Generate: `openssl rand -base64 32` |
 
-### AI Authentication
+### AI Authentication (Zero API Key Configuration)
 
-SessionForge uses `@anthropic-ai/claude-agent-sdk` which inherits authentication from the Claude CLI session. **No `ANTHROPIC_API_KEY` is needed.** The SDK spawns the `claude` CLI subprocess, which uses the logged-in user's credentials automatically.
+SessionForge uses `@anthropic-ai/claude-agent-sdk` which inherits authentication from the Claude CLI session. **There are NO API keys to configure.**
 
-**Important (Development):** The dev server inherits the `CLAUDECODE` environment variable from the parent Claude Code session, which causes nested agent rejections. All agent SDK files (12 total) include `delete process.env.CLAUDECODE` before spawning agents. This is required for local development.
+The SDK spawns the `claude` CLI subprocess, which uses the logged-in user's credentials automatically. To enable AI features in production:
+1. Install Claude CLI in the runtime environment: `npm install -g @anthropic-ai/claude-code`
+2. Authenticate: `claude auth login`
+3. Ensure `DISABLE_AI_AGENTS` is NOT set to `"true"`
+
+**Important (Local Development):** The dev server inherits the `CLAUDECODE` environment variable from the parent Claude Code session, which causes nested agent rejections. All agent SDK files (12 total) include `delete process.env.CLAUDECODE` before spawning agents. This is required for local development. Alternatively, set `DISABLE_AI_AGENTS=true` in `.env.local`.
+
+**Never Set ANTHROPIC_API_KEY:** This project uses claude-agent-sdk, NOT @anthropic-ai/sdk. Any ANTHROPIC_API_KEY env vars are ignored and should be removed.
 
 ---
 

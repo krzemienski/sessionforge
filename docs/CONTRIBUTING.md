@@ -8,12 +8,11 @@ Guidelines for contributing to the SessionForge project.
 
 | Tool | Version | Notes |
 |------|---------|-------|
-| Node.js | 18+ | Or use Bun runtime directly |
-| Bun | 1.2.4+ | Package manager and runtime |
+| Bun | **1.2.4+** | Package manager (REQUIRED, not Node.js; Next.js runs on Node-compatible runtime) |
 | PostgreSQL | 14+ | Local instance or [Neon](https://neon.tech) serverless |
-| Claude CLI | Latest | Authenticated via `claude login` — required for AI features |
+| Claude CLI | Latest | Authenticated via `claude login` — required for AI content generation features |
 
-No `ANTHROPIC_API_KEY` is needed. AI features use `@anthropic-ai/claude-agent-sdk`, which inherits authentication from your Claude CLI session.
+**Zero API Key Configuration:** AI features use `@anthropic-ai/claude-agent-sdk`, which inherits authentication from your Claude CLI session. No `ANTHROPIC_API_KEY` env var is needed or used. Never set it.
 
 ---
 
@@ -46,9 +45,19 @@ bun run db:push
 bun run dev
 ```
 
-App runs on http://localhost:3000. Dev server inherits `CLAUDECODE` from Claude Code parent session — this blocks AI agents. Set `DISABLE_AI_AGENTS=true` locally, or delete the env var before spawning agents.
+App runs on http://localhost:3000.
 
-**Critical:** Use `next dev` (NOT `--turbopack`). Turbopack breaks drizzle-orm relation resolution. Always restart after route/schema edits.
+**IMPORTANT — Dev Server Environment:**
+- The dev server inherits `CLAUDECODE` from the parent Claude Code session
+- This environment variable blocks AI agent execution (nested session rejection)
+- All 12 agent SDK files include `delete process.env.CLAUDECODE` before spawning agents (required for local dev)
+- Alternatively, set `DISABLE_AI_AGENTS=true` in `.env.local` to gracefully disable all AI features
+- Remove or unset both flags when deploying to production to enable AI features (Claude CLI must be installed and authenticated in the runtime environment)
+
+**Critical Dev Server Notes:**
+- Use `next dev` (NOT `next dev --turbopack`). Turbopack has drizzle-orm relation resolution bugs in bun monorepos
+- Always restart the dev server after ANY route or schema changes to clear stale caches
+- Stale caches cause false 500 errors even after fixes are applied
 
 ---
 

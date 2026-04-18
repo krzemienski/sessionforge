@@ -51,7 +51,7 @@ export const db = drizzle({ client: sql, schema });
 |---|---|
 | `claude_sessions` | Indexed Claude Code sessions (messages, tools, files, cost) |
 | `session_bookmarks` | User-marked session highlights for insight extraction |
-| `scan_sources` | SSH remote scan source configs (host, credentials, base path) |
+| `scan_sources` | SSH remote scan source configs with encrypted credentials (host, port, username, `encryptedPassword` via SCAN_SOURCE_ENCRYPTION_KEY) |
 
 ### Content (8 tables)
 
@@ -137,6 +137,12 @@ export const db = drizzle({ client: sql, schema });
 | `subscriptions` | Stripe subscription state (plan tier, status, period) |
 | `usage_events` | Individual usage events (scans, extractions, generations) |
 | `usage_monthly_summary` | Aggregated monthly usage and cost |
+
+### Webhooks (1 table)
+
+| Table | Purpose |
+|---|---|
+| `stripe_webhook_events` | Idempotency ledger for incoming Stripe webhook events (eventId PK, eventType, processedAt); prevents duplicate webhook processing on retries |
 
 ### Other (2 tables)
 
@@ -260,9 +266,9 @@ bunx drizzle-kit generate
 
 ### Known Issues
 
-- `drizzle-kit push` may hang on interactive prompts when adding new enums or columns. Use direct `ALTER TABLE` SQL as a workaround.
-- Always verify the live database schema matches the Drizzle schema after migrations -- tables and columns may be missing from the live DB even if defined in code.
-- After schema changes, restart the dev server to avoid stale Turbopack/Next.js cache errors.
+- `drizzle-kit push` may hang on interactive prompts when adding new enums or columns. **Workaround:** Use direct `ALTER TABLE` SQL statements instead.
+- Always verify the live database schema matches the Drizzle schema after migrations — tables and columns may be missing from the live DB even if defined in code.
+- After schema changes, restart the dev server (`next dev`) to clear stale Turbopack/Next.js cache errors (false 500s on affected routes).
 
 ---
 

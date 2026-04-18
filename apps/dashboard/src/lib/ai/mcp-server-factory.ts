@@ -30,12 +30,14 @@ import type { AgentType } from "./orchestration/tool-registry";
 
 // ── Tool group → handler routing ──
 
+/** Handler function for workspace-scoped tool execution. */
 type ToolHandler = (
   workspaceId: string,
   toolName: string,
   toolInput: Record<string, unknown>,
 ) => Promise<unknown>;
 
+/** Handler function for workspace-agnostic tools (e.g., skills). */
 type SkillToolHandler = (
   toolName: string,
   toolInput: Record<string, unknown>,

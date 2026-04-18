@@ -5,6 +5,13 @@ import { AppError, ERROR_CODES } from "@/lib/errors";
 // parseBody helper
 // ---------------------------------------------------------------------------
 
+/**
+ * Parse and validate an object against a Zod schema.
+ * @param schema - Zod schema for validation.
+ * @param body - Data to validate.
+ * @returns Validated data.
+ * @throws {AppError} If validation fails, includes field-level errors in details.
+ */
 export function parseBody<T>(schema: z.ZodSchema<T>, body: unknown): T {
   const result = schema.safeParse(body);
   if (!result.success) {
@@ -26,11 +33,13 @@ export function parseBody<T>(schema: z.ZodSchema<T>, body: unknown): T {
 // Workspace schemas
 // ---------------------------------------------------------------------------
 
+/** Zod schema for creating a new workspace. */
 export const workspaceCreateSchema = z.object({
   name: z.string().min(1, "name is required").trim(),
   sessionBasePath: z.string().optional(),
 });
 
+/** Zod schema for updating workspace style and AI generation preferences. */
 export const workspaceStyleSchema = z.object({
   defaultTone: z.string().optional(),
   targetAudience: z.string().optional(),
@@ -44,6 +53,7 @@ export const workspaceStyleSchema = z.object({
 // Content schemas
 // ---------------------------------------------------------------------------
 
+/** Zod schema for creating new content (posts). */
 export const contentCreateSchema = z.object({
   workspaceSlug: z.string().min(1, "workspaceSlug is required"),
   title: z.string().min(1, "title is required"),
@@ -53,6 +63,7 @@ export const contentCreateSchema = z.object({
   insightId: z.string().optional(),
 });
 
+/** Zod schema for updating content. */
 export const contentUpdateSchema = z.object({
   title: z.string().optional(),
   markdown: z.string().optional(),
@@ -66,6 +77,7 @@ export const contentUpdateSchema = z.object({
 // API key schemas
 // ---------------------------------------------------------------------------
 
+/** Zod schema for creating a new API key. */
 export const apiKeyCreateSchema = z.object({
   workspaceSlug: z.string().min(1, "workspaceSlug is required"),
   name: z.string().min(1, "name is required"),
@@ -94,6 +106,7 @@ export const sessionScanSchema = z.object({
 // Agent schemas
 // ---------------------------------------------------------------------------
 
+/** Zod schema for blog generation agent input. */
 export const agentBlogSchema = z.object({
   workspaceSlug: z.string().min(1, "workspaceSlug is required"),
   insightId: z.string().min(1, "insightId is required"),

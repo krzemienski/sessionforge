@@ -7,10 +7,18 @@
  *   3. (neither)                                → null (disabled)
  */
 
+/**
+ * Unified Redis client interface supporting both Upstash and ioredis.
+ * Abstracts the underlying driver (HTTP vs TCP) with a consistent API.
+ */
 export interface RedisClient {
+  /** Ping the Redis server. */
   ping(): Promise<string>;
+  /** Get a value by key. Returns null if key doesn't exist. */
   get<T>(key: string): Promise<T | null>;
+  /** Set a key-value pair with optional expiration in seconds. */
   set(key: string, value: unknown, opts?: { ex?: number }): Promise<unknown>;
+  /** Delete a key. */
   del(key: string): Promise<unknown>;
 }
 

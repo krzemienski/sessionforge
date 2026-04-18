@@ -604,31 +604,376 @@ Stores in `automation_pipeline_runs` table:
 
 ---
 
+## Architectural Layers
+
+SessionForge follows a 6-layer architecture:
+
+### 1. Routing Layer (Next.js App Router)
+**Location:** `apps/dashboard/src/app/`
+
+Manages URL routing, layout composition, and server-side middleware:
+- `app/layout.tsx` — Root layout with providers
+- `app/(auth)/` — Authentication pages (login, signup)
+- `app/(dashboard)/layout.tsx` — Dashboard auth gate and workspace context
+- `app/(dashboard)/[workspace]/layout.tsx` — Workspace validation and shell
+- `app/api/` — API route handlers (148 route files)
+
+**Purpose:** Entry point for all requests; establishes session, validates workspace membership, injects auth context.
+
+### 2. Pages Layer (Server Components)
+**Location:** `apps/dashboard/src/app/(dashboard)/[workspace]/`
+
+Server components render UI and fetch data server-side:
+- Sessions list, Insights, Content, Analytics, Automation, Observability pages
+- Each page fetches its own data via Drizzle (no client-side data fetching)
+- Pages are server components by default; minimal state
+
+**Purpose:** Fast initial page load; zero hydration mismatch.
+
+### 3. API Routes Layer (Route Handlers)
+**Location:** `apps/dashboard/src/app/api/`
+
+Next.js Route Handlers implement the REST API:
+- `/api/sessions/` — Session CRUD and scanning
+- `/api/content/` — Content CRUD and generation
+- `/api/agents/` — AI agent endpoints (SSE streaming)
+- `/api/integrations/` — Platform connections
+- `/api/automation/` — Pipeline runs and triggers
+- `/api/stripe/webhook/` — Idempotent webhook handling
+- `/api/cron/` — Scheduled task runner
+
+Each route wraps business logic in `withApiHandler()` for error normalization (see Key Abstractions).
+
+**Purpose:** Consistent HTTP interface; error handling; observability.
+
+### 4. Hooks Layer (React Hooks)
+**Location:** `apps/dashboard/src/hooks/`
+
+Client-side data fetching and state management:
+- `useQuery()` / `useMutation()` hooks from TanStack Query
+- `useAgentRun()` — SSE streaming for agent endpoints with retry state
+- `useWorkspace()` — Workspace context
+- Custom hooks for specific features (editor state, analytics, etc.)
+
+**Purpose:** Data deduplication, caching, retry logic via TanStack Query; streaming support via useAgentRun.
+
+### 5. Components Layer (React Components)
+**Location:** `apps/dashboard/src/components/`
+
+Reusable UI components:
+- Feature components: Editor, Transcript, Publishing panels
+- Page components: ContentListView, CalendarView, PipelineView, etc.
+- UI primitives: `components/ui/` (shadcn/ui + custom design tokens)
+
+All components are typed with `Props` interfaces.
+
+**Purpose:** Composable UI; consistent design tokens; high reusability.
+
+### 6. Library Layer (Business Logic & Utilities)
+**Location:** `apps/dashboard/src/lib/`
+
+Server-side business logic, AI orchestration, integrations:
+
+| Module | Purpose | Key Files |
+|--------|---------|-----------|
+| `lib/ai/` | Agent SDK orchestration, MCP servers, prompts | `agent-runner.ts`, `mcp-server-factory.ts`, `ensure-cli-auth.ts` |
+| `lib/sessions/` | Session scanning, parsing, indexing | `scanner.ts`, `parser.ts`, `indexer.ts` |
+| `lib/integrations/` | Platform clients (Hashnode, Dev.to, etc.) | `hashnode-client.ts`, `devto-client.ts` |
+| `lib/seo/` | SEO analysis and content optimization | `generator.ts`, `analyzer.ts` |
+| `lib/media/` | Diagram generation, image processing | `diagram-generator.ts` |
+| `lib/ingestion/` | URL scraping, repo analysis, content assembly | `source-assembler.ts`, `text-processor.ts` |
+| `lib/observability/` | Event instrumentation, tracing | `event-bus.ts`, `trace-context.ts`, `sse-broadcaster.ts` |
+| `lib/auth.ts` | better-auth server + client setup |
+| `lib/redis.ts` | Dual-client cache (Upstash + ioredis) |
+| `lib/stripe.ts` | Stripe SDK and customer management |
+| `lib/db.ts` | Drizzle client (Neon HTTP driver) |
+| `lib/utils.ts` | `cn()`, `timeAgo()`, `formatDuration()`, etc. |
+| `lib/errors.ts` | `AppError`, `ERROR_CODES`, error formatting |
+| `lib/validation.ts` | Zod schemas, `parseBody()` helper |
+| `lib/api-auth.ts` | Public v1 API authentication (Bearer tokens) |
+| `lib/api-handler.ts` | Error wrapper for internal routes |
+| `lib/workspace-auth.ts` | Workspace membership validation |
+
+### 7. Database Layer (Drizzle ORM + Neon)
+**Location:** `packages/db/src/`
+
+PostgreSQL schema and client:
+- 75 tables split into: `schema/tables.ts`, `schema/enums.ts`, `schema/types.ts`, `schema/relations.ts`
+- Neon serverless driver (`@neondatabase/serverless`)
+- Drizzle ORM for type-safe queries
+- Migrations via `drizzle-kit` (SQL-based)
+
+**Purpose:** Canonical data model; shared schema across all consumers.
+
+---
+
+## Data Flow
+
+### Server State (TanStack Query)
+
+All async data on the client flows through TanStack Query:
+
+```
+Server Route (GET /api/content)
+  ↓
+useQuery("content", async () => fetch("/api/content"))
+  ↓
+TanStack Query cache (30s stale time)
+  ↓
+Component re-render with data
+```
+
+**Config:** `apps/dashboard/src/app/providers.tsx`
+- Stale time: 30 seconds
+- No window-focus refetch (content-generation app; not chat-heavy)
+- Automatic request deduplication
+
+### Client State (useState / useReducer)
+
+Purely local state (no server sync):
+- Editor dirty flag, selected session IDs
+- Sidebar open/close, modal visibility
+- Streaming status during agent runs
+
+No global Zustand/Redux store (TanStack Query replaces traditional client state management).
+
+---
+
+## Key Abstractions
+
+Every SessionForge request flows through high-level abstractions. These provide:
+- Consistent error handling
+- Observability instrumentation
+- Type safety
+- Authorization checks
+
+### 1. `withApiHandler()` — Route Error Wrapper
+**File:** `apps/dashboard/src/lib/api-handler.ts`
+
+Wraps all internal API route handlers. Catches `AppError` (returns structured JSON) and unknown errors (returns 500 with sanitized message).
+
+```typescript
+export function withApiHandler(
+  handler: (req: Request, ctx) => Promise<Response>
+): (req: Request) => Promise<Response>
+```
+
+**Usage in routes:**
+```typescript
+export const POST = withApiHandler(async (req) => {
+  // Route logic here
+  // Throws AppError(...) on validation failure
+  // Handler catches and formats as JSON
+});
+```
+
+### 2. `AppError` — Typed Exception
+**File:** `apps/dashboard/src/lib/errors.ts`
+
+Custom error class with HTTP status and error code:
+
+```typescript
+export class AppError extends Error {
+  constructor(message: string, code: ErrorCode) { ... }
+}
+
+export const ERROR_CODES = {
+  VALIDATION_ERROR: { status: 400, code: "validation_error" },
+  NOT_FOUND: { status: 404, code: "not_found" },
+  UNAUTHORIZED: { status: 401, code: "unauthorized" },
+  // ... 20+ codes
+};
+
+throw new AppError("Invalid email", ERROR_CODES.VALIDATION_ERROR);
+```
+
+### 3. `runAgentStreaming()` / `runAgent()` — Agent Orchestration
+**File:** `apps/dashboard/src/lib/ai/agent-runner.ts:26+`
+
+Central entry point for all AI agent execution. Handles:
+- CLAUDECODE env var cleanup (via `ensureCliAuth()`)
+- MCP server creation (scoped tools)
+- Tool-use loop orchestration
+- SSE streaming + observability
+- Database run tracking
+
+```typescript
+export async function runAgentStreaming(options: AgentRunOptions): Promise<Response>
+export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult>
+```
+
+**Always calls `ensureCliAuth()` at module load (line 26).**
+
+### 4. `createMcpServer()` — Tool Access Control
+**File:** `apps/dashboard/src/lib/ai/mcp-server-factory.ts`
+
+Factory function that builds a Drizzle-scoped MCP server with only the tools a given agent needs:
+
+```typescript
+export function createMcpServer(
+  agentType: AgentType,
+  workspaceId: string,
+  mcpToolConfig?: ToolConfig
+): McpServer
+```
+
+Maps agent type → tool set → Zod-validated tool implementations. Enforces least-privilege (e.g., `editor-chat` cannot read raw sessions).
+
+### 5. `useAgentRun()` — Client-Side SSE Hook
+**File:** `apps/dashboard/src/hooks/use-agent-run.ts`
+
+React hook for consuming SSE agent endpoints:
+
+```typescript
+const { status, run, retry, error, retryInfo } = useAgentRun(endpoint);
+
+// status: "idle" | "running" | "succeeded" | "failed" | "retrying"
+// run({ systemPrompt, userMessage }) → triggers agent
+```
+
+Handles:
+- SSE connection lifecycle
+- Retry state with exponential backoff
+- Event buffering and error recovery
+
+### 6. `getAuthorizedWorkspace()` — Workspace Validation
+**File:** `apps/dashboard/src/lib/workspace-auth.ts`
+
+Resolves workspace by slug and validates membership:
+
+```typescript
+export async function getAuthorizedWorkspace(
+  slug: string,
+  userId: string,
+  requiredPermission?: "owner" | "member"
+): Promise<Workspace>
+```
+
+Used in every workspace-scoped route and the workspace layout. Returns 404 if workspace doesn't exist or user isn't a member.
+
+---
+
+## Entry Points
+
+### Root Layout
+**File:** `apps/dashboard/src/app/layout.tsx`
+
+Wraps entire app in providers (React Query, Theme, Toast). Renders HTML shell.
+
+### Dashboard Layout
+**File:** `apps/dashboard/src/app/(dashboard)/layout.tsx`
+
+Checks session; redirects to `/login` if no session. Creates workspace auto-magically if user has none.
+
+### Workspace Layout
+**File:** `apps/dashboard/src/app/(dashboard)/[workspace]/layout.tsx`
+
+Validates workspace membership via `getAuthorizedWorkspace()`. Renders `WorkspaceShell` (sidebar + mobile nav).
+
+### Cron Automation
+**File:** `apps/dashboard/src/app/api/cron/automation/route.ts`
+
+Vercel Cron (GET, runs every 5 minutes, protected by `CRON_SECRET`). Processes all triggers and fires QStash webhooks.
+
+### Stripe Webhook
+**File:** `apps/dashboard/src/app/api/stripe/webhook/route.ts`
+
+POST handler for Stripe events. Idempotent via `stripe_webhook_events` table (see ADR-005). Updates subscription status in database.
+
+---
+
+## Cross-Cutting Concerns
+
+### 1. Agent SDK Authentication (CLI-Inherited, Zero API Keys)
+
+**See:** [ADR-002: Agent SDK Auth Model](adr/002-agent-sdk-auth-model.md)
+
+- All AI features use `@anthropic-ai/claude-agent-sdk`
+- Authentication inherits from Claude CLI session (no `ANTHROPIC_API_KEY`)
+- Centralized CLAUDECODE env fix in `lib/ai/ensure-cli-auth.ts`
+- Applied in 12 files; enforced via hooks
+
+### 2. Observability & Tracing
+
+Event bus (`lib/observability/event-bus.ts`) instruments:
+- Agent query lifecycle (start, tool_use, tool_result, complete)
+- Pipeline stage transitions (scanning → extracting → generating)
+- Error events (with full stack trace)
+
+Events flow to SSE broadcaster for real-time UI updates (Observability page).
+
+### 3. Workspace Scoping
+
+Every table has `workspaceId` column. Every query filters by workspace. Multiple workspaces per user for project separation.
+
+### 4. Error Handling
+
+- Route handlers use `withApiHandler()` for automatic error formatting
+- Agents emit `error` SSE events (surfaced in UI via `useAgentRun`)
+- Run tracking is best-effort; DB failures do not block agent execution
+
+### 5. Rate Limiting & Caching
+
+Redis (Upstash or ioredis) stores:
+- Scan result cache (24-hour TTL)
+- Rate limit counters (sliding window per user/endpoint)
+
+See [ADR-006: Redis Dual-Client](adr/006-redis-dual-client.md).
+
+---
+
 ## Key Design Decisions
 
 ### 1. CLI-Inherited AI Auth (Zero API Keys)
 All AI features use `@anthropic-ai/claude-agent-sdk` which spawns the `claude` CLI subprocess. Authentication comes from the logged-in user's CLI session -- no `ANTHROPIC_API_KEY` environment variable needed. This simplifies deployment and eliminates key management.
 
-### 2. Local JSONL over Webhook Integrations
+See [ADR-002](adr/002-agent-sdk-auth-model.md) for full rationale.
+
+### 2. Monorepo Structure (Turborepo + Bun)
+Turborepo manages build dependencies; Bun provides fast installs and unified Node runtime. Shared `@sessionforge/db` package keeps schema in sync across all consumers.
+
+See [ADR-003](adr/003-monorepo-structure.md).
+
+### 3. Schema Monolith (75 Tables, One File)
+All Drizzle tables live in `packages/db/src/schema/tables.ts` (1,875 lines) for single source of truth on relations and type cohesion. Splitting deferred to Wave 4b.
+
+See [ADR-004](adr/004-drizzle-schema-monolith.md).
+
+### 4. Stripe Webhook Idempotency Table
+`stripe_webhook_events` table prevents duplicate charge/subscription processing on Stripe webhook retries.
+
+See [ADR-005](adr/005-stripe-webhook-idempotency.md).
+
+### 5. Redis Dual-Client Auto-Selection
+Single `getRedis()` function selects between Upstash (HTTP, production) and ioredis (TCP, local dev) based on env vars. Graceful fallback to disabled if neither is configured.
+
+See [ADR-006](adr/006-redis-dual-client.md).
+
+### 6. No Turbopack (next dev, not --turbopack)
+Turbopack breaks Drizzle relations in bun monorepos. Using default Webpack-based `next dev` for reliability.
+
+See [ADR-007](adr/007-no-turbopack.md).
+
+### 7. Local JSONL over Webhook Integrations
 SessionForge reads directly from `~/.claude/projects/` rather than integrating with external services for data ingestion. Self-contained, no API keys for data intake, content grounded in actual work.
 
-### 3. Agentic Loop over Single-Shot Prompts
+### 8. Agentic Loop over Single-Shot Prompts
 Multi-turn tool-use loops let agents fetch exactly the data they need and iterate, producing higher-quality output without context limit issues.
 
-### 4. Tool Registry Pattern
+### 9. Tool Registry Pattern
 Centralized tool access control per agent. Adding a new agent or tool requires only a registry entry. Enforces least-privilege (e.g., `editor-chat` cannot read sessions directly).
 
-### 5. SSE Streaming for Content Agents
+### 10. SSE Streaming for Content Agents
 Real-time rendering of tool-use activity and partial content in the editor. Background jobs (insight extraction) use plain JSON responses.
 
-### 6. Composite Scoring for Insight Ranking
+### 11. Composite Scoring for Insight Ranking
 6-dimension weighted scoring ensures technically novel, reproducible sessions surface at the top, regardless of recency.
 
-### 7. Idempotent Scan Pipeline
+### 12. Idempotent Scan Pipeline
 Upsert with `(workspaceId, sessionId)` conflict key. Re-scanning is always safe.
 
-### 8. Workspace-Scoped Everything
+### 13. Workspace-Scoped Everything
 Every table scoped to `workspaceId`. Multiple workspaces per user for separating projects.
 
-### 9. Multi-Stage Containerization
+### 14. Multi-Stage Containerization
 3-stage Docker build: deps (frozen lockfile) → builder (monorepo compile) → runner (Node.js standalone). Production image runs only necessary artifacts, zero dev dependencies.
