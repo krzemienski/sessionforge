@@ -23,3 +23,8 @@ validation-evidence/
 .worktrees/
 .security-key
 logs/security/
+
+# Local agent-runtime artifacts (logs, debug snapshots, scratch state)
+.remember/
+.debug/
+.sisyphus/
